@@ -1,0 +1,38 @@
+import { NextResponse } from "next/server";
+import { WhatsAppManager } from "@/lib/whatsapp";
+import { DB } from "@/lib/db";
+
+export async function POST(req: Request) {
+  try {
+    const { to, content, mediaBase64, mimetype, fileName, isVoiceNote } = await req.json();
+
+    if (!to) {
+      return NextResponse.json({ success: false, error: "Missing 'to'" }, { status: 400 });
+    }
+
+    let sentMsg;
+
+    if (mediaBase64) {
+      // Decode base64 to buffer
+      const base64Data = mediaBase64.replace(/^data:[a-zA-Z0-9/+-]+;base64,/, "");
+      const buffer = Buffer.from(base64Data, "base64");
+      
+      sentMsg = await WhatsAppManager.sendMedia(to, buffer, mimetype, fileName, isVoiceNote);
+      
+      // Save to database
+      const displayContent = isVoiceNote ? "🎤 [Voice Note]" : `📎 [Attachment] ${fileName || ""}`;
+      DB.addChatMessage(to, { id: sentMsg?.key?.id, role: "assistant", content: displayContent });
+    } else {
+      if (!content) {
+        return NextResponse.json({ success: false, error: "Missing 'content'" }, { status: 400 });
+      }
+      sentMsg = await WhatsAppManager.sendMessage(to, content);
+      DB.addChatMessage(to, { id: sentMsg?.key?.id, role: "assistant", content });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error("[API/Send] Error sending message:", error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}

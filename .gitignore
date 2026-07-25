@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Whatsapp Auth & Data
+.baileys_auth/
+.data/
+
+# Uploads
+public/uploads/
