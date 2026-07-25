@@ -30,7 +30,7 @@ export async function GET() {
       const elapsedMinutes = (elapsedMs / (1000 * 60)).toFixed(2);
       const customer = DB.getCustomer(phone);
       const followUpLevel = customer?.followUpLevel || 0;
-      const nextFollowUp = config.followUps[followUpLevel];
+      const nextFollowUp = config.followUps?.[followUpLevel];
       const requiredMinutes = nextFollowUp?.delayMinutes || 0;
       const exceedsWait = elapsedMs >= (requiredMinutes * 60 * 1000);
 
