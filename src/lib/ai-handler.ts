@@ -317,6 +317,7 @@ export async function handleWhatsAppMessage(msg: any) {
         temperature: 0.7,
         tools,
         tool_choice: "auto",
+        max_tokens: 2000,
       });
       
       let message = res.choices[0].message;
@@ -412,6 +413,7 @@ export async function handleWhatsAppMessage(msg: any) {
           messages,
           temperature: 0.7,
           tools,
+          max_tokens: 2000,
         });
         message = res.choices[0].message;
       }
@@ -530,6 +532,7 @@ export async function generateContextualFollowUp(phone: string, followUpPrompt: 
       model: isOpenRouter ? "openai/gpt-4o-mini" : "gpt-4o-mini",
       messages,
       temperature: 0.7,
+      max_tokens: 1000,
     });
 
     return res.choices[0].message?.content || "Hi there! Just following up to see if you needed any more help?";
@@ -573,6 +576,7 @@ export async function generateScheduledFollowUp(phone: string, contextNote: stri
       model: isOpenRouter ? "openai/gpt-4o-mini" : "gpt-4o-mini",
       messages,
       temperature: 0.7,
+      max_tokens: 1000,
     });
 
     return res.choices[0].message?.content || `Hi! Following up on what we discussed: ${contextNote}`;
