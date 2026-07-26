@@ -192,6 +192,9 @@ export async function handleWhatsAppMessage(msg: any) {
       const fallback = "I'm currently experiencing a high volume of requests. A human agent will be with you shortly!";
       const sentMsg = await WhatsAppManager.sendMessage(from, fallback);
       DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: fallback });
+      
+      const diagnostics = `[DIAGNOSTIC - KEY ERROR] The bot could not respond because no API keys were loaded.\n- config.anthropicApiKey: ${config.anthropicApiKey ? "Present" : "Empty"}\n- config.openRouterApiKey: ${config.openRouterApiKey ? "Present" : "Empty"}\n- env.ANTHROPIC_API_KEY: ${getEnvKey("ANTHROPIC_API_KEY") ? "Present" : "Empty"}\n- process.env.ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? "Present" : "Empty"}\n- env.OPENROUTER_API_KEY: ${getEnvKey("OPENROUTER_API_KEY") ? "Present" : "Empty"}\n- process.env.OPENROUTER_API_KEY: ${process.env.OPENROUTER_API_KEY ? "Present" : "Empty"}`;
+      DB.addChatMessage(from, { role: "assistant", content: diagnostics });
       return;
     }
 
@@ -503,6 +506,10 @@ export async function handleWhatsAppMessage(msg: any) {
         
         if (i === attempts.length - 1) {
           aiReply = "I'm currently experiencing a high volume of requests and having some technical difficulties. A human agent will be with you shortly, or you can try again later!";
+          
+          const attemptsInfo = attempts.map(att => `${att.type} (${att.model})`).join(", ");
+          const diagnostics = `[DIAGNOSTIC - API ERROR] All model attempts failed.\n- Attempted: ${attemptsInfo}\n- Last Error: ${errorDetail}`;
+          DB.addChatMessage(from, { role: "assistant", content: diagnostics });
         } else {
           console.log("[AI Handler] Switching to fallback API client...");
         }
