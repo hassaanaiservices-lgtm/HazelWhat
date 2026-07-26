@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save, MessageSquare, Settings, Plus, Trash2, Search, MoreVertical, Phone, Video, Paperclip, Smile, Mic, CheckCheck, User, Check, Send, StopCircle, Inbox, Bot, Network, BookOpen, Users, AlertCircle, ShoppingCart, Activity } from "lucide-react";
+import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save, MessageSquare, Settings, Plus, Trash2, Search, MoreVertical, Phone, Video, Paperclip, Smile, Mic, CheckCheck, User, Check, Send, StopCircle, Inbox, Bot, Network, BookOpen, Users, AlertCircle, ShoppingCart, Activity, Eye, EyeOff } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
 
 export default function DashboardPage() {
@@ -30,6 +30,12 @@ export default function DashboardPage() {
     "Abandoned Booking Recovery", "FAQ Automation", "Analytics Dashboard"
   ];
   const [savingConfig, setSavingConfig] = useState(false);
+  const [anthropicKeyStatus, setAnthropicKeyStatus] = useState<string>("Not Checked");
+  const [anthropicKeyError, setAnthropicKeyError] = useState<string>("");
+  const [openRouterKeyStatus, setOpenRouterKeyStatus] = useState<string>("Not Checked");
+  const [openRouterKeyError, setOpenRouterKeyError] = useState<string>("");
+  const [showAnthropicKey, setShowAnthropicKey] = useState(false);
+  const [showOpenRouterKey, setShowOpenRouterKey] = useState(false);
   const [scrapeUrl, setScrapeUrl] = useState("");
   const [scrapeCurrency, setScrapeCurrency] = useState("Rs.");
   const [isScraping, setIsScraping] = useState(false);
@@ -101,12 +107,47 @@ export default function DashboardPage() {
     }
   };
 
+  const validateKey = async (apiKey: string, type: 'anthropic' | 'openrouter') => {
+    const setStatus = type === 'anthropic' ? setAnthropicKeyStatus : setOpenRouterKeyStatus;
+    const setError = type === 'anthropic' ? setAnthropicKeyError : setOpenRouterKeyError;
+
+    if (!apiKey || !apiKey.trim()) {
+      setStatus("Not Configured");
+      setError("");
+      return;
+    }
+
+    setStatus("checking");
+    setError("");
+
+    try {
+      const res = await fetch("/api/whatsapp/config/validate-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStatus("Active");
+        setError("");
+      } else {
+        setStatus(data.status || "Error");
+        setError(data.error || "Failed to validate key.");
+      }
+    } catch (e: any) {
+      setStatus("Error");
+      setError(e.message || "Network error.");
+    }
+  };
+
   const fetchConfig = async () => {
     try {
       const res = await fetch("/api/whatsapp/config");
       const data = await res.json();
       if (data.success) {
         setConfig(data.config);
+        validateKey(data.config.anthropicApiKey, 'anthropic');
+        validateKey(data.config.openRouterApiKey, 'openrouter');
       }
     } catch (e) {
       console.error(e);
@@ -556,45 +597,189 @@ export default function DashboardPage() {
         </div>
       </div>
 
+
+      {/* 2. Middle Column (Chat List) */}
       {/* Dashboard Tab */}
-      {activeTab === 'dashboard' && analytics && (
-        <div className="p-10 max-w-5xl mx-auto w-full h-full overflow-y-auto">
-          <h2 className="text-3xl font-extrabold text-slate-900 mb-8 flex items-center gap-3">
-            <Zap className="h-8 w-8 text-emerald-500" /> Dashboard Overview
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
-              <div className="text-slate-400 font-bold text-sm uppercase tracking-wider mb-2">Today's Chats</div>
-              <div className="text-4xl font-extrabold text-slate-900">{analytics.todayChatCount}</div>
-            </div>
-            
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
-              <div className="text-slate-400 font-bold text-sm uppercase tracking-wider mb-2">Pending Orders</div>
-              <div className="text-4xl font-extrabold text-slate-900 mb-4">{analytics.pendingOrdersCount}</div>
-              <button onClick={() => setActiveTab('orders')} className="text-sm font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-4 py-2 rounded-xl transition-colors">
-                View Orders &rarr;
+      {activeTab === 'dashboard' && (
+        <div className="p-8 max-w-[1200px] mx-auto w-full h-full overflow-y-auto bg-slate-50/50">
+          <div className="flex justify-between items-center mb-8">
+            <h2 className="text-[22px] font-bold text-slate-900">
+              Overview
+            </h2>
+            <div className="flex items-center gap-4">
+              <div className="bg-slate-100/70 p-1 rounded-lg flex items-center text-sm font-semibold">
+                <button className="px-4 py-1.5 bg-white text-slate-800 shadow-sm rounded-md">Weekly</button>
+                <button className="px-4 py-1.5 text-slate-500 hover:text-slate-700">Monthly</button>
+                <button className="px-4 py-1.5 text-slate-500 hover:text-slate-700">Yearly</button>
+              </div>
+              <button className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-sm font-bold text-slate-700 hover:bg-slate-50 shadow-sm">
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+                Filter
               </button>
             </div>
-            
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
-              <div className="text-slate-400 font-bold text-sm uppercase tracking-wider mb-2">Weekly Revenue</div>
-              <div className="text-4xl font-extrabold text-emerald-500">{config.storeCurrency || '$'}{analytics.weekRevenue.toLocaleString()}</div>
+          </div>
+          
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)] p-6 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6 md:gap-0">
+            <div className="flex-1 md:border-r border-slate-100 md:pr-6">
+              <div className="text-slate-500 font-medium text-[13px] mb-2">Total Revenue</div>
+              <div className="flex items-end gap-3">
+                <div className="text-3xl font-extrabold text-slate-900">$200,45.87</div>
+                <div className="bg-emerald-50 text-emerald-600 text-xs font-bold px-2 py-0.5 rounded-full mb-1">+2.5%</div>
+              </div>
             </div>
             
-            <div className="bg-rose-50 p-6 rounded-3xl border border-rose-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
-              <div className="text-rose-400 font-bold text-sm uppercase tracking-wider mb-2 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4" /> Urgent Alerts
+            <div className="flex-1 md:border-r border-slate-100 md:px-6">
+              <div className="text-slate-500 font-medium text-[13px] mb-2">Active Users</div>
+              <div className="flex items-end gap-3">
+                <div className="text-3xl font-extrabold text-slate-900">9,528</div>
+                <div className="bg-emerald-50 text-emerald-600 text-xs font-bold px-2 py-0.5 rounded-full mb-1">+9.5%</div>
               </div>
-              <div className="text-4xl font-extrabold text-rose-600">{analytics.urgentOrders}</div>
-              <div className="text-sm text-rose-700 font-medium mt-1">Orders pending 2+ hrs</div>
+            </div>
+            
+            <div className="flex-1 md:border-r border-slate-100 md:px-6">
+              <div className="text-slate-500 font-medium text-[13px] mb-2">Customer Lifetime Value</div>
+              <div className="flex items-end gap-3">
+                <div className="text-3xl font-extrabold text-slate-900">$849.54</div>
+                <div className="bg-red-50 text-red-500 text-xs font-bold px-2 py-0.5 rounded-full mb-1">-1.6%</div>
+              </div>
+            </div>
+            
+            <div className="flex-1 md:pl-6">
+              <div className="text-slate-500 font-medium text-[13px] mb-2">Customer Acquisition Cost</div>
+              <div className="flex items-end gap-3">
+                <div className="text-3xl font-extrabold text-slate-900">9,528</div>
+                <div className="bg-emerald-50 text-emerald-600 text-xs font-bold px-2 py-0.5 rounded-full mb-1">+3.5%</div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 h-fit">
+              <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col justify-between h-[180px]">
+                <div>
+                  <div className="flex justify-between items-start">
+                    <h3 className="font-bold text-slate-900">Churn Rate</h3>
+                    <MoreVertical className="w-4 h-4 text-slate-400" />
+                  </div>
+                  <div className="text-xs font-medium text-slate-500 mt-1">Downgrade to Free plan</div>
+                </div>
+                <div className="flex items-end justify-between">
+                  <div>
+                    <div className="text-2xl font-extrabold text-slate-900">4.26%</div>
+                    <div className="text-[11px] font-semibold text-slate-500 mt-1"><span className="text-red-500">-0.31%</span> than last Week</div>
+                  </div>
+                  <div className="w-24 h-12 flex items-end">
+                    <svg viewBox="0 0 100 40" className="w-full h-full stroke-red-500 fill-red-500/10" strokeWidth="2"><path d="M0 30 Q 15 25, 25 35 T 40 10 T 50 25 T 60 15 T 75 35 T 100 30 L 100 40 L 0 40 Z"/></svg>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col justify-between h-[180px]">
+                <div>
+                  <div className="flex justify-between items-start">
+                    <h3 className="font-bold text-slate-900">User Growth</h3>
+                    <MoreVertical className="w-4 h-4 text-slate-400" />
+                  </div>
+                  <div className="text-xs font-medium text-slate-500 mt-1">New signups website + mobile</div>
+                </div>
+                <div className="flex items-end justify-between">
+                  <div>
+                    <div className="text-2xl font-extrabold text-slate-900">3,768</div>
+                    <div className="text-[11px] font-semibold text-slate-500 mt-1"><span className="text-emerald-500">+3.85%</span> than last Week</div>
+                  </div>
+                  <div className="w-24 h-12 flex items-end">
+                    <svg viewBox="0 0 100 40" className="w-full h-full stroke-emerald-500 fill-emerald-500/10" strokeWidth="2"><path d="M0 35 Q 15 25, 25 30 T 40 20 T 50 25 T 60 20 T 75 10 T 100 5 L 100 40 L 0 40 Z"/></svg>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)] md:col-span-2">
+                <div className="flex justify-between items-start mb-6">
+                  <h3 className="font-bold text-slate-900">Conversion Funnel</h3>
+                  <MoreVertical className="w-4 h-4 text-slate-400" />
+                </div>
+                <div className="flex items-center gap-4 mb-8 text-xs font-semibold text-slate-600 flex-wrap">
+                  <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-600"></div> Ad Impression</div>
+                  <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500"></div> Website Session</div>
+                  <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-400"></div> App Download</div>
+                  <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-200"></div> New Users</div>
+                </div>
+                
+                <div className="flex items-end justify-between h-40 pt-4 gap-2 md:gap-4 pb-2 border-l border-b border-slate-200 px-4 relative ml-4">
+                  <div className="absolute left-[-24px] top-0 text-[10px] text-slate-400 h-full flex flex-col justify-between pb-2 font-medium">
+                    <span>120</span><span>100</span><span>80</span><span>60</span><span>40</span>
+                  </div>
+                  {[
+                    [20, 20, 20, 15], [30, 25, 20, 15], [25, 20, 20, 20], [30, 20, 25, 10], 
+                    [20, 15, 15, 15], [25, 20, 20, 15], [30, 25, 20, 20], [30, 25, 25, 15]
+                  ].map((heights, i) => (
+                    <div key={i} className="flex-1 flex flex-col justify-end w-4 md:w-8 max-w-[32px] rounded-t-lg overflow-hidden gap-[1px]">
+                      <div className="w-full bg-blue-200 rounded-t-sm" style={{height: `${heights[3]}%`}}></div>
+                      <div className="w-full bg-blue-400" style={{height: `${heights[2]}%`}}></div>
+                      <div className="w-full bg-blue-500" style={{height: `${heights[1]}%`}}></div>
+                      <div className="w-full bg-blue-600 rounded-b-sm" style={{height: `${heights[0]}%`}}></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)] h-full flex flex-col">
+              <div className="flex justify-between items-start mb-6">
+                <h3 className="font-bold text-slate-900">Product Performance</h3>
+                <MoreVertical className="w-4 h-4 text-slate-400" />
+              </div>
+              
+              <div className="bg-slate-50 p-1 rounded-xl flex items-center text-[11px] md:text-xs font-bold mb-6">
+                <button className="flex-1 py-1.5 bg-white text-slate-900 shadow-sm rounded-lg">Daily Sales</button>
+                <button className="flex-1 py-1.5 text-slate-500 hover:text-slate-700">Online Sales</button>
+                <button className="flex-1 py-1.5 text-slate-500 hover:text-slate-700">New Users</button>
+              </div>
+
+              <div className="flex justify-between border-b border-slate-100 pb-6 mb-6">
+                <div>
+                  <div className="text-xs font-medium text-slate-500 mb-1">Digital Product</div>
+                  <div className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                    <span className="text-emerald-500 text-sm">↑</span> 790
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-medium text-slate-500 mb-1">Physical Product</div>
+                  <div className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                    <span className="text-red-500 text-sm">↓</span> 572
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <div className="text-xs font-medium text-slate-500 mb-1">Average Daily Sales</div>
+                  <div className="text-3xl font-extrabold text-slate-900">$2,950</div>
+                </div>
+                <div className="bg-red-50 text-red-500 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1"><span className="text-sm leading-none">↓</span> 0.52%</div>
+              </div>
+
+              <div className="mt-auto h-40 flex items-end justify-between gap-1 md:gap-2 border-b border-l border-slate-200 px-2 pt-2 relative ml-4">
+                <div className="absolute left-[-22px] top-0 text-[10px] text-slate-400 h-full flex flex-col justify-between pb-2 font-medium">
+                    <span>400</span><span>300</span><span>200</span><span>100</span><span>0</span>
+                </div>
+                {[30, 80, 45, 65, 40, 40, 35].map((h, i) => (
+                  <div key={i} className="flex-1 bg-blue-600 rounded-t-sm" style={{height: `${h}%`}}></div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {/* Analytics Tab */}
-      {activeTab === 'analytics' && analytics && (
+      {activeTab === 'analytics' && (
+        !analytics ? (
+          <div className="flex-1 flex flex-col items-center justify-center space-y-4 bg-white rounded-3xl border border-slate-100 p-10 max-w-5xl mx-auto my-10">
+            <Loader2 className="h-8 w-8 text-emerald-500 animate-spin" />
+            <p className="text-slate-500 font-bold">Loading analytics...</p>
+          </div>
+        ) : (
         <div className="p-10 max-w-5xl mx-auto w-full h-full overflow-y-auto">
           <h2 className="text-3xl font-extrabold text-slate-900 mb-8 flex items-center gap-3">
             <Activity className="h-8 w-8 text-emerald-500" /> Analytics
@@ -632,6 +817,7 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+        )
       )}
 
       {/* Settings Tab */}
@@ -674,6 +860,94 @@ export default function DashboardPage() {
                 />
               </div>
             </div>
+
+            {/* API Keys Configuration */}
+            <div className="border-t border-slate-100 pt-6 mt-6">
+              <h3 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-emerald-500" /> API Keys Configuration
+              </h3>
+              <p className="text-xs text-slate-500 mb-6 font-medium">
+                Configure your AI autopilot engine keys. If both are configured, the system will use Anthropic Direct first, and automatically fall back to OpenRouter if Anthropic is out of credits.
+              </p>
+              
+              <div className="grid gap-6">
+                {/* Anthropic API Key */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-bold text-slate-700">Anthropic Direct API Key</label>
+                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
+                      anthropicKeyStatus === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                      anthropicKeyStatus === 'Out of Credits' ? 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse' :
+                      anthropicKeyStatus === 'Invalid' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                      anthropicKeyStatus === 'checking' ? 'bg-slate-100 text-slate-500 animate-pulse' :
+                      'bg-slate-50 text-slate-500 border border-slate-200'
+                    }`}>
+                      {anthropicKeyStatus === 'checking' ? 'Checking...' : anthropicKeyStatus}
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input 
+                      type={showAnthropicKey ? "text" : "password"} 
+                      value={config.anthropicApiKey || ''} 
+                      onChange={e => setConfig({...config, anthropicApiKey: e.target.value})}
+                      onBlur={() => validateKey(config.anthropicApiKey, 'anthropic')}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-12 py-3 text-slate-900 font-medium focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+                      placeholder="sk-ant-..."
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowAnthropicKey(!showAnthropicKey)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                    >
+                      {showAnthropicKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  </div>
+                  {anthropicKeyError && (
+                    <p className="text-xs text-rose-600 font-bold mt-1.5 flex items-center gap-1">
+                      <AlertCircle className="h-3.5 w-3.5" /> {anthropicKeyError}
+                    </p>
+                  )}
+                </div>
+
+                {/* OpenRouter API Key */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-bold text-slate-700">OpenRouter API Key</label>
+                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
+                      openRouterKeyStatus === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                      openRouterKeyStatus === 'Out of Credits' ? 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse' :
+                      openRouterKeyStatus === 'Invalid' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                      openRouterKeyStatus === 'checking' ? 'bg-slate-100 text-slate-500 animate-pulse' :
+                      'bg-slate-50 text-slate-500 border border-slate-200'
+                    }`}>
+                      {openRouterKeyStatus === 'checking' ? 'Checking...' : openRouterKeyStatus}
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input 
+                      type={showOpenRouterKey ? "text" : "password"} 
+                      value={config.openRouterApiKey || ''} 
+                      onChange={e => setConfig({...config, openRouterApiKey: e.target.value})}
+                      onBlur={() => validateKey(config.openRouterApiKey, 'openrouter')}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-12 py-3 text-slate-900 font-medium focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+                      placeholder="sk-or-..."
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowOpenRouterKey(!showOpenRouterKey)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                    >
+                      {showOpenRouterKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  </div>
+                  {openRouterKeyError && (
+                    <p className="text-xs text-rose-600 font-bold mt-1.5 flex items-center gap-1">
+                      <AlertCircle className="h-3.5 w-3.5" /> {openRouterKeyError}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
             
             <div className="mt-8 border-t border-slate-100 pt-6 flex justify-end">
               <button 
@@ -688,8 +962,6 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-
-      {/* 2. Middle Column (Chat List) */}
       {activeTab === 'inbox' && (
         <div className="w-[360px] flex-shrink-0 bg-white border-r border-slate-100 flex flex-col relative z-10">
           

@@ -163,7 +163,7 @@ export class WhatsAppManager {
       return globalForBaileys.baileysSession.sock;
     }
 
-    const authFolder = path.join(process.cwd(), ".baileys_auth");
+    const authFolder = path.join(process.cwd(), ".data", ".baileys_auth");
     if (!fs.existsSync(authFolder)) {
       fs.mkdirSync(authFolder, { recursive: true });
     }

@@ -31,6 +31,8 @@ export interface Config {
   timezone?: string;
   workingHours?: string;
   followUps?: FollowUpConfig[];
+  anthropicApiKey?: string;
+  openRouterApiKey?: string;
 }
 
 export interface Appointment {
