@@ -193,7 +193,8 @@ export async function handleWhatsAppMessage(msg: any) {
       const sentMsg = await WhatsAppManager.sendMessage(from, fallback);
       DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: fallback });
       
-      const diagnostics = `[DIAGNOSTIC - KEY ERROR] The bot could not respond because no API keys were loaded.\n- config.anthropicApiKey: ${config.anthropicApiKey ? "Present" : "Empty"}\n- config.openRouterApiKey: ${config.openRouterApiKey ? "Present" : "Empty"}\n- env.ANTHROPIC_API_KEY: ${getEnvKey("ANTHROPIC_API_KEY") ? "Present" : "Empty"}\n- process.env.ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? "Present" : "Empty"}\n- env.OPENROUTER_API_KEY: ${getEnvKey("OPENROUTER_API_KEY") ? "Present" : "Empty"}\n- process.env.OPENROUTER_API_KEY: ${process.env.OPENROUTER_API_KEY ? "Present" : "Empty"}`;
+      const envKeys = Object.keys(process.env).filter(k => !k.toLowerCase().includes("key") && !k.toLowerCase().includes("token") && !k.toLowerCase().includes("secret") && !k.toLowerCase().includes("password")).join(", ");
+      const diagnostics = `[DIAGNOSTIC - KEY ERROR] The bot could not respond because no API keys were loaded.\n- config.anthropicApiKey: ${config.anthropicApiKey ? "Present" : "Empty"}\n- config.openRouterApiKey: ${config.openRouterApiKey ? "Present" : "Empty"}\n- env.ANTHROPIC_API_KEY: ${getEnvKey("ANTHROPIC_API_KEY") ? "Present" : "Empty"}\n- process.env.ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? "Present" : "Empty"}\n- env.OPENROUTER_API_KEY: ${getEnvKey("OPENROUTER_API_KEY") ? "Present" : "Empty"}\n- process.env.OPENROUTER_API_KEY: ${process.env.OPENROUTER_API_KEY ? "Present" : "Empty"}\n- Available Env Keys: ${envKeys}`;
       DB.addChatMessage(from, { role: "assistant", content: diagnostics });
       return;
     }
