@@ -298,10 +298,23 @@ export class WhatsAppManager {
           globalForBaileys.baileysSession.status = "connecting";
           // Check if we are already trying to reconnect to prevent duplicate attempts
           if (!globalForBaileys.reconnectTimeout) {
-            globalForBaileys.reconnectTimeout = setTimeout(() => {
-              globalForBaileys.reconnectTimeout = null;
-              this.startSession(onMessage).catch(err => console.error("[Baileys] Reconnect failed:", err));
-            }, 5000); // 5 seconds wait is safer
+            const attemptReconnect = () => {
+              // Stop if successfully connected or explicitly disconnected
+              if (globalForBaileys.baileysSession.status === "connected" || globalForBaileys.baileysSession.status === "disconnected") {
+                globalForBaileys.reconnectTimeout = null;
+                return;
+              }
+              console.log("[Baileys] Attempting auto-reconnect...");
+              this.startSession(onMessage)
+                .then(() => {
+                  globalForBaileys.reconnectTimeout = null;
+                })
+                .catch(err => {
+                  console.error("[Baileys] Reconnect attempt failed. Retrying in 10s...", err);
+                  globalForBaileys.reconnectTimeout = setTimeout(attemptReconnect, 10000);
+                });
+            };
+            globalForBaileys.reconnectTimeout = setTimeout(attemptReconnect, 5000);
           }
         } else {
           console.log("[Baileys] Logged out. Setting status to disconnected, but preserving credentials. They will only be deleted if the user explicitly disconnects.");
@@ -446,7 +459,7 @@ export class WhatsAppManager {
     
     globalForBaileys.baileysSession = { status: "disconnected", qrCode: null, sock: null };
     
-    const authFolder = path.join(process.cwd(), ".baileys_auth");
+    const authFolder = path.join(process.cwd(), ".data", ".baileys_auth");
     if (fs.existsSync(authFolder)) {
       try {
         fs.rmSync(authFolder, { recursive: true, force: true });
