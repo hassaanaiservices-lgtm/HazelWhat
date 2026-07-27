@@ -10,6 +10,7 @@ const globalForBaileys = global as unknown as {
   baileysSession: any;
   autoSyncInterval: any;
   followUpInterval: any;
+  reconnectTimeout: any;
 };
 
 if (!globalForBaileys.baileysSession) {
@@ -75,10 +76,88 @@ export class WhatsAppManager {
 
         // Re-fetch in case statuses just changed to 'sent'
         const stillPendingSystemA = DB.getPendingFollowUps();
+        const chats = DB.getAllChats();
+        const orders = DB.getOrders();
+        const pendingOrders = orders.filter(o => o.status === "pending");
         
+        // --- SYSTEM C: Abandoned Order Recovery Engine ---
+        console.log(`\n--- [Cron Tick] System C Abandoned Order Check @ ${new Date(now).toLocaleTimeString()} ---`);
+        for (const order of pendingOrders) {
+          const phone = order.phone;
+          const messages = chats[phone];
+          if (!messages || messages.length === 0) continue;
+          
+          const lastMessage = messages[messages.length - 1];
+          // We only recover order if the bot was the last to speak (waiting for details)
+          if (lastMessage.role !== 'assistant') {
+            console.log(`[System C Recovery] Skipping ${phone}: Last message was from user.`);
+            continue;
+          }
+
+          const elapsedMs = now - new Date(order.timestamp).getTime();
+          const elapsedMinutes = elapsedMs / (1000 * 60);
+          const currentStage = order.recoveryStage || 0;
+
+          // Stage 1: 30 minutes (30 mins)
+          if (currentStage < 1 && elapsedMinutes >= 30) {
+            console.log(`[System C Recovery] Triggering Stage 1 for order ${order.id} (${phone})`);
+            try {
+              const template = `Hey! I noticed we got cut off while finalizing your order for the ${order.productName}. I've gone ahead and reserved one in our system for you. Where would you like me to ship it?`;
+              const contextualMessage = await generateContextualFollowUp(phone, template);
+              const sentMsg = await this.sendMessage(phone, contextualMessage);
+              
+              DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage });
+              DB.updateOrder(order.id, { recoveryStage: 1 });
+            } catch (err) {
+              console.error(`[System C Stage 1] Failed for ${phone}:`, err);
+            }
+          }
+          // Stage 2: 6 hours (360 mins)
+          else if (currentStage < 2 && elapsedMinutes >= 360) {
+            console.log(`[System C Recovery] Triggering Stage 2 for order ${order.id} (${phone})`);
+            try {
+              const template = `Hi! Just a quick heads-up: we have a lot of interest in the ${order.productName} today, and I can only hold your reservation for another hour before releasing it. Would you like to confirm your details to secure it?`;
+              const contextualMessage = await generateContextualFollowUp(phone, template);
+              const sentMsg = await this.sendMessage(phone, contextualMessage);
+              
+              DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage });
+              DB.updateOrder(order.id, { recoveryStage: 2 });
+            } catch (err) {
+              console.error(`[System C Stage 2] Failed for ${phone}:`, err);
+            }
+          }
+          // Stage 3: 24 hours (1440 mins)
+          else if (currentStage < 3 && elapsedMinutes >= 1440) {
+            console.log(`[System C Recovery] Triggering Stage 3 for order ${order.id} (${phone})`);
+            try {
+              const template = `Hey! I really want to help you get this outfit. If we finalize your order for the ${order.productName} today, I can throw in free shipping. Let me know if you want me to add that in! 🎁`;
+              const contextualMessage = await generateContextualFollowUp(phone, template);
+              const sentMsg = await this.sendMessage(phone, contextualMessage);
+              
+              DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage });
+              DB.updateOrder(order.id, { recoveryStage: 3 });
+            } catch (err) {
+              console.error(`[System C Stage 3] Failed for ${phone}:`, err);
+            }
+          }
+          // Stage 4: 48 hours (2880 mins)
+          else if (currentStage < 4 && elapsedMinutes >= 2880) {
+            console.log(`[System C Recovery] Triggering Stage 4 for order ${order.id} (${phone})`);
+            try {
+              const template = `Hi, since we haven't heard back, I've cancelled your pending order for the ${order.productName} and released the hold on the stock. If you decide to order it later, just send me a message here.`;
+              const contextualMessage = await generateContextualFollowUp(phone, template);
+              const sentMsg = await this.sendMessage(phone, contextualMessage);
+              
+              DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage });
+              DB.updateOrder(order.id, { recoveryStage: 4, status: "cancelled" });
+            } catch (err) {
+              console.error(`[System C Stage 4] Failed for ${phone}:`, err);
+            }
+          }
+        }
+
         // --- SYSTEM B: Generic Sequence Follow-ups ---
         if (!config.followUps || config.followUps.length === 0) return;
-        const chats = DB.getAllChats();
         
         console.log(`\n--- [Cron Tick] System B Follow-up Check @ ${new Date(now).toLocaleTimeString()} ---`);
 
@@ -110,10 +189,17 @@ export class WhatsAppManager {
             continue;
           }
 
-          // CONFLICT RESOLUTION: Skip System B if System A has a pending follow-up for this customer
+          // CONFLICT RESOLUTION 1: Skip System B if System A has a pending follow-up for this customer
           const hasPendingSystemA = stillPendingSystemA.some(f => f.phone === phone);
           if (hasPendingSystemA) {
             console.log(`  -> Skipping ${phone}: System A has a pending follow-up.`);
+            continue;
+          }
+
+          // CONFLICT RESOLUTION 2: Skip System B if customer has an active pending order (handled by System C)
+          const hasPendingOrder = pendingOrders.some(o => o.phone === phone);
+          if (hasPendingOrder) {
+            console.log(`  -> Skipping ${phone}: Customer has a pending order (handled by System C).`);
             continue;
           }
 
@@ -159,7 +245,8 @@ export class WhatsAppManager {
       this.startFollowUpsSync();
     }
 
-    if (globalForBaileys.baileysSession.status === "connected") {
+    if (globalForBaileys.baileysSession.status === "connected" || (globalForBaileys.baileysSession.status === "connecting" && globalForBaileys.baileysSession.sock)) {
+      console.log(`[Baileys] startSession called but socket is already ${globalForBaileys.baileysSession.status}. Returning existing instance.`);
       return globalForBaileys.baileysSession.sock;
     }
 
@@ -196,19 +283,39 @@ export class WhatsAppManager {
       }
 
       if (connection === "close") {
-        const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
+        // If we explicitly disconnected, do not reconnect
+        if (globalForBaileys.baileysSession.status === "disconnected") {
+          console.log("[Baileys] Socket closed after explicit disconnect. Skipping reconnect.");
+          return;
+        }
+
+        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        
+        console.log(`[Baileys] Connection closed. Reason code: ${statusCode || 'unknown'}. Should reconnect: ${shouldReconnect}`);
         
         if (shouldReconnect) {
           globalForBaileys.baileysSession.status = "connecting";
-          setTimeout(() => this.startSession(onMessage), 2000);
+          // Check if we are already trying to reconnect to prevent duplicate attempts
+          if (!globalForBaileys.reconnectTimeout) {
+            globalForBaileys.reconnectTimeout = setTimeout(() => {
+              globalForBaileys.reconnectTimeout = null;
+              this.startSession(onMessage).catch(err => console.error("[Baileys] Reconnect failed:", err));
+            }, 5000); // 5 seconds wait is safer
+          }
         } else {
-          fs.rmSync(authFolder, { recursive: true, force: true });
+          console.log("[Baileys] Logged out. Setting status to disconnected, but preserving credentials. They will only be deleted if the user explicitly disconnects.");
           globalForBaileys.baileysSession.status = "disconnected";
           globalForBaileys.baileysSession.qrCode = null;
+          globalForBaileys.baileysSession.sock = null;
         }
       } else if (connection === "open") {
         globalForBaileys.baileysSession.status = "connected";
         globalForBaileys.baileysSession.qrCode = null;
+        if (globalForBaileys.reconnectTimeout) {
+          clearTimeout(globalForBaileys.reconnectTimeout);
+          globalForBaileys.reconnectTimeout = null;
+        }
       }
     });
 

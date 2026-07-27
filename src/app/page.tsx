@@ -46,6 +46,26 @@ export default function DashboardPage() {
   const [leadFilter, setLeadFilter] = useState<'all' | 'hot' | 'cold'>('all');
   const [analytics, setAnalytics] = useState<any>(null);
 
+  const [contactsViewMode, setContactsViewMode] = useState<"list" | "board">("board");
+  const [editingTagsPhone, setEditingTagsPhone] = useState<string | null>(null);
+  const [newTagInput, setNewTagInput] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
+  const updateCustomerField = async (phone: string, updates: any) => {
+    try {
+      const res = await fetch("/api/whatsapp/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, ...updates })
+      });
+      if (res.ok) {
+        fetchChats();
+      }
+    } catch (e) {
+      console.error("Failed to update customer:", e);
+    }
+  };
+
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -1767,94 +1787,366 @@ export default function DashboardPage() {
         )}
       {/* Contacts / Leads Tab */}
       {activeTab === 'contacts' && (
-        <div className="p-10 max-w-5xl mx-auto w-full h-full overflow-y-auto">
-          <h2 className="text-3xl font-extrabold text-slate-900 mb-8 flex items-center gap-3">
-            <Users className="h-8 w-8 text-emerald-500" /> Lead Management
-          </h2>
-          
-          <div className="flex gap-4 mb-6">
-            {['all', 'hot', 'cold'].map(filter => (
-              <button
-                key={filter}
-                onClick={() => setLeadFilter(filter as any)}
-                className={`px-4 py-2 rounded-xl text-sm font-bold capitalize transition-colors ${
-                  leadFilter === filter 
-                    ? 'bg-slate-900 text-white' 
-                    : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
-                }`}
-              >
-                {filter === 'all' ? 'All Contacts' : `${filter} Leads`}
-              </button>
-            ))}
+        <div className="p-8 max-w-[1400px] mx-auto w-full h-full overflow-y-auto">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+            <div>
+              <h2 className="text-[22px] font-bold text-slate-900 flex items-center gap-2">
+                <Users className="h-6 w-6 text-emerald-500" /> Pipeline & Lead Management
+              </h2>
+              <p className="text-sm text-slate-500 mt-1 font-medium">Nurture and manage your WhatsApp leads through the sales pipeline.</p>
+            </div>
+            
+            {/* View Mode & Search */}
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              <div className="bg-slate-100/70 p-1 rounded-xl flex items-center text-sm font-semibold border border-slate-200/50">
+                <button 
+                  onClick={() => setContactsViewMode("board")}
+                  className={`px-4 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${contactsViewMode === 'board' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  <Activity className="w-4 h-4" /> Board View
+                </button>
+                <button 
+                  onClick={() => setContactsViewMode("list")}
+                  className={`px-4 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${contactsViewMode === 'list' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  <Users className="w-4 h-4" /> List View
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden min-h-[500px]">
-            {Object.keys(customers).length === 0 ? (
-              <div className="text-center p-12 text-slate-400 font-bold">
-                No contacts found.
-              </div>
-            ) : (
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100">
-                    <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Name / Phone</th>
-                    <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                    <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.values(customers)
-                    .filter(c => {
-                      if (leadFilter === 'all') return true;
-                      if (leadFilter === 'hot') return c.leadStatus === 'hot';
-                      if (leadFilter === 'cold') return c.leadStatus === 'cold';
-                      return true;
-                    })
-                    .map((customer, i) => (
-                      <tr key={customer.phone} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                        <td className="py-4 px-6">
-                          <div className="flex items-center gap-4">
-                            <div className="h-10 w-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center font-bold">
-                              {customer.name ? customer.name.charAt(0).toUpperCase() : <User className="w-5 h-5" />}
-                            </div>
-                            <div>
-                              <div className="font-bold text-slate-900">{customer.name || 'Unknown User'}</div>
-                              <div className="text-sm text-slate-500 font-medium">+{customer.phone}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-4 px-6">
-                          {customer.leadStatus === 'hot' ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-600">
-                              <Zap className="w-3.5 h-3.5" /> Hot Lead
-                            </span>
-                          ) : customer.leadStatus === 'cold' ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-600">
-                              <Activity className="w-3.5 h-3.5" /> Cold Lead
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
-                              Contact
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-4 px-6 text-right">
-                          <button 
-                            onClick={() => {
-                              setSelectedChat(customer.phone);
-                              setActiveTab('inbox');
-                            }}
-                            className="text-sm font-bold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors"
-                          >
-                            Message
-                          </button>
-                        </td>
-                      </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+          {/* Search bar and counts */}
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6 bg-white p-4 rounded-2xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.01)]">
+            <div className="bg-[#f5f6f8] border border-slate-200/60 rounded-xl flex items-center px-4 py-2 gap-3 w-full md:max-w-md focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500 transition-all">
+              <Search className="h-4 w-4 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Search leads by name or phone..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-transparent border-none outline-none text-sm w-full placeholder:text-slate-400 text-slate-700 font-medium" 
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 self-end md:self-center">
+              Total: {Object.keys(customers).length} Contacts
+            </div>
           </div>
+
+          {contactsViewMode === 'board' ? (
+            /* KANBAN BOARD VIEW */
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-start min-h-[600px] pb-10">
+              {(() => {
+                const stages: { id: "new" | "qualified" | "warm" | "cold" | "completed"; title: string; color: string; bg: string; dot: string }[] = [
+                  { id: 'new', title: 'New Leads', color: 'border-blue-500', bg: 'bg-blue-50/40', dot: 'bg-blue-500' },
+                  { id: 'qualified', title: 'Qualified', color: 'border-amber-400', bg: 'bg-amber-50/30', dot: 'bg-amber-400' },
+                  { id: 'warm', title: 'Warm Leads', color: 'border-purple-500', bg: 'bg-purple-50/30', dot: 'bg-purple-500' },
+                  { id: 'cold', title: 'Cold Leads', color: 'border-slate-400', bg: 'bg-slate-50/70', dot: 'bg-slate-400' },
+                  { id: 'completed', title: 'Sales Completed', color: 'border-emerald-500', bg: 'bg-emerald-50/30', dot: 'bg-emerald-500' }
+                ];
+
+                const getCustomerStage = (c: any): "new" | "qualified" | "warm" | "cold" | "completed" => {
+                  if (c.pipelineStage) return c.pipelineStage;
+                  if (c.leadStatus === "cold") return "cold";
+                  const hasOrder = orders.some((o: any) => o.phone === c.phone && (o.status === "confirmed" || o.status === "delivered"));
+                  if (hasOrder) return "completed";
+                  if (c.leadStatus === "hot") return "warm";
+                  if (c.name && c.name !== c.phone) return "qualified";
+                  return "new";
+                };
+
+                const filteredCustomers = Object.values(customers).filter(c => {
+                  if (!searchQuery) return true;
+                  const searchLower = searchQuery.toLowerCase();
+                  const nameMatch = c.name?.toLowerCase().includes(searchLower);
+                  const phoneMatch = c.phone.includes(searchLower);
+                  const tagMatch = c.tags?.some((t: string) => t.toLowerCase().includes(searchLower));
+                  return nameMatch || phoneMatch || tagMatch;
+                });
+
+                return stages.map(stage => {
+                  const stageLeads = filteredCustomers.filter(c => getCustomerStage(c) === stage.id);
+                  return (
+                    <div key={stage.id} className={`flex flex-col rounded-2xl border border-slate-100 ${stage.bg} p-4 min-h-[500px] max-h-[750px]`}>
+                      {/* Column Header */}
+                      <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-200/50 text-slate-800">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${stage.dot}`}></span>
+                          <h3 className="font-bold text-sm">{stage.title}</h3>
+                        </div>
+                        <span className="bg-white border border-slate-200/60 text-slate-600 text-xs px-2 py-0.5 rounded-full font-bold shadow-sm">
+                          {stageLeads.length}
+                        </span>
+                      </div>
+
+                      {/* Card List Container */}
+                      <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+                        {stageLeads.length === 0 ? (
+                          <div className="text-center py-8 text-xs text-slate-400 font-medium">No leads</div>
+                        ) : (
+                          stageLeads.map(lead => {
+                            const leadName = lead.name && lead.name !== lead.phone ? lead.name : 'Unknown User';
+                            const hasAi = lead.aiEnabled !== false;
+                            
+                            return (
+                              <div key={lead.phone} className="bg-white rounded-xl border border-slate-200/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] p-4 flex flex-col gap-3 hover:shadow-md transition-all">
+                                {/* Header */}
+                                <div className="flex items-start justify-between min-w-0">
+                                  <div className="min-w-0">
+                                    <h4 className="font-bold text-sm text-slate-800 truncate" title={leadName}>{leadName}</h4>
+                                    <p className="text-[11px] text-slate-400 font-semibold mt-0.5">+{lead.phone}</p>
+                                  </div>
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${hasAi ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-500'}`}>
+                                    {hasAi ? 'Autopilot' : 'Copilot'}
+                                  </span>
+                                </div>
+
+                                {/* Tags */}
+                                <div className="flex flex-wrap gap-1 items-center">
+                                  {lead.tags && lead.tags.map((t: string) => (
+                                    <span key={t} className="inline-flex items-center gap-0.5 text-[10px] font-bold bg-slate-50 border border-slate-200/80 px-2 py-0.5 rounded-full text-slate-600">
+                                      {t}
+                                      <button 
+                                        onClick={() => {
+                                          const nextTags = lead.tags.filter((x: string) => x !== t);
+                                          updateCustomerField(lead.phone, { tags: nextTags });
+                                        }}
+                                        className="text-slate-400 hover:text-red-500 text-[9px] ml-1"
+                                      >
+                                        ×
+                                      </button>
+                                    </span>
+                                  ))}
+                                  
+                                  {editingTagsPhone === lead.phone ? (
+                                    <div className="flex items-center gap-1.5 mt-1 w-full">
+                                      <input 
+                                        type="text" 
+                                        placeholder="Add tag..."
+                                        value={newTagInput}
+                                        onChange={(e) => setNewTagInput(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' && newTagInput.trim()) {
+                                            const nextTags = [...(lead.tags || []), newTagInput.trim()];
+                                            updateCustomerField(lead.phone, { tags: nextTags });
+                                            setNewTagInput("");
+                                            setEditingTagsPhone(null);
+                                          }
+                                        }}
+                                        className="text-[11px] border border-slate-300 rounded px-1.5 py-0.5 w-20 focus:outline-none focus:border-emerald-500 font-medium"
+                                        autoFocus
+                                      />
+                                      <button 
+                                        onClick={() => {
+                                          if (newTagInput.trim()) {
+                                            const nextTags = [...(lead.tags || []), newTagInput.trim()];
+                                            updateCustomerField(lead.phone, { tags: nextTags });
+                                            setNewTagInput("");
+                                          }
+                                          setEditingTagsPhone(null);
+                                        }}
+                                        className="text-[10px] font-bold text-emerald-600"
+                                      >
+                                        Add
+                                      </button>
+                                      <button onClick={() => setEditingTagsPhone(null)} className="text-[10px] text-slate-400 font-bold">Cancel</button>
+                                    </div>
+                                  ) : (
+                                    <button 
+                                      onClick={() => {
+                                        setEditingTagsPhone(lead.phone);
+                                        setNewTagInput("");
+                                      }}
+                                      className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50/50 hover:bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100"
+                                    >
+                                      + Tag
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Actions & Select Stage */}
+                                <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-1 gap-2">
+                                  <select 
+                                    value={stage.id} 
+                                    onChange={(e) => updateCustomerField(lead.phone, { pipelineStage: e.target.value })}
+                                    className="text-[11px] bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-slate-600 font-bold w-[100px] outline-none focus:border-emerald-500"
+                                  >
+                                    <option value="new">New Lead</option>
+                                    <option value="qualified">Qualified</option>
+                                    <option value="warm">Warm Lead</option>
+                                    <option value="cold">Cold Lead</option>
+                                    <option value="completed">Completed</option>
+                                  </select>
+
+                                  <button 
+                                    onClick={() => {
+                                      setSelectedChat(lead.phone);
+                                      setActiveTab('inbox');
+                                    }}
+                                    className="text-[11px] font-extrabold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                                  >
+                                    <Inbox className="w-3 h-3" /> Chat
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          ) : (
+            /* ORIGINAL LIST TABLE VIEW */
+            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden min-h-[500px]">
+              {Object.keys(customers).length === 0 ? (
+                <div className="text-center p-12 text-slate-400 font-bold">
+                  No contacts found.
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100">
+                      <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Name / Phone</th>
+                      <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Tags</th>
+                      <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Pipeline Stage</th>
+                      <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.values(customers)
+                      .filter(c => {
+                        if (!searchQuery) return true;
+                        const searchLower = searchQuery.toLowerCase();
+                        const nameMatch = c.name?.toLowerCase().includes(searchLower);
+                        const phoneMatch = c.phone.includes(searchLower);
+                        const tagMatch = c.tags?.some((t: string) => t.toLowerCase().includes(searchLower));
+                        return nameMatch || phoneMatch || tagMatch;
+                      })
+                      .map((customer) => {
+                        const getCustomerStage = (c: any): "new" | "qualified" | "warm" | "cold" | "completed" => {
+                          if (c.pipelineStage) return c.pipelineStage;
+                          if (c.leadStatus === "cold") return "cold";
+                          const hasOrder = orders.some((o: any) => o.phone === c.phone && (o.status === "confirmed" || o.status === "delivered"));
+                          if (hasOrder) return "completed";
+                          if (c.leadStatus === "hot") return "warm";
+                          if (c.name && c.name !== c.phone) return "qualified";
+                          return "new";
+                        };
+                        const stage = getCustomerStage(customer);
+                        
+                        return (
+                          <tr key={customer.phone} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                            <td className="py-4 px-6">
+                              <div className="flex items-center gap-4">
+                                <div className="h-10 w-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center font-bold">
+                                  {customer.name ? customer.name.charAt(0).toUpperCase() : <User className="w-5 h-5" />}
+                                </div>
+                                <div>
+                                  <div className="font-bold text-slate-900">{customer.name || 'Unknown User'}</div>
+                                  <div className="text-sm text-slate-500 font-medium">+{customer.phone}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-4 px-6">
+                              <div className="flex flex-wrap gap-1 items-center max-w-xs">
+                                {customer.tags && customer.tags.map((t: string) => (
+                                  <span key={t} className="inline-flex items-center gap-0.5 text-[10px] font-bold bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-full text-slate-600">
+                                    {t}
+                                    <button 
+                                      onClick={() => {
+                                        const nextTags = customer.tags.filter((x: string) => x !== t);
+                                        updateCustomerField(customer.phone, { tags: nextTags });
+                                      }}
+                                      className="text-slate-400 hover:text-red-500 text-[9px] ml-1"
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                ))}
+                                {editingTagsPhone === customer.phone ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <input 
+                                      type="text" 
+                                      placeholder="Tag..."
+                                      value={newTagInput}
+                                      onChange={(e) => setNewTagInput(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && newTagInput.trim()) {
+                                          const nextTags = [...(customer.tags || []), newTagInput.trim()];
+                                          updateCustomerField(customer.phone, { tags: nextTags });
+                                          setNewTagInput("");
+                                          setEditingTagsPhone(null);
+                                        }
+                                      }}
+                                      className="text-[11px] border border-slate-300 rounded px-1.5 py-0.5 w-16 focus:outline-none"
+                                      autoFocus
+                                    />
+                                    <button 
+                                      onClick={() => {
+                                        if (newTagInput.trim()) {
+                                          const nextTags = [...(customer.tags || []), newTagInput.trim()];
+                                          updateCustomerField(customer.phone, { tags: nextTags });
+                                          setNewTagInput("");
+                                        }
+                                        setEditingTagsPhone(null);
+                                      }}
+                                      className="text-[10px] font-bold text-emerald-600"
+                                    >
+                                      Add
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button 
+                                    onClick={() => {
+                                      setEditingTagsPhone(customer.phone);
+                                      setNewTagInput("");
+                                    }}
+                                    className="text-[9px] font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-100"
+                                  >
+                                    + Add
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-4 px-6">
+                              <select 
+                                value={stage} 
+                                onChange={(e) => updateCustomerField(customer.phone, { pipelineStage: e.target.value })}
+                                className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-slate-600 font-bold w-[120px] outline-none"
+                              >
+                                <option value="new">New Lead</option>
+                                <option value="qualified">Qualified</option>
+                                <option value="warm">Warm Lead</option>
+                                <option value="cold">Cold Lead</option>
+                                <option value="completed">Completed</option>
+                              </select>
+                            </td>
+                            <td className="py-4 px-6 text-right">
+                              <button 
+                                onClick={() => {
+                                  setSelectedChat(customer.phone);
+                                  setActiveTab('inbox');
+                                }}
+                                className="text-sm font-bold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors"
+                              >
+                                Message
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
         </div>
       )}
       

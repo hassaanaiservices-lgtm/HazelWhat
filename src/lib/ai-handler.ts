@@ -136,9 +136,12 @@ export async function handleWhatsAppMessage(msg: any) {
 
     DB.addChatMessage(from, { role: "user", content: hasImage ? `[Image] ${content}` : content });
     
+    const existingCustomer = DB.getCustomer(from);
+    const currentStage = existingCustomer?.pipelineStage || "new";
     DB.updateCustomer(from, { 
       followUpLevel: 0,
       leadStatus: "hot",
+      pipelineStage: currentStage === "completed" ? "completed" : currentStage,
       ...(msg.pushName ? { name: msg.pushName } : {})
     });
     DB.cancelPendingFollowUps(from);
@@ -217,7 +220,8 @@ export async function handleWhatsAppMessage(msg: any) {
     - Then, ask the customer in your text response: "How old is your child?" or "What size are you looking for?"
     - Once they tell you the size, check the specific Variations for that product and tell them the exact price for that size in text.
     - If they already mentioned the size in their initial request, you can directly show the card and state the exact price for that size.
-8. PROACTIVE FOLLOW-UPS: Whenever you tell the user you will follow up or check back later, you MUST call the schedule_followup tool to actually schedule it. Never just say it without calling the tool.`;
+8. PROACTIVE FOLLOW-UPS: Whenever you tell the user you will follow up or check back later, you MUST call the schedule_followup tool to actually schedule it. Never just say it without calling the tool.
+9. CUSTOMER CRM PROFILES: You have access to the update_customer_profile tool. Whenever a user shares their name, or shows strong buying interest (such as asking for catalog, pricing, or stock details), you MUST call update_customer_profile to record their name, add relevant product interest tags, and move them to the appropriate stage ('qualified' when they give basic details, 'warm' when showing purchase intent).`;
 
     if (config.enabledFeatures && config.enabledFeatures.length > 0) {
       fullSystemPrompt += "\n\n=== ADVANCED FEATURES ENABLED ===\n";
@@ -341,6 +345,19 @@ export async function handleWhatsAppMessage(msg: any) {
           },
           required: ["send_at", "message_context"]
         }
+      },
+      {
+        name: "update_customer_profile",
+        description: "Updates the customer's CRM profile, including their tags, custom name, and pipeline stage based on the conversation context.",
+        input_schema: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "The customer's verified name (if they provided it in chat)" },
+            tagsToAdd: { type: "array", items: { type: "string" }, description: "List of new tags/preferences to add to this customer (e.g. ['interested-in-mehrunisa', 'needs-urgently'])" },
+            tagsToRemove: { type: "array", items: { type: "string" }, description: "List of tags to remove from this customer" },
+            stage: { type: "string", enum: ["new", "qualified", "warm", "cold", "completed"], description: "The funnel pipeline stage to move the customer to. Use 'qualified' when they give basic details, and 'warm' when they show strong interest or request pricing/availability." }
+          }
+        }
       }
     ];
 
@@ -409,6 +426,9 @@ export async function handleWhatsAppMessage(msg: any) {
             } 
             else if (toolCall.name === "bookAppointment") {
               const success = DB.bookAppointment(from, args.name, args.service, args.date, args.time);
+              if (success) {
+                DB.updateCustomer(from, { pipelineStage: "completed" });
+              }
               toolResult = JSON.stringify({ success, message: success ? "Appointment booked successfully." : "Time slot already taken. Please pick another." });
             }
             else if (toolCall.name === "cancelAppointment") {
@@ -443,10 +463,41 @@ export async function handleWhatsAppMessage(msg: any) {
                   productImageUrl: args.image_url
                 };
                 DB.addOrder(from, orderData);
+                DB.updateCustomer(from, { pipelineStage: "completed" });
                 toolResult = JSON.stringify({ success: true, message: "Order placed and saved to database successfully. You may now confirm the final order details to the user." });
               } catch (err: any) {
                 console.error("[AI Handler] place_order error:", err);
                 toolResult = JSON.stringify({ success: false, message: "Failed to place order: " + err.message });
+              }
+            }
+            else if (toolCall.name === "update_customer_profile") {
+              try {
+                const customer = DB.getCustomer(from);
+                const currentTags = customer?.tags || [];
+                let newTags = [...currentTags];
+
+                if (args.tagsToAdd && Array.isArray(args.tagsToAdd)) {
+                  args.tagsToAdd.forEach((t: string) => {
+                    const cleanTag = t.trim();
+                    if (cleanTag && !newTags.includes(cleanTag)) {
+                      newTags.push(cleanTag);
+                    }
+                  });
+                }
+
+                if (args.tagsToRemove && Array.isArray(args.tagsToRemove)) {
+                  newTags = newTags.filter(t => !args.tagsToRemove.includes(t));
+                }
+
+                const updates: any = { tags: newTags };
+                if (args.name) updates.name = args.name;
+                if (args.stage) updates.pipelineStage = args.stage;
+
+                DB.updateCustomer(from, updates);
+                toolResult = JSON.stringify({ success: true, message: "Customer profile updated successfully." });
+              } catch (err: any) {
+                console.error("[AI Handler] update_customer_profile error:", err);
+                toolResult = JSON.stringify({ success: false, message: "Failed to update profile: " + err.message });
               }
             }
             else if (toolCall.name === "schedule_followup") {

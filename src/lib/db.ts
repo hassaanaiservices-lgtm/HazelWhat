@@ -52,6 +52,8 @@ export interface Customer {
   aiEnabled?: boolean;
   followUpLevel?: number;
   leadStatus?: "hot" | "cold" | "none";
+  tags?: string[];
+  pipelineStage?: "new" | "qualified" | "warm" | "cold" | "completed";
 }
 
 export interface PromotionLog {
@@ -76,6 +78,7 @@ export interface Order {
   price?: string;
   timestamp: string;
   status: "pending" | "processing" | "shipped" | "delivered" | "cancelled" | "confirmed";
+  recoveryStage?: number;
 }
 
 export interface ScheduledFollowUp {
@@ -305,6 +308,7 @@ export class DB {
       if (data.productImageUrl) existingOrder.productImageUrl = data.productImageUrl;
       
       existingOrder.timestamp = new Date().toISOString(); // Update timestamp so it jumps to top
+      existingOrder.recoveryStage = 0; // Reset recovery stage since customer interacted
       saveDb(db);
       return existingOrder;
     }
@@ -321,7 +325,8 @@ export class DB {
       paymentMethod: data.paymentMethod,
       price: data.price,
       timestamp: new Date().toISOString(),
-      status: "pending"
+      status: "pending",
+      recoveryStage: 0
     };
     db.orders.push(newOrder);
     
@@ -351,6 +356,11 @@ export class DB {
   static getPendingFollowUps(): ScheduledFollowUp[] {
     const db = initDb();
     return db.scheduledFollowUps.filter(f => f.status === "pending");
+  }
+
+  static getAllScheduledFollowUps(): ScheduledFollowUp[] {
+    const db = initDb();
+    return db.scheduledFollowUps || [];
   }
 
   static updateFollowUpStatus(id: string, status: "pending" | "sent" | "cancelled" | "failed") {

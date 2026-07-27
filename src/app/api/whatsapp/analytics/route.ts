@@ -77,6 +77,35 @@ export async function GET() {
       .slice(0, 3)
       .map(entry => ({ name: entry[0], count: entry[1] }));
 
+    // Compute Follow-ups sent:
+    // System A (Scheduled Follow-ups sent)
+    const scheduledFollowUps = DB.getAllScheduledFollowUps();
+    const sentScheduledCount = scheduledFollowUps.filter(f => f.status === 'sent').length;
+
+    // System B (Sequence Follow-ups)
+    const allCustomers = DB.getAllCustomers();
+    const sentSequenceCount = allCustomers.reduce((sum, c) => sum + (c.followUpLevel || 0), 0);
+
+    // System C (Abandoned Order Recovery Follow-ups)
+    const sentRecoveryCount = orders.reduce((sum, o) => sum + (o.recoveryStage || 0), 0);
+
+    const totalFollowUps = sentScheduledCount + sentSequenceCount + sentRecoveryCount;
+
+    // Sales Completed (status confirmed, delivered, processing, shipped)
+    const successfulOrders = orders.filter(o => o.status === 'confirmed' || o.status === 'delivered' || o.status === 'processing' || o.status === 'shipped');
+    const totalSalesCount = successfulOrders.length;
+
+    // Total Sales Revenue
+    let totalSalesRevenue = 0;
+    successfulOrders.forEach(o => {
+      if (o.price) {
+        const num = parseFloat(o.price.replace(/[^\d.-]/g, ''));
+        if (!isNaN(num)) {
+          totalSalesRevenue += num;
+        }
+      }
+    });
+
     return NextResponse.json({
       success: true,
       data: {
@@ -89,7 +118,11 @@ export async function GET() {
         totalBookings,
         conversionRate,
         topProducts,
-        totalContacts: uniqueContacts
+        totalContacts: uniqueContacts,
+        totalFollowUps,
+        totalSalesCount,
+        totalSalesRevenue,
+        currency: config.storeCurrency || '$'
       }
     });
 
