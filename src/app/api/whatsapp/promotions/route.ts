@@ -36,10 +36,10 @@ export async function POST(req: Request) {
       targetPhones = Array.from(new Set(appointments.map(a => a.phone)));
     } else if (audience === "hot") {
       const customers = DB.getAllCustomers();
-      targetPhones = Array.from(new Set(customers.filter(c => c.leadStatus === "hot").map(c => c.phone)));
+      targetPhones = Array.from(new Set(customers.filter(c => c.leadStatus === "hot" || c.pipelineStage === "warm").map(c => c.phone)));
     } else if (audience === "cold") {
       const customers = DB.getAllCustomers();
-      targetPhones = Array.from(new Set(customers.filter(c => c.leadStatus === "cold").map(c => c.phone)));
+      targetPhones = Array.from(new Set(customers.filter(c => c.leadStatus === "cold" || c.pipelineStage === "cold").map(c => c.phone)));
     } else {
       return NextResponse.json({ success: false, error: "Invalid audience type" }, { status: 400 });
     }

@@ -1538,8 +1538,8 @@ export default function DashboardPage() {
                   className="w-full p-4 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-slate-700"
                 >
                   <option value="all">All Contacts</option>
-                  <option value="hot">Hot Leads (Active Conversation)</option>
-                  <option value="cold">Cold Leads (Abandoned Bookings)</option>
+                  <option value="hot">Warm & Hot Leads (Active Inquiries)</option>
+                  <option value="cold">Cold Leads (Inactive / Abandoned)</option>
                 </select>
                 <p className="text-xs text-slate-500 font-medium mt-1">Select which group of contacts should receive this broadcast.</p>
               </div>
@@ -1654,6 +1654,23 @@ export default function DashboardPage() {
                             </div>
                           </div>
                         </div>
+
+                        {fu.enabled && (
+                          <div className="mt-4 border-t border-slate-100 pt-3">
+                            <label className="text-xs font-bold text-slate-500 block mb-1">Follow-up Message Template</label>
+                            <textarea 
+                              value={fu.message || ""}
+                              onChange={(e) => {
+                                const newFUs = [...fullFUs];
+                                newFUs[idx] = { ...newFUs[idx], message: e.target.value };
+                                setConfig({ ...config, followUps: newFUs });
+                              }}
+                              rows={3}
+                              placeholder="Enter the follow-up message template. E.g. 'Hi! Just checking in to see if you have any questions...'"
+                              className="w-full p-3 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/30 outline-none font-medium text-slate-700 focus:border-emerald-500"
+                            />
+                          </div>
+                        )}
                       </div>
                     ));
                   })()}
