@@ -31,6 +31,219 @@ function getEnvKey(keyName: string): string {
   return "";
 }
 
+export function detectKeyType(key: string): "anthropic" | "openrouter" | "deepseek" | "unknown" {
+  if (!key) return "unknown";
+  const trimmed = key.trim();
+  if (trimmed.startsWith("sk-ant-")) {
+    return "anthropic";
+  }
+  if (trimmed.startsWith("sk-or-")) {
+    return "openrouter";
+  }
+  if (trimmed.startsWith("sk-")) {
+    return "deepseek";
+  }
+  return "unknown";
+}
+
+function convertAnthropicMessagesToOpenAi(messages: any[], systemPrompt?: string): any[] {
+  const result: any[] = [];
+  if (systemPrompt) {
+    result.push({ role: "system", content: systemPrompt });
+  }
+
+  for (const msg of messages) {
+    const role = msg.role;
+    let content = msg.content;
+    let toolCalls: any[] | undefined = undefined;
+
+    if (Array.isArray(content)) {
+      const openAiContent: any[] = [];
+      const toolResults: any[] = [];
+
+      for (const block of content) {
+        if (block.type === "text") {
+          openAiContent.push({ type: "text", text: block.text });
+        } else if (block.type === "image") {
+          const mimeType = block.source?.media_type || "image/jpeg";
+          const base64Data = block.source?.data;
+          openAiContent.push({
+            type: "image_url",
+            image_url: { url: `data:${mimeType};base64,${base64Data}` }
+          });
+        } else if (block.type === "tool_use") {
+          if (!toolCalls) toolCalls = [];
+          toolCalls.push({
+            id: block.id,
+            type: "function",
+            function: {
+              name: block.name,
+              arguments: JSON.stringify(block.input)
+            }
+          });
+        } else if (block.type === "tool_result") {
+          toolResults.push({
+            role: "tool",
+            tool_call_id: block.tool_use_id,
+            content: typeof block.content === "string" ? block.content : JSON.stringify(block.content)
+          });
+        }
+      }
+
+      if (role === "assistant") {
+        result.push({
+          role: "assistant",
+          content: openAiContent.length > 0 ? openAiContent.map(c => c.text).join("\n") : null,
+          tool_calls: toolCalls
+        });
+      } else if (role === "user") {
+        if (toolResults.length > 0) {
+          for (const tr of toolResults) {
+            result.push(tr);
+          }
+        } else {
+          result.push({
+            role: "user",
+            content: openAiContent.length === 1 && openAiContent[0].type === "text" ? openAiContent[0].text : openAiContent
+          });
+        }
+      }
+    } else if (typeof content === "string") {
+      result.push({ role, content });
+    }
+  }
+
+  return result;
+}
+
+function convertAnthropicToolsToOpenAi(tools: any[]): any[] {
+  if (!tools) return [];
+  return tools.map(tool => ({
+    type: "function",
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.input_schema
+    }
+  }));
+}
+
+function convertOpenAiResponseToAnthropic(message: any): any[] {
+  const content: any[] = [];
+  if (message.content) {
+    content.push({ type: "text", text: message.content });
+  }
+  if (message.tool_calls) {
+    for (const tc of message.tool_calls) {
+      let parsedInput = {};
+      try {
+        parsedInput = JSON.parse(tc.function.arguments);
+      } catch (e) {
+        console.error("Failed to parse tool call arguments:", tc.function.arguments);
+      }
+      content.push({
+        type: "tool_use",
+        id: tc.id,
+        name: tc.function.name,
+        input: parsedInput
+      });
+    }
+  }
+  return content;
+}
+
+async function callLLM(
+  apiKey: string,
+  systemPrompt: string,
+  messages: any[],
+  tools: any[],
+  temperature = 0.7
+): Promise<{ content: any[] }> {
+  const trimmed = apiKey.trim();
+  const keyType = detectKeyType(trimmed);
+
+  if (keyType === "anthropic") {
+    const anthropic = new Anthropic({ apiKey: trimmed });
+    const res = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 2000,
+      system: systemPrompt,
+      messages: messages as any,
+      tools: tools.length > 0 ? tools : undefined,
+      temperature: temperature,
+    });
+    return res;
+  } else if (keyType === "openrouter") {
+    const models = [
+      "anthropic/claude-haiku-4.5",
+      "google/gemma-4-31b-it:free",
+      "google/gemma-4-26b-a4b-it:free"
+    ];
+    let lastError: any = null;
+    for (const model of models) {
+      try {
+        console.log(`[callLLM] Attempting OpenRouter model ${model}...`);
+        const anthropic = new Anthropic({
+          apiKey: trimmed,
+          baseURL: "https://openrouter.ai/api",
+          defaultHeaders: {
+            "HTTP-Referer": "https://hazeldid.com",
+            "X-Title": "HazelWhat",
+          },
+        });
+        const res = await anthropic.messages.create({
+          model: model,
+          max_tokens: 2000,
+          system: systemPrompt,
+          messages: messages as any,
+          tools: tools.length > 0 ? tools : undefined,
+          temperature: temperature,
+        });
+        return res;
+      } catch (err: any) {
+        console.error(`[callLLM] OpenRouter model ${model} failed:`, err.message || err);
+        lastError = err;
+      }
+    }
+    throw lastError || new Error("OpenRouter models failed");
+  } else if (keyType === "deepseek") {
+    console.log(`[callLLM] Attempting DeepSeek API...`);
+    const openAiMessages = convertAnthropicMessagesToOpenAi(messages, systemPrompt);
+    const openAiTools = convertAnthropicToolsToOpenAi(tools);
+
+    const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${trimmed}`
+      },
+      body: JSON.stringify({
+        model: "deepseek-chat",
+        messages: openAiMessages,
+        tools: openAiTools.length > 0 ? openAiTools : undefined,
+        max_tokens: 2000,
+        temperature: temperature
+      })
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`DeepSeek API failed with status ${res.status}: ${errText}`);
+    }
+
+    const data = await res.json();
+    if (!data.choices || data.choices.length === 0) {
+      throw new Error("DeepSeek API returned an empty choices array.");
+    }
+
+    const choice = data.choices[0].message;
+    const anthropicContent = convertOpenAiResponseToAnthropic(choice);
+    return { content: anthropicContent };
+  } else {
+    throw new Error(`Unsupported API key type. Please provide a valid Anthropic, OpenRouter, or DeepSeek API key.`);
+  }
+}
+
 function debugLog(msg: string) {
   try {
     const logPath = path.join(process.cwd(), ".data", "debug.log");
@@ -139,6 +352,7 @@ export async function handleWhatsAppMessage(msg: any) {
     const existingCustomer = DB.getCustomer(from);
     const currentStage = existingCustomer?.pipelineStage || "new";
     DB.updateCustomer(from, { 
+      jid: msg.key.remoteJid,
       followUpLevel: 0,
       leadStatus: "hot",
       pipelineStage: currentStage === "completed" ? "completed" : currentStage,
@@ -170,34 +384,23 @@ export async function handleWhatsAppMessage(msg: any) {
       return;
     }
 
-    console.log("=== AI HANDLER VERSION 6 (Anthropic SDK) ===");
+    console.log("=== AI HANDLER VERSION 6 (Unified callLLM) ===");
 
-    const anthropicKey = (config.anthropicApiKey || getEnvKey("ANTHROPIC_API_KEY") || process.env.ANTHROPIC_API_KEY || "").trim();
-    const openRouterKey = (config.openRouterApiKey || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENROUTER_API_KEY || "").trim();
+    const apiKey = (config.apiKey || getEnvKey("API_KEY") || process.env.API_KEY || 
+                    config.anthropicApiKey || getEnvKey("ANTHROPIC_API_KEY") || process.env.ANTHROPIC_API_KEY ||
+                    config.openRouterApiKey || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENROUTER_API_KEY || "").trim();
 
     debugLog(`=== Incoming Message from ${from} ===`);
     debugLog(`Content: "${content}"`);
-    debugLog(`Anthropic Key source: config=${config.anthropicApiKey ? "yes" : "no"}, env=${getEnvKey("ANTHROPIC_API_KEY") ? "yes" : "no"}, process=${process.env.ANTHROPIC_API_KEY ? "yes" : "no"}`);
-    debugLog(`OpenRouter Key source: config=${config.openRouterApiKey ? "yes" : "no"}, env=${getEnvKey("OPENROUTER_API_KEY") ? "yes" : "no"}, process=${process.env.OPENROUTER_API_KEY ? "yes" : "no"}`);
+    debugLog(`Unified Key source: config.apiKey=${config.apiKey ? "yes" : "no"}, env.API_KEY=${getEnvKey("API_KEY") ? "yes" : "no"}, process.env.API_KEY=${process.env.API_KEY ? "yes" : "no"}`);
 
-    const attempts: { type: "anthropic" | "openrouter" | "openrouter-free"; key: string; model: string }[] = [];
-    if (anthropicKey) {
-      attempts.push({ type: "anthropic", key: anthropicKey, model: "claude-haiku-4-5-20251001" });
-    }
-    if (openRouterKey) {
-      attempts.push({ type: "openrouter", key: openRouterKey, model: "anthropic/claude-haiku-4.5" });
-      attempts.push({ type: "openrouter-free", key: openRouterKey, model: "google/gemma-4-31b-it:free" });
-      attempts.push({ type: "openrouter-free", key: openRouterKey, model: "google/gemma-4-26b-a4b-it:free" });
-    }
-
-    if (attempts.length === 0) {
-      console.error("[AI Handler] Neither ANTHROPIC_API_KEY nor OPENROUTER_API_KEY is configured.");
+    if (!apiKey) {
+      console.error("[AI Handler] No API key (API_KEY, ANTHROPIC_API_KEY, or OPENROUTER_API_KEY) is configured.");
       const fallback = "I'm currently experiencing a high volume of requests. A human agent will be with you shortly!";
       const sentMsg = await WhatsAppManager.sendMessage(from, fallback);
       DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: fallback });
       
-      const envKeys = Object.keys(process.env).filter(k => !k.toLowerCase().includes("key") && !k.toLowerCase().includes("token") && !k.toLowerCase().includes("secret") && !k.toLowerCase().includes("password")).join(", ");
-      const diagnostics = `[DIAGNOSTIC - KEY ERROR] The bot could not respond because no API keys were loaded.\n- config.anthropicApiKey: ${config.anthropicApiKey ? "Present" : "Empty"}\n- config.openRouterApiKey: ${config.openRouterApiKey ? "Present" : "Empty"}\n- env.ANTHROPIC_API_KEY: ${getEnvKey("ANTHROPIC_API_KEY") ? "Present" : "Empty"}\n- process.env.ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? "Present" : "Empty"}\n- env.OPENROUTER_API_KEY: ${getEnvKey("OPENROUTER_API_KEY") ? "Present" : "Empty"}\n- process.env.OPENROUTER_API_KEY: ${process.env.OPENROUTER_API_KEY ? "Present" : "Empty"}\n- Available Env Keys: ${envKeys}`;
+      const diagnostics = `[DIAGNOSTIC - KEY ERROR] The bot could not respond because no API keys were loaded.\n- config.apiKey: ${config.apiKey ? "Present" : "Empty"}\n- env.API_KEY: ${getEnvKey("API_KEY") ? "Present" : "Empty"}`;
       DB.addChatMessage(from, { role: "assistant", content: diagnostics });
       return;
     }
@@ -361,211 +564,171 @@ export async function handleWhatsAppMessage(msg: any) {
       }
     ];
 
-    for (let i = 0; i < attempts.length; i++) {
-      const attempt = attempts[i];
-      const isOpenRouter = attempt.type.startsWith("openrouter");
+    try {
+      await WhatsAppManager.sendTyping(from);
+      console.log(`[AI Handler] Requesting completion using unified callLLM...`);
+      let res = await callLLM(apiKey, fullSystemPrompt, recentHistory, tools);
+
+      let textContent = "";
+      for (const block of res.content) {
+        if (block.type === 'text') {
+          textContent += block.text;
+        }
+      }
+      aiReply = textContent || aiReply;
+
+      const toolUses = res.content.filter(block => block.type === 'tool_use');
       
-      console.log(`[AI Handler] Attempting connection via ${attempt.type.toUpperCase()} using model ${attempt.model}...`);
-      
-      const anthropic = new Anthropic({ 
-        apiKey: attempt.key,
-        ...(isOpenRouter ? { 
-          baseURL: "https://openrouter.ai/api",
-          defaultHeaders: {
-            "HTTP-Referer": "https://hazeldid.com", 
-            "X-Title": "HazelWhat"
+      if (toolUses.length > 0) {
+        console.log("[AI Handler] AI requested tool calls:", JSON.stringify(toolUses));
+        
+        // Push the assistant's message to the history
+        recentHistory.push({
+          role: "assistant",
+          content: res.content
+        } as any);
+        
+        const toolResults = [];
+
+        for (const _toolCall of toolUses) {
+          const toolCall = _toolCall as any;
+          const args = toolCall.input;
+          let toolResult = "";
+
+          if (toolCall.name === "checkAvailability") {
+            const booked = DB.getAppointmentsByDate(args.date);
+            const bookedTimes = booked.map(a => a.time);
+            const allHours = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+            const available = allHours.filter(h => !bookedTimes.includes(h));
+            toolResult = JSON.stringify({ availableTimes: available });
+          } 
+          else if (toolCall.name === "bookAppointment") {
+            const success = DB.bookAppointment(from, args.name, args.service, args.date, args.time);
+            if (success) {
+              DB.updateCustomer(from, { pipelineStage: "completed" });
+            }
+            toolResult = JSON.stringify({ success, message: success ? "Appointment booked successfully." : "Time slot already taken. Please pick another." });
           }
-        } : {})
-      });
-      const modelName = attempt.model;
+          else if (toolCall.name === "cancelAppointment") {
+            const success = DB.cancelAppointment(from, args.date, args.time);
+            toolResult = JSON.stringify({ success, message: success ? "Appointment cancelled successfully." : "No such appointment found to cancel." });
+          }
+          else if (toolCall.name === "send_product_card") {
+            try {
+              await WhatsAppManager.sendProductCard(from, {
+                title: args.product_name,
+                price: args.price,
+                image: args.image_url,
+                link: args.product_page_url,
+                description: args.description
+              });
+              toolResult = JSON.stringify({ success: true, message: "Product card sent successfully! Do not type out any further description of the product." });
+            } catch (err) {
+              console.error("[AI Handler] sendProductCard error:", err);
+              toolResult = JSON.stringify({ success: false, message: "Failed to send product card." });
+            }
+          }
+          else if (toolCall.name === "place_order") {
+            try {
+              const orderData = {
+                productName: args.product_name,
+                size: args.size,
+                color: args.color,
+                deliveryAddress: args.address,
+                contactNumber: args.contact_number,
+                paymentMethod: args.payment_method,
+                price: args.price,
+                productImageUrl: args.image_url
+              };
+              DB.addOrder(from, orderData);
+              DB.updateCustomer(from, { pipelineStage: "completed" });
+              toolResult = JSON.stringify({ success: true, message: "Order placed and saved to database successfully. You may now confirm the final order details to the user." });
+            } catch (err: any) {
+              console.error("[AI Handler] place_order error:", err);
+              toolResult = JSON.stringify({ success: false, message: "Failed to place order: " + err.message });
+            }
+          }
+          else if (toolCall.name === "update_customer_profile") {
+            try {
+              const customer = DB.getCustomer(from);
+              const currentTags = customer?.tags || [];
+              let newTags = [...currentTags];
 
-      try {
-        await WhatsAppManager.sendTyping(from);
-        console.log(`[AI Handler] Requesting completion from ${attempt.type.toUpperCase()}...`);
-        let res = await anthropic.messages.create({
-          model: modelName,
-          max_tokens: 2000,
-          system: fullSystemPrompt,
-          messages: recentHistory as any,
-          tools: tools,
-          temperature: 0.7,
-        });
+              if (args.tagsToAdd && Array.isArray(args.tagsToAdd)) {
+                args.tagsToAdd.forEach((t: string) => {
+                  const cleanTag = t.trim();
+                  if (cleanTag && !newTags.includes(cleanTag)) {
+                    newTags.push(cleanTag);
+                  }
+                });
+              }
 
-        let textContent = "";
+              if (args.tagsToRemove && Array.isArray(args.tagsToRemove)) {
+                newTags = newTags.filter(t => !args.tagsToRemove.includes(t));
+              }
+
+              const updates: any = { tags: newTags };
+              if (args.name) updates.name = args.name;
+              if (args.stage) updates.pipelineStage = args.stage;
+
+              DB.updateCustomer(from, updates);
+              toolResult = JSON.stringify({ success: true, message: "Customer profile updated successfully." });
+            } catch (err: any) {
+              console.error("[AI Handler] update_customer_profile error:", err);
+              toolResult = JSON.stringify({ success: false, message: "Failed to update profile: " + err.message });
+            }
+          }
+          else if (toolCall.name === "schedule_followup") {
+            try {
+              DB.cancelPendingFollowUps(from);
+              DB.addScheduledFollowUp({
+                id: Math.random().toString(36).substring(2, 9),
+                phone: from,
+                sendAt: args.send_at,
+                context: args.message_context,
+                status: "pending",
+                createdAt: new Date().toISOString()
+              });
+              toolResult = JSON.stringify({ success: true, message: "Follow-up scheduled successfully in the database." });
+            } catch (err: any) {
+              console.error("[AI Handler] schedule_followup error:", err);
+              toolResult = JSON.stringify({ success: false, message: "Failed to schedule follow-up." });
+            }
+          }
+
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: toolCall.id,
+            content: toolResult
+          });
+        }
+
+        recentHistory.push({
+          role: "user",
+          content: toolResults
+        } as any);
+
+        console.log("[AI Handler] Sending tool results back to AI...");
+        res = await callLLM(apiKey, fullSystemPrompt, recentHistory, tools);
+
+        textContent = "";
         for (const block of res.content) {
           if (block.type === 'text') {
             textContent += block.text;
           }
         }
         aiReply = textContent || aiReply;
-
-        const toolUses = res.content.filter(block => block.type === 'tool_use');
-        
-        if (toolUses.length > 0) {
-          console.log("[AI Handler] AI requested tool calls:", JSON.stringify(toolUses));
-          
-          // Push the assistant's message to the history
-          recentHistory.push({
-            role: "assistant",
-            content: res.content
-          } as any);
-          
-          const toolResults = [];
-
-          for (const _toolCall of toolUses) {
-            const toolCall = _toolCall as any;
-            const args = toolCall.input;
-            let toolResult = "";
-
-            if (toolCall.name === "checkAvailability") {
-              const booked = DB.getAppointmentsByDate(args.date);
-              const bookedTimes = booked.map(a => a.time);
-              const allHours = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
-              const available = allHours.filter(h => !bookedTimes.includes(h));
-              toolResult = JSON.stringify({ availableTimes: available });
-            } 
-            else if (toolCall.name === "bookAppointment") {
-              const success = DB.bookAppointment(from, args.name, args.service, args.date, args.time);
-              if (success) {
-                DB.updateCustomer(from, { pipelineStage: "completed" });
-              }
-              toolResult = JSON.stringify({ success, message: success ? "Appointment booked successfully." : "Time slot already taken. Please pick another." });
-            }
-            else if (toolCall.name === "cancelAppointment") {
-              const success = DB.cancelAppointment(from, args.date, args.time);
-              toolResult = JSON.stringify({ success, message: success ? "Appointment cancelled successfully." : "No such appointment found to cancel." });
-            }
-            else if (toolCall.name === "send_product_card") {
-              try {
-                await WhatsAppManager.sendProductCard(from, {
-                  title: args.product_name,
-                  price: args.price,
-                  image: args.image_url,
-                  link: args.product_page_url,
-                  description: args.description
-                });
-                toolResult = JSON.stringify({ success: true, message: "Product card sent successfully! Do not type out any further description of the product." });
-              } catch (err) {
-                console.error("[AI Handler] sendProductCard error:", err);
-                toolResult = JSON.stringify({ success: false, message: "Failed to send product card." });
-              }
-            }
-            else if (toolCall.name === "place_order") {
-              try {
-                const orderData = {
-                  productName: args.product_name,
-                  size: args.size,
-                  color: args.color,
-                  deliveryAddress: args.address,
-                  contactNumber: args.contact_number,
-                  paymentMethod: args.payment_method,
-                  price: args.price,
-                  productImageUrl: args.image_url
-                };
-                DB.addOrder(from, orderData);
-                DB.updateCustomer(from, { pipelineStage: "completed" });
-                toolResult = JSON.stringify({ success: true, message: "Order placed and saved to database successfully. You may now confirm the final order details to the user." });
-              } catch (err: any) {
-                console.error("[AI Handler] place_order error:", err);
-                toolResult = JSON.stringify({ success: false, message: "Failed to place order: " + err.message });
-              }
-            }
-            else if (toolCall.name === "update_customer_profile") {
-              try {
-                const customer = DB.getCustomer(from);
-                const currentTags = customer?.tags || [];
-                let newTags = [...currentTags];
-
-                if (args.tagsToAdd && Array.isArray(args.tagsToAdd)) {
-                  args.tagsToAdd.forEach((t: string) => {
-                    const cleanTag = t.trim();
-                    if (cleanTag && !newTags.includes(cleanTag)) {
-                      newTags.push(cleanTag);
-                    }
-                  });
-                }
-
-                if (args.tagsToRemove && Array.isArray(args.tagsToRemove)) {
-                  newTags = newTags.filter(t => !args.tagsToRemove.includes(t));
-                }
-
-                const updates: any = { tags: newTags };
-                if (args.name) updates.name = args.name;
-                if (args.stage) updates.pipelineStage = args.stage;
-
-                DB.updateCustomer(from, updates);
-                toolResult = JSON.stringify({ success: true, message: "Customer profile updated successfully." });
-              } catch (err: any) {
-                console.error("[AI Handler] update_customer_profile error:", err);
-                toolResult = JSON.stringify({ success: false, message: "Failed to update profile: " + err.message });
-              }
-            }
-            else if (toolCall.name === "schedule_followup") {
-              try {
-                DB.cancelPendingFollowUps(from);
-                DB.addScheduledFollowUp({
-                  id: Math.random().toString(36).substring(2, 9),
-                  phone: from,
-                  sendAt: args.send_at,
-                  context: args.message_context,
-                  status: "pending",
-                  createdAt: new Date().toISOString()
-                });
-                toolResult = JSON.stringify({ success: true, message: "Follow-up scheduled successfully in the database." });
-              } catch (err: any) {
-                console.error("[AI Handler] schedule_followup error:", err);
-                toolResult = JSON.stringify({ success: false, message: "Failed to schedule follow-up." });
-              }
-            }
-
-            toolResults.push({
-              type: "tool_result",
-              tool_use_id: toolCall.id,
-              content: toolResult
-            });
-          }
-
-          recentHistory.push({
-            role: "user",
-            content: toolResults
-          } as any);
-
-          console.log("[AI Handler] Sending tool results back to AI...");
-          res = await anthropic.messages.create({
-            model: modelName,
-            max_tokens: 2000,
-            system: fullSystemPrompt,
-            messages: recentHistory as any,
-            tools: tools,
-            temperature: 0.7,
-          });
-
-          textContent = "";
-          for (const block of res.content) {
-            if (block.type === 'text') {
-              textContent += block.text;
-            }
-          }
-          aiReply = textContent || aiReply;
-        }
-        
-        debugLog(`SUCCESS: ${attempt.type.toUpperCase()} with model ${attempt.model} generated reply: "${aiReply.substring(0, 60)}..."`);
-        break; // break the loop, we successfully generated response!
-      } catch (apiErr: any) {
-        const errorDetail = apiErr.message || JSON.stringify(apiErr);
-        console.error(`[AI Handler] API ERROR CAUGHT for ${attempt.type.toUpperCase()}:`, errorDetail);
-        debugLog(`FAILURE: ${attempt.type.toUpperCase()} with model ${attempt.model} failed. Error: ${errorDetail}`);
-        
-        if (i === attempts.length - 1) {
-          aiReply = "I'm currently experiencing a high volume of requests and having some technical difficulties. A human agent will be with you shortly, or you can try again later!";
-          
-          const attemptsInfo = attempts.map(att => `${att.type} (${att.model})`).join(", ");
-          const diagnostics = `[DIAGNOSTIC - API ERROR] All model attempts failed.\n- Attempted: ${attemptsInfo}\n- Last Error: ${errorDetail}`;
-          DB.addChatMessage(from, { role: "assistant", content: diagnostics });
-        } else {
-          console.log("[AI Handler] Switching to fallback API client...");
-        }
       }
+      
+      debugLog(`SUCCESS: Unified LLM generated reply: "${aiReply.substring(0, 60)}..."`);
+    } catch (apiErr: any) {
+      const errorDetail = apiErr.message || JSON.stringify(apiErr);
+      console.error(`[AI Handler] Unified LLM API ERROR CAUGHT:`, errorDetail);
+      debugLog(`FAILURE: Unified LLM API call failed. Error: ${errorDetail}`);
+      
+      aiReply = "I'm currently experiencing a high volume of requests and having some technical difficulties. A human agent will be with you shortly, or you can try again later!";
+      const diagnostics = `[DIAGNOSTIC - API ERROR] Unified LLM call failed.\n- Key Type: ${detectKeyType(apiKey)}\n- Last Error: ${errorDetail}`;
+      DB.addChatMessage(from, { role: "assistant", content: diagnostics });
     }
 
     if (aiReply) {
@@ -611,18 +774,11 @@ export async function handleWhatsAppMessage(msg: any) {
 
 export async function generateContextualFollowUp(phone: string, followUpPrompt: string): Promise<string> {
   const config = DB.getConfig();
-  const anthropicKey = (config.anthropicApiKey || getEnvKey("ANTHROPIC_API_KEY") || process.env.ANTHROPIC_API_KEY || "").trim();
-  const openRouterKey = (config.openRouterApiKey || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENROUTER_API_KEY || "").trim();
+  const apiKey = (config.apiKey || getEnvKey("API_KEY") || process.env.API_KEY || 
+                  config.anthropicApiKey || getEnvKey("ANTHROPIC_API_KEY") || process.env.ANTHROPIC_API_KEY ||
+                  config.openRouterApiKey || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENROUTER_API_KEY || "").trim();
 
-  const attempts: { type: "anthropic" | "openrouter"; key: string }[] = [];
-  if (anthropicKey) {
-    attempts.push({ type: "anthropic", key: anthropicKey });
-  }
-  if (openRouterKey) {
-    attempts.push({ type: "openrouter", key: openRouterKey });
-  }
-
-  if (attempts.length === 0) {
+  if (!apiKey) {
     return followUpPrompt || "Hello! Just checking in.";
   }
 
@@ -637,61 +793,28 @@ export async function generateContextualFollowUp(phone: string, followUpPrompt: 
     systemPrompt += `\n\nInstruction: Look at the chat history. The user hasn't replied in a while. Craft a short, personalized follow-up message to restart the conversation, referencing their last inquiry.`;
   }
 
-  for (let i = 0; i < attempts.length; i++) {
-    const attempt = attempts[i];
-    const isOpenRouter = attempt.type === "openrouter";
-    const anthropic = new Anthropic({ 
-      apiKey: attempt.key,
-      ...(isOpenRouter ? { 
-        baseURL: "https://openrouter.ai/api",
-        defaultHeaders: {
-          "HTTP-Referer": "https://hazeldid.com", 
-          "X-Title": "HazelWhat"
-        }
-      } : {})
-    });
-    const modelName = isOpenRouter ? "anthropic/claude-haiku-4.5" : "claude-haiku-4-5-20251001";
-
-    try {
-      const res = await anthropic.messages.create({
-        model: modelName,
-        max_tokens: 1000,
-        system: systemPrompt,
-        messages: recentHistory as any,
-        temperature: 0.7,
-      });
-
-      let textContent = "";
-      for (const block of res.content) {
-        if (block.type === 'text') {
-          textContent += block.text;
-        }
-      }
-      return textContent || "Hi there! Just following up to see if you needed any more help?";
-    } catch (error: any) {
-      console.error(`[AI Handler] Error generating contextual follow-up using ${attempt.type.toUpperCase()}:`, error.message || error);
-      if (i === attempts.length - 1) {
-        return "Hi there! Just checking in to see if you need any more help?";
+  try {
+    const res = await callLLM(apiKey, systemPrompt, recentHistory, []);
+    let textContent = "";
+    for (const block of res.content) {
+      if (block.type === 'text') {
+        textContent += block.text;
       }
     }
+    return textContent || "Hi there! Just following up to see if you needed any more help?";
+  } catch (error: any) {
+    console.error(`[AI Handler] Error generating contextual follow-up:`, error.message || error);
+    return "Hi there! Just checking in to see if you need any more help?";
   }
-  return "Hi there! Just checking in to see if you need any more help?";
 }
 
 export async function generateScheduledFollowUp(phone: string, contextNote: string): Promise<string> {
   const config = DB.getConfig();
-  const anthropicKey = (config.anthropicApiKey || getEnvKey("ANTHROPIC_API_KEY") || process.env.ANTHROPIC_API_KEY || "").trim();
-  const openRouterKey = (config.openRouterApiKey || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENROUTER_API_KEY || "").trim();
+  const apiKey = (config.apiKey || getEnvKey("API_KEY") || process.env.API_KEY || 
+                  config.anthropicApiKey || getEnvKey("ANTHROPIC_API_KEY") || process.env.ANTHROPIC_API_KEY ||
+                  config.openRouterApiKey || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENROUTER_API_KEY || "").trim();
 
-  const attempts: { type: "anthropic" | "openrouter"; key: string }[] = [];
-  if (anthropicKey) {
-    attempts.push({ type: "anthropic", key: anthropicKey });
-  }
-  if (openRouterKey) {
-    attempts.push({ type: "openrouter", key: openRouterKey });
-  }
-
-  if (attempts.length === 0) {
+  if (!apiKey) {
     return `Hi! Following up on what we discussed: ${contextNote}`;
   }
 
@@ -701,43 +824,17 @@ export async function generateScheduledFollowUp(phone: string, contextNote: stri
   let systemPrompt = `You are an expert Booking and Sales AI Assistant. You previously promised the user you would follow up with them later. It is now time to send that follow-up.`;
   systemPrompt += `\n\nContext for this follow-up: ${contextNote}\n\nInstruction: Look at the chat history and the context note above. Craft a natural, friendly, and highly relevant follow-up message fulfilling your promise to the user.`;
 
-  for (let i = 0; i < attempts.length; i++) {
-    const attempt = attempts[i];
-    const isOpenRouter = attempt.type === "openrouter";
-    const anthropic = new Anthropic({ 
-      apiKey: attempt.key,
-      ...(isOpenRouter ? { 
-        baseURL: "https://openrouter.ai/api",
-        defaultHeaders: {
-          "HTTP-Referer": "https://hazeldid.com", 
-          "X-Title": "HazelWhat"
-        }
-      } : {})
-    });
-    const modelName = isOpenRouter ? "anthropic/claude-haiku-4.5" : "claude-haiku-4-5-20251001";
-
-    try {
-      const res = await anthropic.messages.create({
-        model: modelName,
-        max_tokens: 1000,
-        system: systemPrompt,
-        messages: recentHistory as any,
-        temperature: 0.7,
-      });
-
-      let textContent = "";
-      for (const block of res.content) {
-        if (block.type === 'text') {
-          textContent += block.text;
-        }
-      }
-      return textContent || `Hi! Following up on what we discussed: ${contextNote}`;
-    } catch (error: any) {
-      console.error(`[AI Handler] Error generating scheduled follow-up using ${attempt.type.toUpperCase()}:`, error.message || error);
-      if (i === attempts.length - 1) {
-        return `Hi! Following up on what we discussed: ${contextNote}`;
+  try {
+    const res = await callLLM(apiKey, systemPrompt, recentHistory, []);
+    let textContent = "";
+    for (const block of res.content) {
+      if (block.type === 'text') {
+        textContent += block.text;
       }
     }
+    return textContent || `Hi! Following up on what we discussed: ${contextNote}`;
+  } catch (error: any) {
+    console.error(`[AI Handler] Error generating scheduled follow-up:`, error.message || error);
+    return `Hi! Following up on what we discussed: ${contextNote}`;
   }
-  return `Hi! Following up on what we discussed: ${contextNote}`;
 }

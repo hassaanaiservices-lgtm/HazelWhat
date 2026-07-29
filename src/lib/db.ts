@@ -33,6 +33,7 @@ export interface Config {
   followUps?: FollowUpConfig[];
   anthropicApiKey?: string;
   openRouterApiKey?: string;
+  apiKey?: string;
 }
 
 export interface Appointment {
@@ -48,6 +49,7 @@ export interface Appointment {
 export interface Customer {
   phone: string;
   name: string;
+  jid?: string;
   preferences?: string;
   aiEnabled?: boolean;
   followUpLevel?: number;
@@ -90,6 +92,30 @@ export interface ScheduledFollowUp {
   createdAt: string;
 }
 
+export interface RevivalCampaign {
+  id: string;
+  message: string;
+  audience: string;
+  timeSlotStart: string;
+  timeSlotEnd: string;
+  delayMinSeconds: number;
+  delayMaxSeconds: number;
+  batchSize: number;
+  batchBreakMinutes: number;
+  dailyCap: number;
+  status: "active" | "paused" | "completed" | "cancelled";
+  targetPhones: string[];
+  sentPhones: string[];
+  failedPhones: string[];
+  sentToday: number;
+  lastSentDate: string;
+  createdAt: string;
+  mediaBase64?: string;
+  mimetype?: string;
+  fileName?: string;
+  lastBatchSentAt?: string;
+}
+
 export interface DbSchema {
   chats: Record<string, ChatMessage[]>;
   config: Config;
@@ -98,6 +124,7 @@ export interface DbSchema {
   promotions: PromotionLog[];
   orders: Order[];
   scheduledFollowUps: ScheduledFollowUp[];
+  revivalCampaigns: RevivalCampaign[];
 }
 
 const DEFAULT_CONFIG: Config = {
@@ -123,7 +150,7 @@ function initDb(): DbSchema {
   }
   
   if (!fs.existsSync(DB_PATH)) {
-    const defaultDb: DbSchema = { chats: {}, config: DEFAULT_CONFIG, appointments: [], customers: {}, promotions: [], orders: [], scheduledFollowUps: [] };
+    const defaultDb: DbSchema = { chats: {}, config: DEFAULT_CONFIG, appointments: [], customers: {}, promotions: [], orders: [], scheduledFollowUps: [], revivalCampaigns: [] };
     fs.writeFileSync(DB_PATH, JSON.stringify(defaultDb, null, 2));
     return defaultDb;
   }
@@ -138,11 +165,12 @@ function initDb(): DbSchema {
       customers: parsed.customers || {},
       promotions: parsed.promotions || [],
       orders: parsed.orders || [],
-      scheduledFollowUps: parsed.scheduledFollowUps || []
+      scheduledFollowUps: parsed.scheduledFollowUps || [],
+      revivalCampaigns: parsed.revivalCampaigns || []
     };
   } catch (e) {
     console.error("DB Corrupted, resetting to default");
-    return { chats: {}, config: DEFAULT_CONFIG, appointments: [], customers: {}, promotions: [], orders: [], scheduledFollowUps: [] };
+    return { chats: {}, config: DEFAULT_CONFIG, appointments: [], customers: {}, promotions: [], orders: [], scheduledFollowUps: [], revivalCampaigns: [] };
   }
 }
 
@@ -396,5 +424,31 @@ export class DB {
       return true;
     }
     return false;
+  }
+
+  // --- Revival Campaign Methods ---
+  static getRevivalCampaigns(): RevivalCampaign[] {
+    return initDb().revivalCampaigns || [];
+  }
+
+  static getActiveCampaign(): RevivalCampaign | null {
+    const db = initDb();
+    return (db.revivalCampaigns || []).find(c => c.status === "active") || null;
+  }
+
+  static addRevivalCampaign(campaign: RevivalCampaign) {
+    const db = initDb();
+    if (!db.revivalCampaigns) db.revivalCampaigns = [];
+    db.revivalCampaigns.push(campaign);
+    saveDb(db);
+  }
+
+  static updateRevivalCampaign(id: string, updates: Partial<RevivalCampaign>) {
+    const db = initDb();
+    const idx = (db.revivalCampaigns || []).findIndex(c => c.id === id);
+    if (idx !== -1) {
+      db.revivalCampaigns[idx] = { ...db.revivalCampaigns[idx], ...updates };
+      saveDb(db);
+    }
   }
 }

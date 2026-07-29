@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save, MessageSquare, Settings, Plus, Trash2, Search, MoreVertical, Phone, Video, Paperclip, Smile, Mic, CheckCheck, User, Check, Send, StopCircle, Inbox, Bot, Network, BookOpen, Users, AlertCircle, ShoppingCart, Activity, Eye, EyeOff } from "lucide-react";
+import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save, MessageSquare, Settings, Plus, Trash2, Search, MoreVertical, Phone, Video, Paperclip, Smile, Mic, CheckCheck, User, Check, Send, StopCircle, Inbox, Bot, Network, BookOpen, Users, AlertCircle, ShoppingCart, Activity, Eye, EyeOff, RefreshCw, Pause, Play } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
 
 export default function DashboardPage() {
   const [sessionData, setSessionData] = useState<any>(null);
   const [status, setStatus] = useState<"idle" | "creating" | "waiting_qr" | "scanning" | "connected" | "error">("idle");
   const [qrCode, setQrCode] = useState<string | null>(null);
+  const [qrGeneratedAt, setQrGeneratedAt] = useState<number | null>(null);
+  const [qrSecondsLeft, setQrSecondsLeft] = useState<number>(20);
   const [errorMessage, setErrorMessage] = useState("");
 
   const [chats, setChats] = useState<Record<string, any[]>>({});
@@ -22,25 +24,35 @@ export default function DashboardPage() {
     globalAiEnabled: true 
   });
   
-  const AVAILABLE_FEATURES = [
-    "24/7 Instant Replies", "Knowledge Base Assistant", "Service Recommendation",
-    "Price Inquiry", "Before & After Care Instructions", "Staff Recommendation", 
-    "Branch Information", "Multi-language Support", "Lead Collection",
-    "Smart Follow-ups", "Human Handoff", "Dashboard Integration",
-    "Abandoned Booking Recovery", "FAQ Automation", "Analytics Dashboard"
-  ];
   const [savingConfig, setSavingConfig] = useState(false);
-  const [anthropicKeyStatus, setAnthropicKeyStatus] = useState<string>("Not Checked");
-  const [anthropicKeyError, setAnthropicKeyError] = useState<string>("");
-  const [openRouterKeyStatus, setOpenRouterKeyStatus] = useState<string>("Not Checked");
-  const [openRouterKeyError, setOpenRouterKeyError] = useState<string>("");
-  const [showAnthropicKey, setShowAnthropicKey] = useState(false);
-  const [showOpenRouterKey, setShowOpenRouterKey] = useState(false);
+  const [apiKeyStatus, setApiKeyStatus] = useState<string>("Not Checked");
+  const [apiKeyError, setApiKeyError] = useState<string>("");
+  const [showApiKey, setShowApiKey] = useState(false);
   const [scrapeUrl, setScrapeUrl] = useState("");
   const [scrapeCurrency, setScrapeCurrency] = useState("Rs.");
   const [isScraping, setIsScraping] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<"dashboard" | "inbox" | "agents" | "channels" | "promotions" | "orders" | "knowledge" | "contacts" | "analytics" | "settings">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "inbox" | "agents" | "channels" | "promotions" | "orders" | "knowledge" | "contacts" | "analytics" | "settings" | "leads-revival">("dashboard");
+  const [inboxFilter, setInboxFilter] = useState<"all" | "normal" | "revival">("all");
+  const [inboxSearch, setInboxSearch] = useState<string>("");
+  const [revivalCampaigns, setRevivalCampaigns] = useState<any[]>([]);
+  const [activeRevivalCampaign, setActiveRevivalCampaign] = useState<any | null>(null);
+  const [creatingCampaign, setCreatingCampaign] = useState(false);
+
+  // Form states for Leads Revival
+  const [revivalMessage, setRevivalMessage] = useState("");
+  const [revivalAudience, setRevivalAudience] = useState("all");
+  const [revivalTimeStart, setRevivalTimeStart] = useState("09:00");
+  const [revivalTimeEnd, setRevivalTimeEnd] = useState("21:00");
+  const [revivalDelayMin, setRevivalDelayMin] = useState(60);
+  const [revivalDelayMax, setRevivalDelayMax] = useState(120);
+  const [revivalBatchSize, setRevivalBatchSize] = useState(10);
+  const [revivalBatchBreak, setRevivalBatchBreak] = useState(45);
+  const [revivalDailyCap, setRevivalDailyCap] = useState(80);
+  const [revivalMediaBase64, setRevivalMediaBase64] = useState<string | null>(null);
+  const [revivalMediaMime, setRevivalMediaMime] = useState<string | null>(null);
+  const [revivalMediaName, setRevivalMediaName] = useState<string | null>(null);
+
   const [orders, setOrders] = useState<any[]>([]);
   const [orderFilter, setOrderFilter] = useState<'all' | 'pending' | 'confirmed' | 'cancelled'>('all');
   const [leadFilter, setLeadFilter] = useState<'all' | 'hot' | 'cold'>('all');
@@ -66,6 +78,21 @@ export default function DashboardPage() {
     }
   };
 
+  const getSelectedLeadsCount = () => {
+    const customerList = Object.values(customers);
+    const chatPhones = Object.keys(chats);
+    if (revivalAudience === "all") {
+      return new Set([...customerList.map(c => c.phone), ...chatPhones]).size;
+    } else if (revivalAudience === "cold") {
+      return customerList.filter(c => c.leadStatus === "cold" || c.pipelineStage === "cold").length;
+    } else if (revivalAudience === "hot") {
+      return customerList.filter(c => c.leadStatus === "hot" || c.pipelineStage === "warm").length;
+    } else if (revivalAudience === "new") {
+      return customerList.filter(c => !c.pipelineStage || c.pipelineStage === "new").length;
+    }
+    return 0;
+  };
+
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -83,6 +110,7 @@ export default function DashboardPage() {
   const [sendingPromo, setSendingPromo] = useState(false);
   const [promoHistory, setPromoHistory] = useState<any[]>([]);
   const promoFileInputRef = useRef<HTMLInputElement>(null);
+  const revivalFileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -127,18 +155,15 @@ export default function DashboardPage() {
     }
   };
 
-  const validateKey = async (apiKey: string, type: 'anthropic' | 'openrouter') => {
-    const setStatus = type === 'anthropic' ? setAnthropicKeyStatus : setOpenRouterKeyStatus;
-    const setError = type === 'anthropic' ? setAnthropicKeyError : setOpenRouterKeyError;
-
+  const validateApiKey = async (apiKey: string) => {
     if (!apiKey || !apiKey.trim()) {
-      setStatus("Not Configured");
-      setError("");
+      setApiKeyStatus("Not Configured");
+      setApiKeyError("");
       return;
     }
 
-    setStatus("checking");
-    setError("");
+    setApiKeyStatus("checking");
+    setApiKeyError("");
 
     try {
       const res = await fetch("/api/whatsapp/config/validate-key", {
@@ -148,15 +173,15 @@ export default function DashboardPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setStatus("Active");
-        setError("");
+        setApiKeyStatus("Active");
+        setApiKeyError("");
       } else {
-        setStatus(data.status || "Error");
-        setError(data.error || "Failed to validate key.");
+        setApiKeyStatus(data.status || "Error");
+        setApiKeyError(data.error || "Failed to validate key.");
       }
     } catch (e: any) {
-      setStatus("Error");
-      setError(e.message || "Network error.");
+      setApiKeyStatus("Error");
+      setApiKeyError(e.message || "Network error.");
     }
   };
 
@@ -166,8 +191,8 @@ export default function DashboardPage() {
       const data = await res.json();
       if (data.success) {
         setConfig(data.config);
-        validateKey(data.config.anthropicApiKey, 'anthropic');
-        validateKey(data.config.openRouterApiKey, 'openrouter');
+        // Validate the unified API key
+        validateApiKey(data.config.apiKey || data.config.anthropicApiKey || data.config.openRouterApiKey);
       }
     } catch (e) {
       console.error(e);
@@ -219,15 +244,37 @@ export default function DashboardPage() {
     }
   };
 
+  const fetchRevivalCampaigns = async () => {
+    try {
+      const res = await fetch("/api/whatsapp/leads-revival");
+      const data = await res.json();
+      if (data.success) {
+        setRevivalCampaigns(data.campaigns || []);
+        setActiveRevivalCampaign(data.activeCampaign || null);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch revival campaigns:", e);
+    }
+  };
+
   useEffect(() => {
     fetchChats();
     fetchConfig();
     fetchPromotions();
     fetchOrders();
     fetchAnalytics();
+    fetchRevivalCampaigns();
     let chatInterval = setInterval(fetchChats, 3000);
     return () => clearInterval(chatInterval);
   }, []);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (activeTab === "leads-revival" || activeRevivalCampaign) {
+      interval = setInterval(fetchRevivalCampaigns, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [activeTab, activeRevivalCampaign]);
 
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
@@ -249,18 +296,41 @@ export default function DashboardPage() {
               setErrorMessage("Connection failed. Please try again.");
               clearInterval(pollInterval);
             } else if (data.session.qrCode) {
-              setQrCode(data.session.qrCode);
+              // Only update if it's a genuinely new QR (different timestamp)
+              if (data.session.qrGeneratedAt && data.session.qrGeneratedAt !== qrGeneratedAt) {
+                setQrCode(data.session.qrCode);
+                setQrGeneratedAt(data.session.qrGeneratedAt);
+              } else if (!qrCode) {
+                setQrCode(data.session.qrCode);
+                setQrGeneratedAt(data.session.qrGeneratedAt || Date.now());
+              }
               setStatus("scanning");
             }
           }
         } catch (e) {
           console.error("Polling error", e);
         }
-      }, 2000);
+      }, 750);
     }
 
     return () => clearInterval(pollInterval);
   }, [status]);
+
+  // QR countdown timer
+  useEffect(() => {
+    if (status !== "scanning" || !qrGeneratedAt) {
+      setQrSecondsLeft(20);
+      return;
+    }
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - qrGeneratedAt) / 1000);
+      const left = Math.max(0, 20 - elapsed);
+      setQrSecondsLeft(left);
+    };
+    tick();
+    const id = setInterval(tick, 500);
+    return () => clearInterval(id);
+  }, [status, qrGeneratedAt]);
 
   const startSession = async () => {
     try {
@@ -516,6 +586,93 @@ export default function DashboardPage() {
     }
   };
 
+  const handleRevivalFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setRevivalMediaBase64(event.target?.result as string);
+        setRevivalMediaMime(file.type);
+        setRevivalMediaName(file.name);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeRevivalMedia = () => {
+    setRevivalMediaBase64(null);
+    setRevivalMediaMime(null);
+    setRevivalMediaName(null);
+    if (revivalFileInputRef.current) {
+      revivalFileInputRef.current.value = "";
+    }
+  };
+
+  const launchRevivalCampaign = async () => {
+    if (!revivalMessage.trim() && !revivalMediaBase64) return;
+    setCreatingCampaign(true);
+    try {
+      const res = await fetch("/api/whatsapp/leads-revival", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: revivalMessage,
+          audience: revivalAudience,
+          timeSlotStart: revivalTimeStart,
+          timeSlotEnd: revivalTimeEnd,
+          delayMinSeconds: revivalDelayMin,
+          delayMaxSeconds: revivalDelayMax,
+          batchSize: revivalBatchSize,
+          batchBreakMinutes: revivalBatchBreak,
+          dailyCap: revivalDailyCap,
+          mediaBase64: revivalMediaBase64,
+          mimetype: revivalMediaMime,
+          fileName: revivalMediaName,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setRevivalMessage("");
+        removeRevivalMedia();
+        fetchRevivalCampaigns();
+      } else {
+        alert(data.error || "Failed to launch revival campaign.");
+      }
+    } catch (e: any) {
+      alert("Error: " + e.message);
+    } finally {
+      setCreatingCampaign(false);
+    }
+  };
+
+  const controlRevivalCampaign = async (action: "pause" | "resume" | "cancel") => {
+    try {
+      if (action === "cancel") {
+        const res = await fetch("/api/whatsapp/leads-revival", { method: "DELETE" });
+        const data = await res.json();
+        if (data.success) {
+          fetchRevivalCampaigns();
+        } else {
+          alert(data.error || "Failed to cancel campaign.");
+        }
+      } else {
+        const res = await fetch("/api/whatsapp/leads-revival", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          fetchRevivalCampaigns();
+        } else {
+          alert(data.error || `Failed to ${action} campaign.`);
+        }
+      }
+    } catch (e: any) {
+      alert("Error: " + e.message);
+    }
+  };
+
   const sendPromotion = async () => {
     if (!promoMessage.trim() && !promoMediaBase64) return;
     setSendingPromo(true);
@@ -591,6 +748,9 @@ export default function DashboardPage() {
           <button onClick={() => setActiveTab('promotions')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'promotions' ? 'bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}>
             <MessageSquare className={`h-[18px] w-[18px] ${activeTab === 'promotions' ? 'text-emerald-500' : 'text-slate-400'}`} /> Promotions
           </button>
+          <button onClick={() => setActiveTab('leads-revival')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'leads-revival' ? 'bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}>
+            <RefreshCw className={`h-[18px] w-[18px] ${activeTab === 'leads-revival' ? 'text-emerald-500' : 'text-slate-400'}`} /> Leads Revival
+          </button>
           <button onClick={() => setActiveTab('analytics')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'analytics' ? 'bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}>
             <Activity className={`h-[18px] w-[18px] ${activeTab === 'analytics' ? 'text-emerald-500' : 'text-slate-400'}`} /> Analytics
           </button>
@@ -621,7 +781,8 @@ export default function DashboardPage() {
       {/* 2. Middle Column (Chat List) */}
       {/* Dashboard Tab */}
       {activeTab === 'dashboard' && (
-        <div className="p-8 max-w-[1200px] mx-auto w-full h-full overflow-y-auto bg-slate-50/50">
+        <div className="flex-1 h-full overflow-y-auto bg-slate-50/50">
+          <div className="p-8 max-w-[1200px] mx-auto w-full">
           <div className="flex justify-between items-center mb-8">
             <h2 className="text-[22px] font-bold text-slate-900">
               Overview
@@ -790,17 +951,19 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+      </div>
       )}
 
       {/* Analytics Tab */}
       {activeTab === 'analytics' && (
-        !analytics ? (
-          <div className="flex-1 flex flex-col items-center justify-center space-y-4 bg-white rounded-3xl border border-slate-100 p-10 max-w-5xl mx-auto my-10">
-            <Loader2 className="h-8 w-8 text-emerald-500 animate-spin" />
-            <p className="text-slate-500 font-bold">Loading analytics...</p>
-          </div>
-        ) : (
-        <div className="p-10 max-w-5xl mx-auto w-full h-full overflow-y-auto">
+        <div className="flex-1 h-full overflow-y-auto">
+          {!analytics ? (
+            <div className="flex-1 flex flex-col items-center justify-center space-y-4 bg-white rounded-3xl border border-slate-100 p-10 max-w-5xl mx-auto my-10">
+              <Loader2 className="h-8 w-8 text-emerald-500 animate-spin" />
+              <p className="text-slate-500 font-bold">Loading analytics...</p>
+            </div>
+          ) : (
+            <div className="p-10 max-w-5xl mx-auto w-full">
           <h2 className="text-3xl font-extrabold text-slate-900 mb-8 flex items-center gap-3">
             <Activity className="h-8 w-8 text-emerald-500" /> Analytics
           </h2>
@@ -835,14 +998,17 @@ export default function DashboardPage() {
             ) : (
               <div className="text-slate-400 font-medium">No product data available yet.</div>
             )}
-          </div>
+            </div>
+            </div>
+          )
+        }
         </div>
-        )
       )}
 
       {/* Settings Tab */}
       {activeTab === 'settings' && (
-        <div className="p-10 max-w-4xl mx-auto w-full h-full overflow-y-auto">
+        <div className="flex-1 h-full overflow-y-auto">
+          <div className="p-10 max-w-4xl mx-auto w-full">
           <h2 className="text-3xl font-extrabold text-slate-900 mb-8 flex items-center gap-3">
             <Settings className="h-8 w-8 text-emerald-500" /> Account Settings
           </h2>
@@ -881,88 +1047,50 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* API Keys Configuration */}
+            {/* API Key Configuration */}
             <div className="border-t border-slate-100 pt-6 mt-6">
               <h3 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-emerald-500" /> API Keys Configuration
+                <ShieldCheck className="h-5 w-5 text-emerald-500" /> API Key Configuration
               </h3>
               <p className="text-xs text-slate-500 mb-6 font-medium">
-                Configure your AI autopilot engine keys. If both are configured, the system will use Anthropic Direct first, and automatically fall back to OpenRouter if Anthropic is out of credits.
+                Configure your AI autopilot engine key. The system auto-detects the provider based on the key prefix (Anthropic: sk-ant-..., OpenRouter: sk-or-..., DeepSeek: sk-...).
               </p>
               
               <div className="grid gap-6">
-                {/* Anthropic API Key */}
+                {/* Unified API Key */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-bold text-slate-700">Anthropic Direct API Key</label>
+                    <label className="block text-sm font-bold text-slate-700">AI API Key</label>
                     <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
-                      anthropicKeyStatus === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                      anthropicKeyStatus === 'Out of Credits' ? 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse' :
-                      anthropicKeyStatus === 'Invalid' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
-                      anthropicKeyStatus === 'checking' ? 'bg-slate-100 text-slate-500 animate-pulse' :
+                      apiKeyStatus === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                      apiKeyStatus === 'Out of Credits' ? 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse' :
+                      apiKeyStatus === 'Invalid' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                      apiKeyStatus === 'checking' ? 'bg-slate-100 text-slate-500 animate-pulse' :
                       'bg-slate-50 text-slate-500 border border-slate-200'
                     }`}>
-                      {anthropicKeyStatus === 'checking' ? 'Checking...' : anthropicKeyStatus}
+                      {apiKeyStatus === 'checking' ? 'Checking...' : apiKeyStatus}
                     </span>
                   </div>
                   <div className="relative">
                     <input 
-                      type={showAnthropicKey ? "text" : "password"} 
-                      value={config.anthropicApiKey || ''} 
-                      onChange={e => setConfig({...config, anthropicApiKey: e.target.value})}
-                      onBlur={() => validateKey(config.anthropicApiKey, 'anthropic')}
+                      type={showApiKey ? "text" : "password"} 
+                      value={config.apiKey || ''} 
+                      onChange={e => setConfig({...config, apiKey: e.target.value})}
+                      onBlur={() => validateApiKey(config.apiKey)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-12 py-3 text-slate-900 font-medium focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
-                      placeholder="sk-ant-..."
+                      placeholder="sk-ant-..., sk-or-..., or sk-..."
                     />
                     <button 
                       type="button"
-                      onClick={() => setShowAnthropicKey(!showAnthropicKey)}
+                      onClick={() => setShowApiKey(!showApiKey)}
                       className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
                     >
-                      {showAnthropicKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>
                   </div>
-                  {anthropicKeyError && (
+                  {apiKeyError && (
                     <p className="text-xs text-rose-600 font-bold mt-1.5 flex items-center gap-1">
-                      <AlertCircle className="h-3.5 w-3.5" /> {anthropicKeyError}
-                    </p>
-                  )}
-                </div>
-
-                {/* OpenRouter API Key */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-bold text-slate-700">OpenRouter API Key</label>
-                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
-                      openRouterKeyStatus === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                      openRouterKeyStatus === 'Out of Credits' ? 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse' :
-                      openRouterKeyStatus === 'Invalid' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
-                      openRouterKeyStatus === 'checking' ? 'bg-slate-100 text-slate-500 animate-pulse' :
-                      'bg-slate-50 text-slate-500 border border-slate-200'
-                    }`}>
-                      {openRouterKeyStatus === 'checking' ? 'Checking...' : openRouterKeyStatus}
-                    </span>
-                  </div>
-                  <div className="relative">
-                    <input 
-                      type={showOpenRouterKey ? "text" : "password"} 
-                      value={config.openRouterApiKey || ''} 
-                      onChange={e => setConfig({...config, openRouterApiKey: e.target.value})}
-                      onBlur={() => validateKey(config.openRouterApiKey, 'openrouter')}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-12 py-3 text-slate-900 font-medium focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
-                      placeholder="sk-or-..."
-                    />
-                    <button 
-                      type="button"
-                      onClick={() => setShowOpenRouterKey(!showOpenRouterKey)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
-                    >
-                      {showOpenRouterKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  </div>
-                  {openRouterKeyError && (
-                    <p className="text-xs text-rose-600 font-bold mt-1.5 flex items-center gap-1">
-                      <AlertCircle className="h-3.5 w-3.5" /> {openRouterKeyError}
+                      <AlertCircle className="h-3.5 w-3.5" /> {apiKeyError}
                     </p>
                   )}
                 </div>
@@ -981,6 +1109,7 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+      </div>
       )}
       {activeTab === 'inbox' && (
         <div className="w-[360px] flex-shrink-0 bg-white border-r border-slate-100 flex flex-col relative z-10">
@@ -997,27 +1126,94 @@ export default function DashboardPage() {
           )}
 
           {/* Search */}
-          <div className="p-4 border-b border-slate-50">
-            <div className="bg-[#f5f6f8] border border-slate-200/60 rounded-xl flex items-center px-4 py-2.5 gap-3 focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500 transition-all">
+          <div className="p-4 pb-2">
+            <div className="bg-[#f5f6f8] border border-slate-200/60 rounded-xl flex items-center px-4 py-2.5 gap-3 focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500 transition-all relative">
               <Search className="h-4 w-4 text-slate-400" />
-              <input type="text" placeholder="Search" className="bg-transparent border-none outline-none text-[15px] w-full placeholder:text-slate-400 text-slate-700 font-medium" />
+              <input 
+                type="text" 
+                placeholder="Search" 
+                value={inboxSearch}
+                onChange={(e) => setInboxSearch(e.target.value)}
+                className="bg-transparent border-none outline-none text-[15px] w-full placeholder:text-slate-400 text-slate-700 font-medium pr-6" 
+              />
+              {inboxSearch && (
+                <button 
+                  onClick={() => setInboxSearch("")} 
+                  className="absolute right-3 text-slate-400 hover:text-slate-600 focus:outline-none"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
+          </div>
+
+          {/* Inbox Segmentation Tabs */}
+          <div className="flex gap-1.5 px-4 pb-3 border-b border-slate-100 mt-1">
+            <button 
+              onClick={() => setInboxFilter("all")}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                inboxFilter === "all" ? "bg-slate-900 text-white shadow-sm" : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              All
+            </button>
+            <button 
+              onClick={() => setInboxFilter("normal")}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                inboxFilter === "normal" ? "bg-emerald-500 text-white shadow-sm" : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              Conversations
+            </button>
+            <button 
+              onClick={() => setInboxFilter("revival")}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                inboxFilter === "revival" ? "bg-blue-500 text-white shadow-sm" : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              Leads Revival
+            </button>
           </div>
 
           {/* Chat List */}
           <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
-            {Object.keys(chats).length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400 p-4 text-center">
-                <p className="text-sm font-medium">No chats found.</p>
-              </div>
-            ) : (
-              Object.entries(chats).sort((a, b) => {
-                const aLast = a[1][a[1].length - 1];
-                const bLast = b[1][b[1].length - 1];
-                const aTime = aLast ? new Date(aLast.timestamp).getTime() : 0;
-                const bTime = bLast ? new Date(bLast.timestamp).getTime() : 0;
-                return bTime - aTime;
-              }).map(([phone, messages], i) => {
+            {(() => {
+              const filteredChats = Object.entries(chats)
+                .filter(([phone, messages]) => {
+                  // 1. Search filter
+                  if (inboxSearch) {
+                    const searchLower = inboxSearch.toLowerCase();
+                    const displayName = (customers[phone]?.name || phone).toLowerCase();
+                    const matchesName = displayName.includes(searchLower);
+                    const matchesMessage = messages.some(m => m.content?.toLowerCase().includes(searchLower));
+                    if (!matchesName && !matchesMessage) return false;
+                  }
+
+                  // 2. Inbox segment filter
+                  const customer = customers[phone];
+                  const isRevival = customer?.tags?.includes("revival-sent");
+                  if (inboxFilter === "normal" && isRevival) return false;
+                  if (inboxFilter === "revival" && !isRevival) return false;
+
+                  return true;
+                })
+                .sort((a, b) => {
+                  const aLast = a[1][a[1].length - 1];
+                  const bLast = b[1][b[1].length - 1];
+                  const aTime = aLast ? new Date(aLast.timestamp).getTime() : 0;
+                  const bTime = bLast ? new Date(bLast.timestamp).getTime() : 0;
+                  return bTime - aTime;
+                });
+
+              if (filteredChats.length === 0) {
+                return (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-400 p-4 text-center">
+                    <p className="text-sm font-medium">No chats found.</p>
+                  </div>
+                );
+              }
+
+              return filteredChats.map(([phone, messages], i) => {
                 const lastMessage = messages[messages.length - 1];
                 const formatContactName = (id: string) => {
                   const savedName = customers[id]?.name;
@@ -1068,17 +1264,16 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 );
-              })
-            )}
+              });
+            })()}
           </div>
         </div>
       )}
 
       {/* 3. Main Content View */}
-      <div className="flex-1 flex flex-col min-w-0 relative z-0 bg-[#efeae2]" style={activeTab === 'inbox' ? { backgroundImage: "url('https://cdn.pixabay.com/photo/2021/07/25/08/03/pattern-6491187_960_720.png')", backgroundSize: "400px", backgroundBlendMode: "overlay", backgroundColor: "rgba(240, 242, 245, 0.95)" } : { backgroundColor: "#f8f9fa" }}>
-        
-        {activeTab === 'inbox' && (
-          !selectedChat ? (
+      {activeTab === 'inbox' && (
+        <div className="flex-1 flex flex-col min-w-0 relative z-0 bg-[#efeae2]" style={{ backgroundImage: "url('https://cdn.pixabay.com/photo/2021/07/25/08/03/pattern-6491187_960_720.png')", backgroundSize: "400px", backgroundBlendMode: "overlay", backgroundColor: "rgba(240, 242, 245, 0.95)" }}>
+          {!selectedChat ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-4">
               <div className="h-64 w-64 bg-[url('https://static.whatsapp.net/rsrc.php/v3/y6/r/wa669aeJeom.png')] bg-contain bg-no-repeat bg-center opacity-40 mix-blend-multiply"></div>
               <h2 className="text-3xl font-light text-slate-600">WhatsApp for Web</h2>
@@ -1262,11 +1457,14 @@ export default function DashboardPage() {
               )}
             </>
           )
-        )}
+        }
+        </div>
+      )}
 
         {/* Channels Tab (QR Connection) */}
         {activeTab === 'channels' && (
-          <div className="p-10 max-w-4xl mx-auto w-full h-full overflow-y-auto">
+          <div className="flex-1 h-full overflow-y-auto">
+            <div className="p-10 max-w-4xl mx-auto w-full">
             <h2 className="text-3xl font-extrabold text-slate-900 mb-8">WhatsApp Integration</h2>
             <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center">
               
@@ -1290,13 +1488,22 @@ export default function DashboardPage() {
 
               {status === "scanning" && qrCode && (
                 <div className="flex flex-col items-center">
-                  <div className="bg-white p-4 rounded-3xl shadow-lg border border-slate-100 mb-8">
+                  <div className="bg-white p-4 rounded-3xl shadow-lg border border-slate-100 mb-8 relative">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={qrCode} alt="QR" className="w-64 h-64 rounded-xl object-contain" />
+                    {/* Freshness badge */}
+                    <div className={`absolute -top-3 -right-3 text-xs font-bold px-2.5 py-1 rounded-full shadow ${
+                      qrSecondsLeft > 10 ? 'bg-emerald-500 text-white' :
+                      qrSecondsLeft > 5  ? 'bg-amber-400 text-white' :
+                                           'bg-rose-500 text-white'
+                    }`}>
+                      {qrSecondsLeft > 0 ? `${qrSecondsLeft}s` : 'Refreshing...'}
+                    </div>
                   </div>
                   <div className="w-full space-y-3 bg-slate-50 p-6 rounded-2xl border border-slate-100">
                     <p className="text-sm text-slate-600 font-bold">1. Open WhatsApp -&gt; Settings -&gt; Linked Devices</p>
                     <p className="text-sm text-slate-600 font-bold">2. Tap Link a Device &amp; point phone to this screen.</p>
+                    <p className="text-xs text-slate-400 font-medium mt-2">⚠️ Scan while the timer is green or amber — the QR auto-refreshes every 20 seconds.</p>
                   </div>
                 </div>
               )}
@@ -1320,11 +1527,13 @@ export default function DashboardPage() {
 
             </div>
           </div>
-        )}
+        </div>
+      )}
 
         {/* Agents Tab (Config) */}
         {activeTab === 'agents' && (
-          <div className="p-10 max-w-4xl mx-auto w-full h-full overflow-y-auto">
+          <div className="flex-1 h-full overflow-y-auto">
+            <div className="p-10 max-w-4xl mx-auto w-full">
             <h2 className="text-3xl font-extrabold text-slate-900 mb-8 flex items-center gap-3">
               <Bot className="h-8 w-8 text-emerald-500" /> Bot Configuration
             </h2>
@@ -1473,40 +1682,6 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="pt-8 border-t border-slate-100">
-                <div className="mb-6">
-                  <h3 className="text-lg font-bold text-slate-900">Feature Modules</h3>
-                  <p className="text-sm text-slate-500 font-medium mt-1">One-click activate advanced AI capabilities and dashboard features.</p>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {AVAILABLE_FEATURES.map((feature) => {
-                    const isEnabled = config.enabledFeatures?.includes(feature);
-                    return (
-                      <div 
-                        key={feature}
-                        onClick={() => {
-                          const current = config.enabledFeatures || [];
-                          const updated = isEnabled 
-                            ? current.filter((f: any) => f !== feature)
-                            : [...current, feature];
-                          setConfig({ ...config, enabledFeatures: updated });
-                        }}
-                        className={`flex items-center justify-between p-4 rounded-2xl border-2 cursor-pointer transition-all ${
-                          isEnabled ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-200'
-                        }`}
-                      >
-                        <span className={`text-sm font-bold ${isEnabled ? 'text-emerald-900' : 'text-slate-700'}`}>
-                          {feature}
-                        </span>
-                        <div className={`w-10 h-6 rounded-full p-1 transition-colors ${isEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-                          <div className={`w-4 h-4 bg-white rounded-full transition-transform ${isEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
               <div className="pt-4">
                 <button 
                   onClick={saveConfig}
@@ -1520,11 +1695,13 @@ export default function DashboardPage() {
 
             </div>
           </div>
-        )}
+        </div>
+      )}
 
         {/* Promotions Tab */}
         {activeTab === 'promotions' && (
-          <div className="p-10 max-w-4xl mx-auto w-full h-full overflow-y-auto">
+          <div className="flex-1 h-full overflow-y-auto">
+            <div className="p-10 max-w-4xl mx-auto w-full">
             <h2 className="text-3xl font-extrabold text-slate-900 mb-8 flex items-center gap-3">
               <MessageSquare className="h-8 w-8 text-emerald-500" /> Promotions & Broadcasts
             </h2>
@@ -1680,11 +1857,415 @@ export default function DashboardPage() {
 
             </div>
           </div>
-        )}
+        </div>
+      )}
+
+        {/* Leads Revival Tab */}
+        {activeTab === 'leads-revival' && (
+          <div className="flex-1 h-full overflow-y-auto">
+            <div className="p-10 max-w-4xl mx-auto w-full">
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-3xl font-extrabold text-slate-900 flex items-center gap-3">
+                <RefreshCw className={`h-8 w-8 text-emerald-500 ${activeRevivalCampaign?.status === 'active' ? 'animate-spin' : ''}`} style={{ animationDuration: '4s' }} /> Leads Revival
+              </h2>
+              {activeRevivalCampaign && (
+                <div className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                  activeRevivalCampaign.status === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse' :
+                  activeRevivalCampaign.status === 'paused' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                  'bg-slate-100 text-slate-500'
+                }`}>
+                  <span className={`h-2 w-2 rounded-full ${
+                    activeRevivalCampaign.status === 'active' ? 'bg-emerald-500' :
+                    activeRevivalCampaign.status === 'paused' ? 'bg-amber-500' :
+                    'bg-slate-400'
+                  }`} />
+                  Campaign {activeRevivalCampaign.status}
+                </div>
+              )}
+            </div>
+
+            {activeRevivalCampaign ? (
+              /* Active Campaign Status Dashboard */
+              <div className="space-y-8">
+                <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6">
+                  <div className="flex justify-between items-start border-b border-slate-50 pb-6">
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-900">Campaign Details: {activeRevivalCampaign.id}</h3>
+                      <p className="text-xs text-slate-400 font-bold mt-1">Created on {new Date(activeRevivalCampaign.createdAt).toLocaleString()}</p>
+                    </div>
+                    <div className="flex gap-3">
+                      {activeRevivalCampaign.status === "active" ? (
+                        <button
+                          onClick={() => controlRevivalCampaign("pause")}
+                          className="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-5 rounded-xl transition text-sm flex items-center gap-2"
+                        >
+                          <Pause className="w-4 h-4" /> Pause Campaign
+                        </button>
+                      ) : activeRevivalCampaign.status === "paused" ? (
+                        <button
+                          onClick={() => controlRevivalCampaign("resume")}
+                          className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-5 rounded-xl transition text-sm flex items-center gap-2"
+                        >
+                          <Play className="w-4 h-4" /> Resume Campaign
+                        </button>
+                      ) : null}
+                      <button
+                        onClick={() => controlRevivalCampaign("cancel")}
+                        className="bg-rose-500 hover:bg-rose-600 text-white font-bold py-2 px-5 rounded-xl transition text-sm flex items-center gap-2"
+                      >
+                        <StopCircle className="w-4 h-4" /> Cancel Campaign
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Target Audience</div>
+                      <div className="text-lg font-bold text-slate-700 capitalize">{activeRevivalCampaign.audience} Leads</div>
+                    </div>
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Sent Today</div>
+                      <div className="text-lg font-bold text-slate-700">{activeRevivalCampaign.sentToday} / {activeRevivalCampaign.dailyCap}</div>
+                    </div>
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Failed</div>
+                      <div className="text-lg font-bold text-red-600">{activeRevivalCampaign.failedPhones.length}</div>
+                    </div>
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Schedule Slot</div>
+                      <div className="text-lg font-bold text-slate-700">{activeRevivalCampaign.timeSlotStart} - {activeRevivalCampaign.timeSlotEnd}</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-4">
+                    <div className="flex justify-between items-center text-sm font-bold text-slate-700">
+                      <span>Campaign Progress</span>
+                      <span>
+                        {activeRevivalCampaign.sentPhones.length + activeRevivalCampaign.failedPhones.length} / {activeRevivalCampaign.targetPhones.length} Leads
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                      <div 
+                        className="bg-emerald-500 h-full transition-all duration-500" 
+                        style={{ width: `${Math.round(((activeRevivalCampaign.sentPhones.length + activeRevivalCampaign.failedPhones.length) / activeRevivalCampaign.targetPhones.length) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-slate-400 font-semibold">
+                      <span>{Math.round(((activeRevivalCampaign.sentPhones.length + activeRevivalCampaign.failedPhones.length) / activeRevivalCampaign.targetPhones.length) * 100)}% Complete</span>
+                      {activeRevivalCampaign.lastBatchSentAt && (
+                        <span>Last batch sent: {new Date(activeRevivalCampaign.lastBatchSentAt).toLocaleTimeString()}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-2">
+                    <h4 className="text-sm font-bold text-slate-900">Revival Message Content</h4>
+                    <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap">{activeRevivalCampaign.message}</p>
+                    {activeRevivalCampaign.fileName && (
+                      <div className="flex items-center gap-2 mt-3 bg-emerald-50 border border-emerald-100 text-emerald-800 px-3 py-2 rounded-xl text-xs font-bold w-fit">
+                        <span>Attached file: {activeRevivalCampaign.fileName}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Campaign Delivery Log */}
+                <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6">
+                  <h3 className="text-lg font-bold text-slate-900">Campaign Delivery Log</h3>
+                  <div className="max-h-60 overflow-y-auto border border-slate-50 rounded-2xl divide-y divide-slate-50">
+                    {activeRevivalCampaign.targetPhones.map((phone: string) => {
+                      const isSent = activeRevivalCampaign.sentPhones.includes(phone);
+                      const isFailed = activeRevivalCampaign.failedPhones.includes(phone);
+                      let statusText = "Pending";
+                      let colorClass = "bg-slate-100 text-slate-500";
+                      if (isSent) {
+                        statusText = "Sent";
+                        colorClass = "bg-emerald-50 text-emerald-700 border border-emerald-200";
+                      } else if (isFailed) {
+                        statusText = "Failed";
+                        colorClass = "bg-red-50 text-red-700 border border-red-200";
+                      }
+                      
+                      const customerName = customers[phone]?.name;
+
+                      return (
+                        <div key={phone} className="flex justify-between items-center p-4 text-sm">
+                          <div className="font-semibold text-slate-700">
+                            {customerName ? `${customerName} (${phone})` : `+${phone}`}
+                          </div>
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${colorClass}`}>
+                            {statusText}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Campaign Creator Form */
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6">
+                  <div className="space-y-3">
+                    <label className="text-sm font-bold text-slate-900">Audience Segment</label>
+                    <select 
+                      value={revivalAudience}
+                      onChange={(e) => setRevivalAudience(e.target.value)}
+                      className="w-full p-4 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-slate-700"
+                    >
+                      <option value="all">All Contacts (Count: {getSelectedLeadsCount()})</option>
+                      <option value="cold">Cold Leads (Inactive / Abandoned) (Count: {getSelectedLeadsCount()})</option>
+                      <option value="hot">Warm & Hot Leads (Active Inquiries) (Count: {getSelectedLeadsCount()})</option>
+                      <option value="new">New Leads (No pipeline stage) (Count: {getSelectedLeadsCount()})</option>
+                    </select>
+                    <p className="text-xs text-slate-500 font-medium mt-1">Select the target segment to trigger the revival sequence.</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-sm font-bold text-slate-900">Media Attachment (Optional)</label>
+                    <div className="flex items-center gap-4">
+                      <input 
+                        type="file" 
+                        className="hidden" 
+                        ref={revivalFileInputRef}
+                        onChange={handleRevivalFileChange}
+                        accept="image/*,video/*,audio/*,application/pdf"
+                      />
+                      <button 
+                        onClick={() => revivalFileInputRef.current?.click()}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl font-bold flex items-center gap-2 transition"
+                      >
+                        <Paperclip className="w-5 h-5" />
+                        Attach File
+                      </button>
+                      {revivalMediaName && (
+                        <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-4 py-3 rounded-xl text-sm font-bold">
+                          <span className="truncate max-w-[200px]">{revivalMediaName}</span>
+                          <button onClick={removeRevivalMedia} className="text-emerald-900 hover:text-red-500 transition">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-sm font-bold text-slate-900">Campaign Message {revivalMediaBase64 ? '(Optional Caption)' : ''}</label>
+                    <textarea 
+                      value={revivalMessage}
+                      onChange={(e) => setRevivalMessage(e.target.value)}
+                      className="w-full h-32 p-4 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition font-medium"
+                      placeholder="Draft your revival message here... (e.g. 'Hey! Just checking if you were still interested in Mehrunisa? We are running low on stock.')"
+                    />
+                  </div>
+
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-150 space-y-6">
+                    <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-500" /> Safety Settings (Anti-Ban Limits)
+                    </h3>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 block mb-1">Time Slot Start</label>
+                        <input 
+                          type="time" 
+                          value={revivalTimeStart}
+                          onChange={(e) => setRevivalTimeStart(e.target.value)}
+                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 block mb-1">Time Slot End</label>
+                        <input 
+                          type="time" 
+                          value={revivalTimeEnd}
+                          onChange={(e) => setRevivalTimeEnd(e.target.value)}
+                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 block mb-1">Min Delay (Seconds)</label>
+                        <input 
+                          type="number" 
+                          min={45} 
+                          max={180}
+                          value={revivalDelayMin}
+                          onChange={(e) => setRevivalDelayMin(Math.max(45, parseInt(e.target.value) || 45))}
+                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 block mb-1">Max Delay (Seconds)</label>
+                        <input 
+                          type="number" 
+                          min={45} 
+                          max={180}
+                          value={revivalDelayMax}
+                          onChange={(e) => setRevivalDelayMax(Math.max(revivalDelayMin, parseInt(e.target.value) || 45))}
+                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 block mb-1">Batch Size</label>
+                        <input 
+                          type="number" 
+                          min={1} 
+                          max={15}
+                          value={revivalBatchSize}
+                          onChange={(e) => setRevivalBatchSize(Math.max(1, Math.min(15, parseInt(e.target.value) || 1)))}
+                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 block mb-1">Break (Mins)</label>
+                        <input 
+                          type="number" 
+                          min={30} 
+                          max={90}
+                          value={revivalBatchBreak}
+                          onChange={(e) => setRevivalBatchBreak(Math.max(30, Math.min(90, parseInt(e.target.value) || 30)))}
+                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 block mb-1">Daily Cap</label>
+                        <input 
+                          type="number" 
+                          min={1} 
+                          max={80}
+                          value={revivalDailyCap}
+                          onChange={(e) => setRevivalDailyCap(Math.max(1, Math.min(80, parseInt(e.target.value) || 1)))}
+                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={launchRevivalCampaign}
+                    disabled={creatingCampaign || (!revivalMessage.trim() && !revivalMediaBase64) || getSelectedLeadsCount() === 0}
+                    className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold h-14 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    {creatingCampaign ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                    {creatingCampaign ? "Launching Campaign..." : "Launch Campaign"}
+                  </button>
+                </div>
+
+                {/* AI Calculator & Settings Summary Card */}
+                <div className="space-y-6">
+                  {(() => {
+                    const targetLeads = getSelectedLeadsCount();
+                    const avgDelay = (revivalDelayMin + revivalDelayMax) / 2;
+                    const startH = parseInt(revivalTimeStart.split(":")[0]) || 9;
+                    const endH = parseInt(revivalTimeEnd.split(":")[0]) || 21;
+                    const activeHours = Math.max(1, endH - startH);
+
+                    // Cycle in seconds
+                    const cycleSec = (revivalBatchSize * avgDelay) + (revivalBatchBreak * 60);
+                    const batchesPerDay = Math.floor((activeHours * 3600) / cycleSec);
+                    const sendCapPerDayByTime = Math.max(1, batchesPerDay * revivalBatchSize);
+                    const actualDailySend = Math.min(revivalDailyCap, sendCapPerDayByTime);
+                    const daysEst = actualDailySend > 0 ? Math.ceil(targetLeads / actualDailySend) : 0;
+
+                    return (
+                      <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-lg space-y-6">
+                        <h3 className="text-lg font-bold flex items-center gap-2 border-b border-slate-800 pb-4">
+                          <Eye className="w-5 h-5 text-emerald-400" /> AI Campaign Estimator
+                        </h3>
+                        
+                        <div className="space-y-4">
+                          <div>
+                            <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">Target Leads Selected</div>
+                            <div className="text-3xl font-extrabold text-emerald-400">{targetLeads}</div>
+                          </div>
+                          
+                          <div>
+                            <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">Daily Send Speed (Estimated)</div>
+                            <div className="text-lg font-bold text-white">{actualDailySend} leads / day</div>
+                            <div className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                              Limits: {revivalDailyCap} cap, {activeHours} hrs/day slot
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-slate-800">
+                            <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">Estimated Completion</div>
+                            <div className="text-2xl font-extrabold text-white flex items-center gap-2 mt-1">
+                              <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
+                              {targetLeads === 0 ? "No leads selected" : daysEst === 1 ? "1 Day" : `${daysEst} Days`}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bg-slate-800/50 p-4 rounded-xl text-xs text-slate-300 font-medium leading-relaxed">
+                          🛡️ <strong>Safety Autopilot:</strong> Random {revivalDelayMin}-{revivalDelayMax}s delays between messages prevent spam triggers. Breaks of {revivalBatchBreak}m between {revivalBatchSize}-message batches keep sending patterns human-like.
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* Campaign Logs / History List */}
+            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm mt-8 space-y-6">
+              <h3 className="text-lg font-bold text-slate-900">Campaign History</h3>
+              <div className="overflow-x-auto">
+                <table className="w-left text-left border-collapse w-full">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      <th className="pb-4">Campaign ID</th>
+                      <th className="pb-4">Date</th>
+                      <th className="pb-4">Audience</th>
+                      <th className="pb-4">Status</th>
+                      <th className="pb-4 text-right">Progress</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50 text-sm">
+                    {revivalCampaigns.filter(c => c.id !== activeRevivalCampaign?.id).length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-6 text-center text-slate-400 font-medium">No campaign history found.</td>
+                      </tr>
+                    ) : (
+                      revivalCampaigns.filter(c => c.id !== activeRevivalCampaign?.id).reverse().map(c => {
+                        const reached = c.sentPhones.length + c.failedPhones.length;
+                        const total = c.targetPhones.length;
+                        let statusColor = "text-slate-500 bg-slate-50";
+                        if (c.status === "completed") statusColor = "text-emerald-700 bg-emerald-50";
+                        else if (c.status === "cancelled") statusColor = "text-red-700 bg-red-50";
+
+                        return (
+                          <tr key={c.id}>
+                            <td className="py-4 font-bold text-slate-900">{c.id}</td>
+                            <td className="py-4 font-semibold text-slate-500">{new Date(c.createdAt).toLocaleDateString()}</td>
+                            <td className="py-4 font-semibold text-slate-500 capitalize">{c.audience}</td>
+                            <td className="py-4">
+                              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase ${statusColor}`}>
+                                {c.status}
+                              </span>
+                            </td>
+                            <td className="py-4 text-right font-bold text-slate-700">{reached} / {total}</td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
         {/* Orders Tab */}
         {activeTab === 'orders' && (
-          <div className="p-10 max-w-4xl mx-auto w-full h-full overflow-y-auto">
+          <div className="flex-1 h-full overflow-y-auto">
+            <div className="p-10 max-w-4xl mx-auto w-full">
             <h2 className="text-3xl font-extrabold text-slate-900 mb-8 flex items-center gap-3">
               <ShoppingCart className="h-8 w-8 text-emerald-500" /> Incoming Orders
             </h2>
@@ -1801,10 +2382,12 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
-        )}
+        </div>
+      )}
       {/* Contacts / Leads Tab */}
       {activeTab === 'contacts' && (
-        <div className="p-8 max-w-[1400px] mx-auto w-full h-full overflow-y-auto">
+        <div className="flex-1 h-full overflow-y-auto">
+          <div className="p-8 max-w-[1400px] mx-auto w-full">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div>
               <h2 className="text-[22px] font-bold text-slate-900 flex items-center gap-2">
@@ -2164,10 +2747,9 @@ export default function DashboardPage() {
               )}
             </div>
           )}
+          </div>
         </div>
       )}
-      
-      </div>
 
     </div>
   );

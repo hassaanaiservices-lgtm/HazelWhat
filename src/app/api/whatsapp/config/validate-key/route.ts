@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { detectKeyType } from "@/lib/ai-handler";
 
 export const dynamic = 'force-dynamic';
 
@@ -12,27 +13,50 @@ export async function POST(request: NextRequest) {
     }
 
     const key = apiKey.trim();
-    const isOpenRouter = key.startsWith("sk-or-");
-    
-    const anthropic = new Anthropic({
-      apiKey: key,
-      ...(isOpenRouter ? {
-        baseURL: "https://openrouter.ai/api",
-        defaultHeaders: {
-          "HTTP-Referer": "https://hazeldid.com",
-          "X-Title": "HazelWhat"
-        }
-      } : {})
-    });
-
-    const modelName = isOpenRouter ? "anthropic/claude-haiku-4.5" : "claude-haiku-4-5-20251001";
+    const keyType = detectKeyType(key);
 
     try {
-      await anthropic.messages.create({
-        model: modelName,
-        max_tokens: 1,
-        messages: [{ role: "user", content: "test" }]
-      });
+      if (keyType === "anthropic") {
+        const anthropic = new Anthropic({ apiKey: key });
+        await anthropic.messages.create({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1,
+          messages: [{ role: "user", content: "test" }]
+        });
+      } else if (keyType === "openrouter") {
+        const anthropic = new Anthropic({
+          apiKey: key,
+          baseURL: "https://openrouter.ai/api",
+          defaultHeaders: {
+            "HTTP-Referer": "https://hazeldid.com",
+            "X-Title": "HazelWhat"
+          }
+        });
+        await anthropic.messages.create({
+          model: "anthropic/claude-haiku-4.5",
+          max_tokens: 1,
+          messages: [{ role: "user", content: "test" }]
+        });
+      } else if (keyType === "deepseek") {
+        const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${key}`
+          },
+          body: JSON.stringify({
+            model: "deepseek-chat",
+            messages: [{ role: "user", content: "test" }],
+            max_tokens: 1
+          })
+        });
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`DeepSeek API validation failed: ${errText}`);
+        }
+      } else {
+        return NextResponse.json({ success: false, status: "Invalid", error: "Unsupported key format. Key must start with sk-ant-, sk-or-, or sk-." });
+      }
 
       return NextResponse.json({ success: true, status: "Active" });
     } catch (err: any) {

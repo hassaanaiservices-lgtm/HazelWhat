@@ -1,4 +1,4 @@
-import { makeWASocket, useMultiFileAuthState, DisconnectReason, WAMessageStatus, downloadMediaMessage, generateWAMessageFromContent, prepareWAMessageMedia } from "@whiskeysockets/baileys";
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, WAMessageStatus, downloadMediaMessage, generateWAMessageFromContent, prepareWAMessageMedia, fetchLatestBaileysVersion, Browsers, DEFAULT_CONNECTION_CONFIG } from "@whiskeysockets/baileys";
 import { DB } from "./db";
 import { Boom } from "@hapi/boom";
 import QRCode from "qrcode";
@@ -11,10 +11,13 @@ const globalForBaileys = global as unknown as {
   autoSyncInterval: any;
   followUpInterval: any;
   reconnectTimeout: any;
+  revivalInterval: any;
+  revivalProcessing: boolean;
+  startPromise?: Promise<any> | null;
 };
 
 if (!globalForBaileys.baileysSession) {
-  globalForBaileys.baileysSession = { status: "disconnected", qrCode: null, sock: null };
+  globalForBaileys.baileysSession = { status: "disconnected", qrCode: null, qrGeneratedAt: null, sock: null };
 }
 
 export class WhatsAppManager {
@@ -237,6 +240,156 @@ export class WhatsAppManager {
     }, 60000); // 1 minute interval
   }
 
+  static startRevivalSync() {
+    if (globalForBaileys.revivalInterval) {
+      clearInterval(globalForBaileys.revivalInterval);
+    }
+    // Check every 60 seconds for active campaigns
+    globalForBaileys.revivalInterval = setInterval(async () => {
+      // Prevent overlapping processing
+      if (globalForBaileys.revivalProcessing) return;
+      globalForBaileys.revivalProcessing = true;
+      try {
+        await this.processRevivalCampaign();
+      } catch (e) {
+        console.error("[Revival] Processing error:", e);
+      } finally {
+        globalForBaileys.revivalProcessing = false;
+      }
+    }, 60000);
+  }
+
+  static async processRevivalCampaign() {
+    const campaign = DB.getActiveCampaign();
+    if (!campaign) return;
+
+    // Check batch break
+    if (campaign.lastBatchSentAt && campaign.batchBreakMinutes) {
+      const lastBatchTime = new Date(campaign.lastBatchSentAt).getTime();
+      const nextBatchTime = lastBatchTime + campaign.batchBreakMinutes * 60 * 1000;
+      if (Date.now() < nextBatchTime) {
+        const minsLeft = Math.ceil((nextBatchTime - Date.now()) / 60000);
+        console.log(`[Revival] Campaign ${campaign.id} is in a batch break. ${minsLeft} minutes remaining.`);
+        return;
+      }
+    }
+
+    // Check if WhatsApp is connected
+    if (globalForBaileys.baileysSession.status !== "connected" || !globalForBaileys.baileysSession.sock) {
+      console.log("[Revival] WhatsApp not connected. Skipping.");
+      return;
+    }
+
+    // Check time slot
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMin = now.getMinutes();
+    const currentTimeMinutes = currentHour * 60 + currentMin;
+    const slotStartMinutes = parseInt(campaign.timeSlotStart.split(":")[0]) * 60 + parseInt(campaign.timeSlotStart.split(":")[1] || "0");
+    const slotEndMinutes = parseInt(campaign.timeSlotEnd.split(":")[0]) * 60 + parseInt(campaign.timeSlotEnd.split(":")[1] || "0");
+
+    if (currentTimeMinutes < slotStartMinutes || currentTimeMinutes >= slotEndMinutes) {
+      console.log(`[Revival] Outside time slot (${campaign.timeSlotStart}-${campaign.timeSlotEnd}). Current: ${currentHour}:${String(currentMin).padStart(2, "0")}. Skipping.`);
+      return;
+    }
+
+    // Reset daily counter if new day
+    const today = now.toISOString().split("T")[0];
+    let sentToday = campaign.sentToday;
+    if (campaign.lastSentDate !== today) {
+      sentToday = 0;
+      DB.updateRevivalCampaign(campaign.id, { sentToday: 0, lastSentDate: today });
+    }
+
+    // Check daily cap
+    if (sentToday >= campaign.dailyCap) {
+      console.log(`[Revival] Daily cap reached (${sentToday}/${campaign.dailyCap}). Waiting for tomorrow.`);
+      return;
+    }
+
+    // Get unsent phones
+    const sentSet = new Set([...campaign.sentPhones, ...campaign.failedPhones]);
+    const remaining = campaign.targetPhones.filter(p => !sentSet.has(p));
+
+    if (remaining.length === 0) {
+      console.log(`[Revival] Campaign ${campaign.id} completed! All ${campaign.targetPhones.length} leads processed.`);
+      DB.updateRevivalCampaign(campaign.id, { status: "completed" });
+      return;
+    }
+
+    // Pick next batch
+    const canSendMore = campaign.dailyCap - sentToday;
+    const batchCount = Math.min(campaign.batchSize, remaining.length, canSendMore);
+    const batch = remaining.slice(0, batchCount);
+
+    console.log(`[Revival] Processing batch of ${batch.length} messages for campaign ${campaign.id} (${campaign.sentPhones.length}/${campaign.targetPhones.length} done)`);
+
+    const newSentPhones = [...campaign.sentPhones];
+    const newFailedPhones = [...campaign.failedPhones];
+    let batchSentCount = 0;
+
+    // Prepare media buffer once if needed
+    let buffer: Buffer | null = null;
+    if (campaign.mediaBase64) {
+      try {
+        buffer = Buffer.from(campaign.mediaBase64.split(",")[1] || campaign.mediaBase64, "base64");
+      } catch (e) {
+        console.error("[Revival] Failed to decode media:", e);
+      }
+    }
+
+    for (const phone of batch) {
+      // Random delay between messages
+      const delayMs = (campaign.delayMinSeconds + Math.random() * (campaign.delayMaxSeconds - campaign.delayMinSeconds)) * 1000;
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+
+      try {
+        if (buffer && campaign.mimetype) {
+          await this.sendMedia(phone, buffer, campaign.mimetype, campaign.message || campaign.fileName);
+        } else {
+          await this.sendMessage(phone, campaign.message);
+        }
+
+        // Log to chat DB so it appears in the inbox
+        DB.addChatMessage(phone, {
+          id: "rv-" + Math.random().toString(36).substring(2, 8),
+          role: "assistant",
+          content: campaign.message || "[Media]",
+          status: 1,
+        });
+
+        // Tag the customer as revival-contacted
+        const customer = DB.getCustomer(phone);
+        const existingTags = customer?.tags || [];
+        if (!existingTags.includes("revival-sent")) {
+          DB.updateCustomer(phone, { tags: [...existingTags, "revival-sent"] });
+        }
+
+        newSentPhones.push(phone);
+        batchSentCount++;
+        console.log(`[Revival] ✓ Sent to ${phone} (delay: ${(delayMs/1000).toFixed(0)}s)`);
+      } catch (err: any) {
+        console.error(`[Revival] ✗ Failed to send to ${phone}:`, err.message);
+        newFailedPhones.push(phone);
+      }
+    }
+
+    // Update campaign progress
+    const updatedSentToday = sentToday + batchSentCount;
+    const allProcessed = newSentPhones.length + newFailedPhones.length >= campaign.targetPhones.length;
+
+    DB.updateRevivalCampaign(campaign.id, {
+      sentPhones: newSentPhones,
+      failedPhones: newFailedPhones,
+      sentToday: updatedSentToday,
+      lastSentDate: today,
+      status: allProcessed ? "completed" : "active",
+      lastBatchSentAt: new Date().toISOString(),
+    });
+
+    console.log(`[Revival] Batch done. Sent: ${batchSentCount}, Total: ${newSentPhones.length}/${campaign.targetPhones.length}, Today: ${updatedSentToday}/${campaign.dailyCap}`);
+  }
+
   static async startSession(onMessage: (msg: any) => void) {
     if (!globalForBaileys.autoSyncInterval) {
       this.startAutoSync();
@@ -244,207 +397,328 @@ export class WhatsAppManager {
     if (!globalForBaileys.followUpInterval) {
       this.startFollowUpsSync();
     }
+    if (!globalForBaileys.revivalInterval) {
+      this.startRevivalSync();
+    }
 
-    if (globalForBaileys.baileysSession.status === "connected" || (globalForBaileys.baileysSession.status === "connecting" && globalForBaileys.baileysSession.sock)) {
-      console.log(`[Baileys] startSession called but socket is already ${globalForBaileys.baileysSession.status}. Returning existing instance.`);
+    if (globalForBaileys.startPromise) {
+      console.log("[Baileys] startSession call received while initialization is in progress. Awaiting existing promise...");
+      return globalForBaileys.startPromise;
+    }
+
+    if (globalForBaileys.baileysSession.status === "connected" && globalForBaileys.baileysSession.sock) {
+      console.log(`[Baileys] startSession called but socket is already connected. Returning existing instance.`);
       return globalForBaileys.baileysSession.sock;
     }
 
-    const authFolder = path.join(process.cwd(), ".data", ".baileys_auth");
-    if (!fs.existsSync(authFolder)) {
-      fs.mkdirSync(authFolder, { recursive: true });
-    }
+    globalForBaileys.baileysSession.status = "connecting";
 
-    const { state, saveCreds } = await useMultiFileAuthState(authFolder);
-    const logger = pino({ level: "silent" });
-
-    const sock = makeWASocket({
-      auth: state,
-      printQRInTerminal: false,
-      logger,
-      browser: ["HazelWhat SaaS", "Chrome", "1.0.0"],
-    });
-
-    globalForBaileys.baileysSession = { sock, status: "connecting", qrCode: null };
-
-    sock.ev.on("creds.update", saveCreds);
-
-    sock.ev.on("connection.update", async (update) => {
-      const { connection, lastDisconnect, qr } = update;
-
-      if (qr) {
-        try {
-          const qrCodeDataUri = await QRCode.toDataURL(qr);
-          globalForBaileys.baileysSession.status = "connecting";
-          globalForBaileys.baileysSession.qrCode = qrCodeDataUri;
-        } catch (err) {
-          console.error("[Baileys] Error generating QR:", err);
-        }
+    const initPromise = (async () => {
+      const authFolder = path.join(process.cwd(), ".data", ".baileys_auth");
+      if (!fs.existsSync(authFolder)) {
+        fs.mkdirSync(authFolder, { recursive: true });
       }
 
-      if (connection === "close") {
-        // If we explicitly disconnected, do not reconnect
-        if (globalForBaileys.baileysSession.status === "disconnected") {
-          console.log("[Baileys] Socket closed after explicit disconnect. Skipping reconnect.");
-          return;
+      const { state, saveCreds } = await useMultiFileAuthState(authFolder);
+      const logger = pino({ level: "silent" });
+
+      // Fetch the latest WA version with a timeout, falling back to DEFAULT_CONNECTION_CONFIG
+      // to avoid hanging on cloud platforms like Railway where GitHub requests might be slow/rate-limited.
+      let version = DEFAULT_CONNECTION_CONFIG.version;
+      let isLatest = false;
+      try {
+        const latestPromise = fetchLatestBaileysVersion();
+        const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3000));
+        const latest = await Promise.race([latestPromise, timeoutPromise]) as { version: [number, number, number], isLatest: boolean };
+        version = latest.version;
+        isLatest = latest.isLatest;
+        console.log(`[Baileys] Successfully fetched latest WA version: v${version.join('.')}`);
+      } catch (err) {
+        console.warn("[Baileys] Failed to fetch latest WA version, using stable default v" + version.join('.') + ":", err);
+      }
+
+      const sock = makeWASocket({
+        version,
+        auth: state,
+        printQRInTerminal: false,
+        logger,
+        browser: Browsers.ubuntu("Chrome"),
+      });
+
+      globalForBaileys.baileysSession.sock = sock;
+
+      sock.ev.on("creds.update", saveCreds);
+
+      sock.ev.on("connection.update", async (update) => {
+        const { connection, lastDisconnect, qr } = update;
+
+        if (qr) {
+          try {
+            const qrCodeDataUri = await QRCode.toDataURL(qr, { errorCorrectionLevel: 'M', margin: 2, width: 512 });
+            console.log("[Baileys] New QR code generated at", new Date().toISOString());
+            globalForBaileys.baileysSession.status = "connecting";
+            globalForBaileys.baileysSession.qrCode = qrCodeDataUri;
+            globalForBaileys.baileysSession.qrGeneratedAt = Date.now();
+          } catch (err) {
+            console.error("[Baileys] Error generating QR:", err);
+          }
         }
 
-        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-        
-        console.log(`[Baileys] Connection closed. Reason code: ${statusCode || 'unknown'}. Should reconnect: ${shouldReconnect}`);
-        
-        if (shouldReconnect) {
-          globalForBaileys.baileysSession.status = "connecting";
-          // Check if we are already trying to reconnect to prevent duplicate attempts
-          if (!globalForBaileys.reconnectTimeout) {
-            const attemptReconnect = () => {
-              // Stop if successfully connected or explicitly disconnected
-              if (globalForBaileys.baileysSession.status === "connected" || globalForBaileys.baileysSession.status === "disconnected") {
-                globalForBaileys.reconnectTimeout = null;
-                return;
-              }
-              console.log("[Baileys] Attempting auto-reconnect...");
-              this.startSession(onMessage)
-                .then(() => {
-                  globalForBaileys.reconnectTimeout = null;
-                })
-                .catch(err => {
-                  console.error("[Baileys] Reconnect attempt failed. Retrying in 10s...", err);
-                  globalForBaileys.reconnectTimeout = setTimeout(attemptReconnect, 10000);
-                });
-            };
-            globalForBaileys.reconnectTimeout = setTimeout(attemptReconnect, 5000);
-          }
-        } else {
-          console.log("[Baileys] Logged out. Setting status to disconnected, but preserving credentials. They will only be deleted if the user explicitly disconnects.");
-          globalForBaileys.baileysSession.status = "disconnected";
-          globalForBaileys.baileysSession.qrCode = null;
+        if (connection === "close") {
+          const wasLoggedIn = !!globalForBaileys.baileysSession.sock?.user;
+          // Nullify sock reference so subsequent startSession calls will create a fresh socket
           globalForBaileys.baileysSession.sock = null;
-        }
-      } else if (connection === "open") {
-        globalForBaileys.baileysSession.status = "connected";
-        globalForBaileys.baileysSession.qrCode = null;
-        if (globalForBaileys.reconnectTimeout) {
-          clearTimeout(globalForBaileys.reconnectTimeout);
-          globalForBaileys.reconnectTimeout = null;
-        }
-      }
-    });
 
-    sock.ev.on("messages.upsert", async (m) => {
-      if (m.type === "notify") {
-        for (const msg of m.messages) {
-          if (!msg.key.fromMe && msg.message) {
-            onMessage(msg);
-          } else if (msg.key.fromMe && msg.message) {
-            // Message sent by the bot owner (e.g. from their actual phone or by our code)
-            const textContent = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || "";
-            const hasImage = !!msg.message?.imageMessage;
-            const content = hasImage ? `[Image] ${textContent}` : textContent;
-            
-            if (content) {
-              let from = msg.key.remoteJid;
-              if (from?.includes("@lid") && msg.key.remoteJidAlt) {
-                from = msg.key.remoteJidAlt;
-              }
-              from = from?.replace("@s.whatsapp.net", "")?.replace("@lid", "");
-              
-              if (from) {
-                const history = DB.getChats(from);
-                const exists = history.some((chatMsg: any) => chatMsg.id === msg.key.id);
-                if (!exists) {
-                  // Save the owner's manual message as 'assistant' so it appears on the dashboard
-                  DB.addChatMessage(from, { id: msg.key.id || undefined, role: "assistant", content });
-                }
-              }
-            }
+          // If we explicitly disconnected, do not reconnect
+          if (globalForBaileys.baileysSession.status === "disconnected") {
+            console.log("[Baileys] Socket closed after explicit disconnect. Skipping reconnect.");
+            return;
           }
-        }
-      }
-    });
 
-    sock.ev.on("messages.update", (updates) => {
-      for (const { key, update } of updates) {
-        if (key.id && update.status) {
-          DB.updateMessageStatus(key.id, update.status);
-        }
-      }
-    });
-
-    sock.ev.on("messaging-history.set", ({ contacts, messages, isLatest }) => {
-      // Sync contacts
-      for (const contact of contacts) {
-        if (contact.id && !contact.id.includes("@g.us") && !contact.id.includes("@lid")) {
-          const phone = contact.id.replace("@s.whatsapp.net", "");
-          if (phone) {
-            DB.updateCustomer(phone, { name: contact.name || contact.notify || phone });
-          }
-        }
-      }
-
-      // Sync historical messages if available
-      if (messages) {
-        for (const msg of messages) {
-          if (!msg.key.remoteJid?.includes("@g.us")) {
-            const content = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
-            if (content) {
-              let from = msg.key.remoteJid;
-              if (from?.includes("@lid")) {
-                if (msg.key.remoteJidAlt) {
-                  from = msg.key.remoteJidAlt;
-                } else {
-                  continue; // Skip ghost chat if real number is unknown
+          const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+          const shouldReconnect = !wasLoggedIn || (statusCode !== DisconnectReason.loggedOut && statusCode !== DisconnectReason.badSession);
+          
+          console.log(`[Baileys] Connection closed. Reason code: ${statusCode || 'unknown'}. Should reconnect: ${shouldReconnect} (wasLoggedIn: ${wasLoggedIn})`);
+          
+          if (shouldReconnect) {
+            globalForBaileys.baileysSession.status = "connecting";
+            // Check if we are already trying to reconnect to prevent duplicate attempts
+            if (!globalForBaileys.reconnectTimeout) {
+              const attemptReconnect = () => {
+                // Stop if successfully connected or explicitly disconnected
+                if (globalForBaileys.baileysSession.status === "connected" || globalForBaileys.baileysSession.status === "disconnected") {
+                  globalForBaileys.reconnectTimeout = null;
+                  return;
                 }
-              }
-              from = from?.replace("@s.whatsapp.net", "");
-              
-              if (from) {
-                const history = DB.getChats(from);
-                const exists = history.some((chatMsg: any) => chatMsg.id === msg.key.id);
-                if (!exists) {
-                  const timestampStr = msg.messageTimestamp 
-                    ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
-                    : new Date().toISOString();
-                    
-                  DB.addChatMessage(from, { 
-                    id: msg.key.id || undefined, 
-                    role: msg.key.fromMe ? "assistant" : "user", 
-                    content,
-                    timestamp: timestampStr
+                console.log("[Baileys] Attempting auto-reconnect...");
+                this.startSession(onMessage)
+                  .then(() => {
+                    globalForBaileys.reconnectTimeout = null;
+                  })
+                  .catch(err => {
+                    console.error("[Baileys] Reconnect attempt failed. Retrying in 5s...", err);
+                    globalForBaileys.reconnectTimeout = setTimeout(attemptReconnect, 5000);
                   });
+              };
+              // Reconnect rapidly (1s delay) to complete QR scan stream restart
+              globalForBaileys.reconnectTimeout = setTimeout(attemptReconnect, 1000);
+            }
+          } else {
+            console.log("[Baileys] Logged out or bad session. Setting status to disconnected and deleting credentials.");
+            globalForBaileys.baileysSession.status = "disconnected";
+            globalForBaileys.baileysSession.qrCode = null;
+            globalForBaileys.baileysSession.sock = null;
+
+            // Delete auth credentials to prevent infinite loop
+            const authFolder = path.join(process.cwd(), ".data", ".baileys_auth");
+            if (fs.existsSync(authFolder)) {
+              try {
+                fs.rmSync(authFolder, { recursive: true, force: true });
+              } catch (e) {
+                console.error("Failed to delete auth folder:", e);
+              }
+            }
+          }
+        } else if (connection === "open") {
+          console.log("[Baileys] Connection established successfully!");
+          globalForBaileys.baileysSession.status = "connected";
+          globalForBaileys.baileysSession.qrCode = null;
+          if (globalForBaileys.reconnectTimeout) {
+            clearTimeout(globalForBaileys.reconnectTimeout);
+            globalForBaileys.reconnectTimeout = null;
+          }
+        }
+      });
+
+      sock.ev.on("messages.upsert", async (m) => {
+        if (m.type === "notify") {
+          for (const msg of m.messages) {
+            if (!msg.key.fromMe && msg.message) {
+              onMessage(msg);
+            } else if (msg.key.fromMe && msg.message) {
+              // Message sent by the bot owner (e.g. from their actual phone or by our code)
+              const textContent = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || "";
+              const hasImage = !!msg.message?.imageMessage;
+              const content = hasImage ? `[Image] ${textContent}` : textContent;
+              
+              if (content) {
+                let from = msg.key.remoteJid;
+                const originalJid = msg.key.remoteJid;
+                if (from?.includes("@lid") && msg.key.remoteJidAlt) {
+                  from = msg.key.remoteJidAlt;
+                }
+                from = from?.replace("@s.whatsapp.net", "")?.replace("@lid", "");
+                
+                if (from) {
+                  if (originalJid) {
+                    DB.updateCustomer(from, { jid: originalJid });
+                  }
+                  const history = DB.getChats(from);
+                  const exists = history.some((chatMsg: any) => chatMsg.id === msg.key.id);
+                  if (!exists) {
+                    // Save the owner's manual message as 'assistant' so it appears on the dashboard
+                    DB.addChatMessage(from, { id: msg.key.id || undefined, role: "assistant", content });
+                  }
                 }
               }
             }
           }
         }
-      }
-    });
+      });
 
-    sock.ev.on("contacts.upsert", (contacts) => {
-      for (const contact of contacts) {
-        if (contact.id && !contact.id.includes("@g.us") && !contact.id.includes("@lid")) {
-          const phone = contact.id.replace("@s.whatsapp.net", "");
-          if (phone) {
-            DB.updateCustomer(phone, { name: contact.name || contact.notify || phone });
+      sock.ev.on("messages.update", (updates) => {
+        for (const { key, update } of updates) {
+          if (key.id && update.status) {
+            DB.updateMessageStatus(key.id, update.status);
           }
         }
-      }
-    });
+      });
 
-    return sock;
+      sock.ev.on("messaging-history.set", ({ contacts, messages, isLatest }) => {
+        // Sync contacts
+        for (const contact of contacts) {
+          if (contact.id && !contact.id.includes("@g.us")) {
+            const phone = contact.id.replace("@s.whatsapp.net", "").replace("@lid", "");
+            if (phone) {
+              DB.updateCustomer(phone, { 
+                name: contact.name || contact.notify || phone,
+                jid: contact.id
+              });
+            }
+          }
+        }
+
+        // Sync historical messages if available
+        if (messages) {
+          for (const msg of messages) {
+            if (!msg.key.remoteJid?.includes("@g.us")) {
+              const content = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
+              if (content) {
+                let from = msg.key.remoteJid;
+                const originalJid = msg.key.remoteJid;
+                if (from?.includes("@lid")) {
+                  if (msg.key.remoteJidAlt) {
+                    from = msg.key.remoteJidAlt;
+                  } else {
+                    continue; // Skip ghost chat if real number is unknown
+                  }
+                }
+                from = from?.replace("@s.whatsapp.net", "");
+                
+                if (from) {
+                  if (originalJid) {
+                    DB.updateCustomer(from, { jid: originalJid });
+                  }
+                  const history = DB.getChats(from);
+                  const exists = history.some((chatMsg: any) => chatMsg.id === msg.key.id);
+                  if (!exists) {
+                    const timestampStr = msg.messageTimestamp 
+                      ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
+                      : new Date().toISOString();
+                      
+                    DB.addChatMessage(from, { 
+                      id: msg.key.id || undefined, 
+                      role: msg.key.fromMe ? "assistant" : "user", 
+                      content,
+                      timestamp: timestampStr
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      sock.ev.on("contacts.upsert", (contacts) => {
+        for (const contact of contacts) {
+          if (contact.id && !contact.id.includes("@g.us")) {
+            const phone = contact.id.replace("@s.whatsapp.net", "").replace("@lid", "");
+            if (phone) {
+              DB.updateCustomer(phone, { 
+                name: contact.name || contact.notify || phone,
+                jid: contact.id
+              });
+            }
+          }
+        }
+      });
+
+      return sock;
+    })();
+
+    globalForBaileys.startPromise = initPromise;
+    try {
+      const sock = await initPromise;
+      return sock;
+    } finally {
+      globalForBaileys.startPromise = null;
+    }
   }
 
   static getStatus() {
     return {
       status: globalForBaileys.baileysSession.status,
       qrCode: globalForBaileys.baileysSession.qrCode,
+      qrGeneratedAt: globalForBaileys.baileysSession.qrGeneratedAt,
       phoneNumber: globalForBaileys.baileysSession.sock?.user?.id?.split(":")[0],
       displayName: globalForBaileys.baileysSession.sock?.user?.name || "WhatsApp Business",
     };
   }
 
+  /**
+   * Soft reset: closes the socket and deletes local credentials WITHOUT
+   * calling sock.logout(). This is used when re-generating a QR code so
+   * WhatsApp servers don't flag the account for rapid re-pairing.
+   */
+  static async softReset() {
+    // Cancel any pending reconnect
+    if (globalForBaileys.reconnectTimeout) {
+      clearTimeout(globalForBaileys.reconnectTimeout);
+      globalForBaileys.reconnectTimeout = null;
+    }
+
+    // Mark as disconnected first so connection.update handler doesn't try to reconnect
+    globalForBaileys.baileysSession.status = "disconnected";
+
+    if (globalForBaileys.baileysSession.sock) {
+      try {
+        globalForBaileys.baileysSession.sock.end(undefined);
+      } catch (e) {}
+    }
+
+    // Allow time for graceful shutdown and file locks to release
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    globalForBaileys.baileysSession = { status: "disconnected", qrCode: null, qrGeneratedAt: null, sock: null };
+    globalForBaileys.startPromise = null;
+
+    const authFolder = path.join(process.cwd(), ".data", ".baileys_auth");
+    if (fs.existsSync(authFolder)) {
+      try {
+        fs.rmSync(authFolder, { recursive: true, force: true });
+        console.log("[Baileys] Auth folder deleted for fresh QR generation.");
+      } catch (e) {
+        console.error("Failed to delete auth folder:", e);
+      }
+    }
+  }
+
+  /**
+   * Full disconnect: calls sock.logout() which tells WhatsApp servers to
+   * permanently deregister this linked device. Only use when the user
+   * explicitly clicks "Disconnect Device".
+   */
   static async disconnect() {
+    // Cancel any pending reconnect
+    if (globalForBaileys.reconnectTimeout) {
+      clearTimeout(globalForBaileys.reconnectTimeout);
+      globalForBaileys.reconnectTimeout = null;
+    }
+
+    // Mark as disconnected first so connection.update handler doesn't try to reconnect
+    globalForBaileys.baileysSession.status = "disconnected";
+
     if (globalForBaileys.baileysSession.sock) {
       try {
         globalForBaileys.baileysSession.sock.logout();
@@ -457,7 +731,8 @@ export class WhatsAppManager {
     // Allow time for graceful shutdown and file locks to release
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    globalForBaileys.baileysSession = { status: "disconnected", qrCode: null, sock: null };
+    globalForBaileys.baileysSession = { status: "disconnected", qrCode: null, qrGeneratedAt: null, sock: null };
+    globalForBaileys.startPromise = null;
     
     const authFolder = path.join(process.cwd(), ".data", ".baileys_auth");
     if (fs.existsSync(authFolder)) {
@@ -469,9 +744,21 @@ export class WhatsAppManager {
     }
   }
 
+  static resolveJid(to: string): string {
+    if (to.includes("@")) {
+      return to;
+    }
+    const cleanPhone = to.replace(/[^\d+]/g, "");
+    const customer = DB.getCustomer(cleanPhone);
+    if (customer && customer.jid) {
+      return customer.jid;
+    }
+    return `${cleanPhone}@s.whatsapp.net`;
+  }
+
   static async sendTyping(to: string) {
     if (globalForBaileys.baileysSession.status !== "connected" || !globalForBaileys.baileysSession.sock) return;
-    const jid = to.includes("@") ? to : `${to.replace(/[^\d+]/g, "")}@s.whatsapp.net`;
+    const jid = this.resolveJid(to);
     await globalForBaileys.baileysSession.sock.sendPresenceUpdate('composing', jid);
   }
 
@@ -479,7 +766,7 @@ export class WhatsAppManager {
     if (globalForBaileys.baileysSession.status !== "connected" || !globalForBaileys.baileysSession.sock) {
       throw new Error("WhatsApp not connected");
     }
-    const jid = to.includes("@") ? to : `${to.replace(/[^\d+]/g, "")}@s.whatsapp.net`;
+    const jid = this.resolveJid(to);
     await globalForBaileys.baileysSession.sock.sendPresenceUpdate('paused', jid);
     const sentMsg = await globalForBaileys.baileysSession.sock.sendMessage(jid, { text });
     return sentMsg;
@@ -489,7 +776,7 @@ export class WhatsAppManager {
     if (globalForBaileys.baileysSession.status !== "connected" || !globalForBaileys.baileysSession.sock) {
       throw new Error("WhatsApp not connected");
     }
-    const jid = to.includes("@") ? to : `${to.replace(/[^\d+]/g, "")}@s.whatsapp.net`;
+    const jid = this.resolveJid(to);
     
     let msgObj: any = {};
     if (isVoiceNote || mimetype.startsWith('audio/')) {
@@ -512,12 +799,12 @@ export class WhatsAppManager {
 
   static async markChatRead(phone: string, messageIds: string[]) {
     if (globalForBaileys.baileysSession.status !== "connected" || !globalForBaileys.baileysSession.sock || !messageIds.length) return;
-    const jid = phone.includes("@") ? phone : `${phone.replace(/[^\d+]/g, "")}@s.whatsapp.net`;
+    const jid = this.resolveJid(phone);
     const keys = messageIds.map(id => ({ remoteJid: jid, id, fromMe: false }));
     try {
       await globalForBaileys.baileysSession.sock.readMessages(keys);
     } catch (e) {
-      console.error("Failed to mark messages as read:", e);
+      console.error("[Baileys] Failed to mark messages read:", e);
     }
   }
 
@@ -657,4 +944,5 @@ export class WhatsAppManager {
 // Ensure intervals are hot-reloaded with the new logic in Next.js dev mode
 if (globalForBaileys.baileysSession && globalForBaileys.baileysSession.status === "connected") {
   WhatsAppManager.startFollowUpsSync();
+  WhatsAppManager.startRevivalSync();
 }

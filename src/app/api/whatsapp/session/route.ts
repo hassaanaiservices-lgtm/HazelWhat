@@ -27,6 +27,7 @@ export async function GET() {
         status = {
           status: "connecting",
           qrCode: null,
+          qrGeneratedAt: null,
           phoneNumber: undefined,
           displayName: "WhatsApp Business"
         };
@@ -41,6 +42,11 @@ export async function GET() {
 
 export async function POST() {
   try {
+    // Soft reset: close existing socket and delete local credentials
+    // without calling logout() (which would deregister the device on
+    // WhatsApp servers and cause "Couldn't link device" errors).
+    await WhatsAppManager.softReset();
+    
     // Start session and pass the AI handler for incoming messages
     await WhatsAppManager.startSession(async (msg) => {
       await handleWhatsAppMessage(msg);
