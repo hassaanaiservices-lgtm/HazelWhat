@@ -33,6 +33,8 @@ function getEnvKey(keyName: string): string {
 
 function getApiKey(config: any): string {
   const keys = [
+    process.env["DEEPSEEK_API_KEY"],
+    getEnvKey("DEEPSEEK_API_KEY"),
     config.apiKey,
     config.anthropicApiKey,
     config.openRouterApiKey,
@@ -43,7 +45,6 @@ function getApiKey(config: any): string {
     process.env["ApiKey"],
     process.env["apikey"],
     process.env["APIKEY"],
-    process.env["DEEPSEEK_API_KEY"],
     process.env["OPENAI_API_KEY"],
     process.env["ANTHROPIC_API_KEY"],
     process.env["OPENROUTER_API_KEY"],
@@ -51,7 +52,6 @@ function getApiKey(config: any): string {
     getEnvKey("API_KEY"),
     getEnvKey("Api_key"),
     getEnvKey("api_key"),
-    getEnvKey("DEEPSEEK_API_KEY"),
     getEnvKey("OPENAI_API_KEY"),
     getEnvKey("ANTHROPIC_API_KEY"),
     getEnvKey("OPENROUTER_API_KEY")
@@ -478,7 +478,7 @@ export async function handleWhatsAppMessage(msg: any) {
 
     debugLog(`=== Incoming Message from ${from} ===`);
     debugLog(`Content: "${content}"`);
-    debugLog(`Unified Key source: config.apiKey=${config.apiKey ? "yes" : "no"}, process.env['Api key']=${process.env['Api key'] ? "yes" : "no"}, process.env.API_KEY=${process.env.API_KEY ? "yes" : "no"}`);
+    debugLog(`Unified Key source: config.apiKey=${config.apiKey ? "yes" : "no"}, process.env.DEEPSEEK_API_KEY=${process.env.DEEPSEEK_API_KEY ? "yes" : "no"}, process.env.API_KEY=${process.env.API_KEY ? "yes" : "no"}`);
 
     if (!apiKey) {
       console.error("[AI Handler] No API key is configured.");
@@ -486,7 +486,7 @@ export async function handleWhatsAppMessage(msg: any) {
       const sentMsg = await WhatsAppManager.sendMessage(from, fallback);
       DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: fallback });
       
-      const diagnostics = `[DIAGNOSTIC - KEY ERROR] The bot could not respond because no API keys were loaded.\n- config.apiKey: ${config.apiKey ? "Present" : "Empty"}\n- process.env["Api key"]: ${process.env["Api key"] ? "Present" : "Empty"}\n- process.env.API_KEY: ${process.env.API_KEY ? "Present" : "Empty"}\n- process.env.DEEPSEEK_API_KEY: ${process.env.DEEPSEEK_API_KEY ? "Present" : "Empty"}\n- process.env.OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? "Present" : "Empty"}\n- process.env.ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? "Present" : "Empty"}\n- process.env.OPENROUTER_API_KEY: ${process.env.OPENROUTER_API_KEY ? "Present" : "Empty"}`;
+      const diagnostics = `[DIAGNOSTIC - KEY ERROR] The bot could not respond because no API keys were loaded.\n- config.apiKey: ${config.apiKey ? "Present" : "Empty"}\n- process.env.DEEPSEEK_API_KEY: ${process.env.DEEPSEEK_API_KEY ? "Present" : "Empty"}\n- process.env.API_KEY: ${process.env.API_KEY ? "Present" : "Empty"}\n- process.env.OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? "Present" : "Empty"}\n- process.env.ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? "Present" : "Empty"}\n- process.env.OPENROUTER_API_KEY: ${process.env.OPENROUTER_API_KEY ? "Present" : "Empty"}\n- process.env["Api key"]: ${process.env["Api key"] ? "Present" : "Empty"}`;
       DB.addChatMessage(from, { role: "assistant", content: diagnostics });
       return;
     }
