@@ -1,12 +1,11 @@
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, WAMessageStatus, downloadMediaMessage, generateWAMessageFromContent, prepareWAMessageMedia, fetchLatestBaileysVersion, Browsers, DEFAULT_CONNECTION_CONFIG } from "@whiskeysockets/baileys";
-import { DB } from "./db";
+import { DB, DB_DIR } from "./db";
 import { Boom } from "@hapi/boom";
 import QRCode from "qrcode";
 import pino from "pino";
 import path from "path";
 import fs from "fs";
 import { scrapeStore } from "./scraper";
-const DB_DIR = process.env.DATABASE_DIR || path.join(process.cwd(), ".data");
 const AUTH_FOLDER = path.join(DB_DIR, ".baileys_auth");
 
 const globalForBaileys = global as unknown as {

@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { WhatsAppManager } from "./whatsapp";
-import { DB } from "./db";
+import { DB, DB_DIR } from "./db";
 import dns from "dns";
 import fs from "fs";
 import path from "path";
@@ -329,8 +329,7 @@ async function callLLM(
 
 function debugLog(msg: string) {
   try {
-    const dbDir = process.env.DATABASE_DIR || path.join(process.cwd(), ".data");
-    const logPath = path.join(dbDir, "debug.log");
+    const logPath = path.join(DB_DIR, "debug.log");
     if (!fs.existsSync(path.dirname(logPath))) {
       fs.mkdirSync(path.dirname(logPath), { recursive: true });
     }

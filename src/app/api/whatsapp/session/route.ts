@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WhatsAppManager } from "@/lib/whatsapp";
 import { handleWhatsAppMessage } from "@/lib/ai-handler";
+import { DB_DIR } from "@/lib/db";
 
 import path from "path";
 import fs from "fs";
@@ -11,8 +12,7 @@ export async function GET() {
     
     // Auto-reconnect if auth credentials exist but session is disconnected
     if (status.status === "disconnected") {
-      const dbDir = process.env.DATABASE_DIR || path.join(process.cwd(), ".data");
-      const authFolder = path.join(dbDir, ".baileys_auth");
+      const authFolder = path.join(DB_DIR, ".baileys_auth");
       const credsFile = path.join(authFolder, "creds.json");
       
       if (fs.existsSync(credsFile)) {

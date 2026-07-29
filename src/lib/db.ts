@@ -1,7 +1,27 @@
 import fs from 'fs';
 import path from 'path';
 
-const DB_DIR = process.env.DATABASE_DIR || path.join(process.cwd(), '.data');
+export const DB_DIR = (function() {
+  let dir = process.env.DATABASE_DIR || path.join(process.cwd(), '.data');
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    // Test write permissions
+    const testFile = path.join(dir, '.write_test');
+    fs.writeFileSync(testFile, 'test');
+    fs.unlinkSync(testFile);
+    return dir;
+  } catch (err) {
+    console.error(`[DB] Directory ${dir} is not writable. Falling back to local .data. Error:`, err);
+    const localDir = path.join(process.cwd(), '.data');
+    if (!fs.existsSync(localDir)) {
+      fs.mkdirSync(localDir, { recursive: true });
+    }
+    return localDir;
+  }
+})();
+
 const DB_PATH = path.join(DB_DIR, 'db.json');
 
 export interface ChatMessage {
