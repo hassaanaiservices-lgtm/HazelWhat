@@ -3,16 +3,16 @@ import { DB, RevivalCampaign } from "@/lib/db";
 
 // Safety floor constants — these cannot be bypassed
 const SAFETY = {
-  MIN_DELAY_SEC: 45,
-  MAX_DELAY_SEC: 180,
+  MIN_DELAY_SEC: 10,
+  MAX_DELAY_SEC: 1800,
   MIN_BATCH_SIZE: 1,
-  MAX_BATCH_SIZE: 15,
-  MIN_BATCH_BREAK_MIN: 30,
-  MAX_BATCH_BREAK_MIN: 90,
+  MAX_BATCH_SIZE: 1000,
+  MIN_BATCH_BREAK_MIN: 0,
+  MAX_BATCH_BREAK_MIN: 1440,
   MIN_DAILY_CAP: 1,
-  MAX_DAILY_CAP: 80,
-  MIN_HOUR: 8,   // 08:00
-  MAX_HOUR: 22,  // 22:00
+  MAX_DAILY_CAP: 500,
+  MIN_HOUR: 0,   // 00:00
+  MAX_HOUR: 24,  // 24:00
 };
 
 function clamp(val: number, min: number, max: number) {
@@ -74,6 +74,19 @@ export async function POST(req: Request) {
     } else if (audience === "new") {
       const customers = DB.getAllCustomers();
       targetPhones = customers.filter(c => !c.pipelineStage || c.pipelineStage === "new").map(c => c.phone);
+    } else if (audience === "custom") {
+      if (!Array.isArray(body.customPhones) || body.customPhones.length === 0) {
+        return NextResponse.json({ success: false, error: "Custom phone list is empty." }, { status: 400 });
+      }
+      targetPhones = body.customPhones.map((p: string) => {
+        let clean = p.replace(/[^\d]/g, "");
+        if (clean.startsWith("0") && !clean.startsWith("00")) {
+          clean = "92" + clean.substring(1);
+        } else if (clean.startsWith("00")) {
+          clean = clean.substring(2);
+        }
+        return clean;
+      }).filter((p: string) => p.length >= 10);
     } else {
       return NextResponse.json({ success: false, error: "Invalid audience type." }, { status: 400 });
     }

@@ -53,6 +53,41 @@ export default function DashboardPage() {
   const [revivalMediaMime, setRevivalMediaMime] = useState<string | null>(null);
   const [revivalMediaName, setRevivalMediaName] = useState<string | null>(null);
 
+  // Custom states and parsing helpers for target phone lists
+  const [customPhonesInput, setCustomPhonesInput] = useState("");
+  const [customPhones, setCustomPhones] = useState<string[]>([]);
+  const customPhonesFileInputRef = useRef<HTMLInputElement>(null);
+
+  const parsePhones = (text: string) => {
+    const rawMatches = text.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4,6}/g) || [];
+    const cleaned = rawMatches.map(num => {
+      const digits = num.replace(/[^\d]/g, "");
+      if (digits.startsWith("0") && digits.length === 11) {
+        return "92" + digits.substring(1);
+      }
+      return digits;
+    }).filter(digits => digits.length >= 10 && digits.length <= 15);
+    return Array.from(new Set(cleaned));
+  };
+
+  const handleCustomPhonesChange = (val: string) => {
+    setCustomPhonesInput(val);
+    setCustomPhones(parsePhones(val));
+  };
+
+  const handleCustomPhonesFileUploaded = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      const parsed = parsePhones(text);
+      setCustomPhones(parsed);
+      setCustomPhonesInput(parsed.join("\n"));
+    };
+    reader.readAsText(file);
+  };
+
   const [orders, setOrders] = useState<any[]>([]);
   const [orderFilter, setOrderFilter] = useState<'all' | 'pending' | 'confirmed' | 'cancelled'>('all');
   const [leadFilter, setLeadFilter] = useState<'all' | 'hot' | 'cold'>('all');
@@ -78,16 +113,19 @@ export default function DashboardPage() {
     }
   };
 
-  const getSelectedLeadsCount = () => {
+  const getSelectedLeadsCount = (aud = revivalAudience) => {
+    if (aud === "custom") {
+      return customPhones.length;
+    }
     const customerList = Object.values(customers);
     const chatPhones = Object.keys(chats);
-    if (revivalAudience === "all") {
+    if (aud === "all") {
       return new Set([...customerList.map(c => c.phone), ...chatPhones]).size;
-    } else if (revivalAudience === "cold") {
+    } else if (aud === "cold") {
       return customerList.filter(c => c.leadStatus === "cold" || c.pipelineStage === "cold").length;
-    } else if (revivalAudience === "hot") {
+    } else if (aud === "hot") {
       return customerList.filter(c => c.leadStatus === "hot" || c.pipelineStage === "warm").length;
-    } else if (revivalAudience === "new") {
+    } else if (aud === "new") {
       return customerList.filter(c => !c.pipelineStage || c.pipelineStage === "new").length;
     }
     return 0;
@@ -618,6 +656,7 @@ export default function DashboardPage() {
         body: JSON.stringify({
           message: revivalMessage,
           audience: revivalAudience,
+          customPhones: revivalAudience === "custom" ? customPhones : undefined,
           timeSlotStart: revivalTimeStart,
           timeSlotEnd: revivalTimeEnd,
           delayMinSeconds: revivalDelayMin,
@@ -633,6 +672,8 @@ export default function DashboardPage() {
       const data = await res.json();
       if (data.success) {
         setRevivalMessage("");
+        setCustomPhonesInput("");
+        setCustomPhones([]);
         removeRevivalMedia();
         fetchRevivalCampaigns();
       } else {
@@ -2013,12 +2054,42 @@ export default function DashboardPage() {
                       onChange={(e) => setRevivalAudience(e.target.value)}
                       className="w-full p-4 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-slate-700"
                     >
-                      <option value="all">All Contacts (Count: {getSelectedLeadsCount()})</option>
-                      <option value="cold">Cold Leads (Inactive / Abandoned) (Count: {getSelectedLeadsCount()})</option>
-                      <option value="hot">Warm & Hot Leads (Active Inquiries) (Count: {getSelectedLeadsCount()})</option>
-                      <option value="new">New Leads (No pipeline stage) (Count: {getSelectedLeadsCount()})</option>
+                      <option value="all">All Contacts (Count: {getSelectedLeadsCount("all")})</option>
+                      <option value="cold">Cold Leads (Inactive / Abandoned) (Count: {getSelectedLeadsCount("cold")})</option>
+                      <option value="hot">Warm & Hot Leads (Active Inquiries) (Count: {getSelectedLeadsCount("hot")})</option>
+                      <option value="new">New Leads (No pipeline stage) (Count: {getSelectedLeadsCount("new")})</option>
+                      <option value="custom">Custom Phone List (Count: {getSelectedLeadsCount("custom")})</option>
                     </select>
                     <p className="text-xs text-slate-500 font-medium mt-1">Select the target segment to trigger the revival sequence.</p>
+                    
+                    {revivalAudience === "custom" && (
+                      <div className="space-y-3 mt-4 border border-slate-100 p-5 rounded-2xl bg-slate-50">
+                        <label className="text-sm font-bold text-slate-700 block">Custom Phone Numbers (One per line or comma-separated)</label>
+                        <textarea
+                          value={customPhonesInput}
+                          onChange={(e) => handleCustomPhonesChange(e.target.value)}
+                          placeholder="e.g.&#10;+923228487873&#10;03011660641&#10;+92 300 1234567"
+                          className="w-full h-32 p-4 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition font-medium"
+                        />
+                        <div className="flex items-center justify-between text-xs text-slate-500 font-semibold">
+                          <span>Parsed valid numbers: <strong className="text-emerald-600">{customPhones.length}</strong></span>
+                          <button 
+                            type="button" 
+                            onClick={() => customPhonesFileInputRef.current?.click()} 
+                            className="text-emerald-600 hover:text-emerald-700 underline cursor-pointer focus:outline-none"
+                          >
+                            Upload .txt / .csv file
+                          </button>
+                          <input
+                            type="file"
+                            ref={customPhonesFileInputRef}
+                            className="hidden"
+                            accept=".txt,.csv"
+                            onChange={handleCustomPhonesFileUploaded}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-3">
@@ -2090,10 +2161,10 @@ export default function DashboardPage() {
                         <label className="text-xs font-bold text-slate-500 block mb-1">Min Delay (Seconds)</label>
                         <input 
                           type="number" 
-                          min={45} 
-                          max={180}
+                          min={10} 
+                          max={1800}
                           value={revivalDelayMin}
-                          onChange={(e) => setRevivalDelayMin(Math.max(45, parseInt(e.target.value) || 45))}
+                          onChange={(e) => setRevivalDelayMin(Math.max(10, parseInt(e.target.value) || 10))}
                           className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
                         />
                       </div>
@@ -2101,10 +2172,10 @@ export default function DashboardPage() {
                         <label className="text-xs font-bold text-slate-500 block mb-1">Max Delay (Seconds)</label>
                         <input 
                           type="number" 
-                          min={45} 
-                          max={180}
+                          min={10} 
+                          max={1800}
                           value={revivalDelayMax}
-                          onChange={(e) => setRevivalDelayMax(Math.max(revivalDelayMin, parseInt(e.target.value) || 45))}
+                          onChange={(e) => setRevivalDelayMax(Math.max(revivalDelayMin, parseInt(e.target.value) || 10))}
                           className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
                         />
                       </div>
@@ -2116,9 +2187,9 @@ export default function DashboardPage() {
                         <input 
                           type="number" 
                           min={1} 
-                          max={15}
+                          max={1000}
                           value={revivalBatchSize}
-                          onChange={(e) => setRevivalBatchSize(Math.max(1, Math.min(15, parseInt(e.target.value) || 1)))}
+                          onChange={(e) => setRevivalBatchSize(Math.max(1, Math.min(1000, parseInt(e.target.value) || 1)))}
                           className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
                         />
                       </div>
@@ -2126,10 +2197,10 @@ export default function DashboardPage() {
                         <label className="text-xs font-bold text-slate-500 block mb-1">Break (Mins)</label>
                         <input 
                           type="number" 
-                          min={30} 
-                          max={90}
+                          min={0} 
+                          max={1440}
                           value={revivalBatchBreak}
-                          onChange={(e) => setRevivalBatchBreak(Math.max(30, Math.min(90, parseInt(e.target.value) || 30)))}
+                          onChange={(e) => setRevivalBatchBreak(Math.max(0, Math.min(1440, parseInt(e.target.value) || 0)))}
                           className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
                         />
                       </div>
@@ -2138,9 +2209,9 @@ export default function DashboardPage() {
                         <input 
                           type="number" 
                           min={1} 
-                          max={80}
+                          max={500}
                           value={revivalDailyCap}
-                          onChange={(e) => setRevivalDailyCap(Math.max(1, Math.min(80, parseInt(e.target.value) || 1)))}
+                          onChange={(e) => setRevivalDailyCap(Math.max(1, Math.min(500, parseInt(e.target.value) || 1)))}
                           className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
                         />
                       </div>

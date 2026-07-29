@@ -755,7 +755,23 @@ export class WhatsAppManager {
     if (to.includes("@")) {
       return to;
     }
-    const cleanPhone = to.replace(/[^\d+]/g, "");
+    let cleanPhone = to.replace(/[^\d]/g, "");
+    
+    // Auto-formatting local numbers (starting with 0) to proper international formatting
+    if (cleanPhone.startsWith("0") && !cleanPhone.startsWith("00")) {
+      const ownJid = globalForBaileys.baileysSession.sock?.user?.id;
+      let countryCode = "92"; // Default fallback to Pakistan
+      if (ownJid) {
+        const ownNumber = ownJid.split("@")[0].split(":")[0];
+        if (ownNumber.length > 10) {
+          countryCode = ownNumber.substring(0, ownNumber.length - 10);
+        }
+      }
+      cleanPhone = countryCode + cleanPhone.substring(1);
+    } else if (cleanPhone.startsWith("00")) {
+      cleanPhone = cleanPhone.substring(2);
+    }
+
     const customer = DB.getCustomer(cleanPhone);
     if (customer && customer.jid) {
       return customer.jid;
