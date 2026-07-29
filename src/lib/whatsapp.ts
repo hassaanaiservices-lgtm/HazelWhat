@@ -6,6 +6,9 @@ import pino from "pino";
 import path from "path";
 import fs from "fs";
 import { scrapeStore } from "./scraper";
+const DB_DIR = process.env.DATABASE_DIR || path.join(process.cwd(), ".data");
+const AUTH_FOLDER = path.join(DB_DIR, ".baileys_auth");
+
 const globalForBaileys = global as unknown as {
   baileysSession: any;
   autoSyncInterval: any;
@@ -414,7 +417,7 @@ export class WhatsAppManager {
     globalForBaileys.baileysSession.status = "connecting";
 
     const initPromise = (async () => {
-      const authFolder = path.join(process.cwd(), ".data", ".baileys_auth");
+      const authFolder = AUTH_FOLDER;
       if (!fs.existsSync(authFolder)) {
         fs.mkdirSync(authFolder, { recursive: true });
       }
@@ -510,7 +513,7 @@ export class WhatsAppManager {
             globalForBaileys.baileysSession.sock = null;
 
             // Delete auth credentials to prevent infinite loop
-            const authFolder = path.join(process.cwd(), ".data", ".baileys_auth");
+            const authFolder = AUTH_FOLDER;
             if (fs.existsSync(authFolder)) {
               try {
                 fs.rmSync(authFolder, { recursive: true, force: true });
@@ -533,6 +536,10 @@ export class WhatsAppManager {
       sock.ev.on("messages.upsert", async (m) => {
         if (m.type === "notify") {
           for (const msg of m.messages) {
+            const remoteJid = msg.key.remoteJid;
+            if (!remoteJid || remoteJid === "status@broadcast" || remoteJid.endsWith("@g.us") || remoteJid.endsWith("@newsletter")) {
+              continue;
+            }
             if (!msg.key.fromMe && msg.message) {
               onMessage(msg);
             } else if (msg.key.fromMe && msg.message) {
@@ -577,7 +584,7 @@ export class WhatsAppManager {
       sock.ev.on("messaging-history.set", ({ contacts, messages, isLatest }) => {
         // Sync contacts
         for (const contact of contacts) {
-          if (contact.id && !contact.id.includes("@g.us")) {
+          if (contact.id && contact.id !== "status@broadcast" && !contact.id.endsWith("@g.us") && !contact.id.endsWith("@newsletter")) {
             const phone = contact.id.replace("@s.whatsapp.net", "").replace("@lid", "");
             if (phone) {
               DB.updateCustomer(phone, { 
@@ -591,7 +598,8 @@ export class WhatsAppManager {
         // Sync historical messages if available
         if (messages) {
           for (const msg of messages) {
-            if (!msg.key.remoteJid?.includes("@g.us")) {
+            const remoteJid = msg.key.remoteJid;
+            if (remoteJid && remoteJid !== "status@broadcast" && !remoteJid.endsWith("@g.us") && !remoteJid.endsWith("@newsletter")) {
               const content = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
               if (content) {
                 let from = msg.key.remoteJid;
@@ -632,7 +640,7 @@ export class WhatsAppManager {
 
       sock.ev.on("contacts.upsert", (contacts) => {
         for (const contact of contacts) {
-          if (contact.id && !contact.id.includes("@g.us")) {
+          if (contact.id && contact.id !== "status@broadcast" && !contact.id.endsWith("@g.us") && !contact.id.endsWith("@newsletter")) {
             const phone = contact.id.replace("@s.whatsapp.net", "").replace("@lid", "");
             if (phone) {
               DB.updateCustomer(phone, { 
@@ -693,7 +701,7 @@ export class WhatsAppManager {
     globalForBaileys.baileysSession = { status: "disconnected", qrCode: null, qrGeneratedAt: null, sock: null };
     globalForBaileys.startPromise = null;
 
-    const authFolder = path.join(process.cwd(), ".data", ".baileys_auth");
+    const authFolder = AUTH_FOLDER;
     if (fs.existsSync(authFolder)) {
       try {
         fs.rmSync(authFolder, { recursive: true, force: true });
@@ -734,7 +742,7 @@ export class WhatsAppManager {
     globalForBaileys.baileysSession = { status: "disconnected", qrCode: null, qrGeneratedAt: null, sock: null };
     globalForBaileys.startPromise = null;
     
-    const authFolder = path.join(process.cwd(), ".data", ".baileys_auth");
+    const authFolder = AUTH_FOLDER;
     if (fs.existsSync(authFolder)) {
       try {
         fs.rmSync(authFolder, { recursive: true, force: true });

@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
-const DB_PATH = path.join(process.cwd(), '.data', 'db.json');
+const DB_DIR = process.env.DATABASE_DIR || path.join(process.cwd(), '.data');
+const DB_PATH = path.join(DB_DIR, 'db.json');
 
 export interface ChatMessage {
   id?: string;

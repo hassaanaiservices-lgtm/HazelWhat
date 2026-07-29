@@ -11,7 +11,8 @@ export async function GET() {
     
     // Auto-reconnect if auth credentials exist but session is disconnected
     if (status.status === "disconnected") {
-      const authFolder = path.join(process.cwd(), ".data", ".baileys_auth");
+      const dbDir = process.env.DATABASE_DIR || path.join(process.cwd(), ".data");
+      const authFolder = path.join(dbDir, ".baileys_auth");
       const credsFile = path.join(authFolder, "creds.json");
       
       if (fs.existsSync(credsFile)) {

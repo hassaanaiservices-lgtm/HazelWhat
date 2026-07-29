@@ -211,27 +211,76 @@ async function callLLM(
     const openAiMessages = convertAnthropicMessagesToOpenAi(messages, systemPrompt);
     const openAiTools = convertAnthropicToolsToOpenAi(tools);
 
-    const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${trimmed}`
-      },
-      body: JSON.stringify({
-        model: "deepseek-chat",
-        messages: openAiMessages,
-        tools: openAiTools.length > 0 ? openAiTools : undefined,
-        max_tokens: 2000,
-        temperature: temperature
-      })
+    // Clean openAiMessages: convert content array to string and replace image_url with [Image Attachment]
+    const cleanedMessages = openAiMessages.map(msg => {
+      if (Array.isArray(msg.content)) {
+        const textParts = [];
+        for (const block of msg.content) {
+          if (block.type === "text") {
+            textParts.push(block.text);
+          } else if (block.type === "image_url") {
+            textParts.push("[Image Attachment]");
+          }
+        }
+        return {
+          ...msg,
+          content: textParts.join("\n") || "[Attachment]"
+        };
+      }
+      return msg;
     });
 
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`DeepSeek API failed with status ${res.status}: ${errText}`);
+    let attempts = 3;
+    let res: Response | null = null;
+    let lastError: any = null;
+
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        console.log(`[callLLM] DeepSeek API attempt ${attempt} of ${attempts}...`);
+        
+        // Timeout after 15 seconds to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+        res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${trimmed}`
+          },
+          body: JSON.stringify({
+            model: "deepseek-chat",
+            messages: cleanedMessages,
+            tools: openAiTools.length > 0 ? openAiTools : undefined,
+            max_tokens: 2000,
+            temperature: temperature
+          }),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`Status ${res.status}: ${errText}`);
+        }
+        break;
+      } catch (err: any) {
+        console.error(`[callLLM] DeepSeek attempt ${attempt} failed:`, err.message || err);
+        lastError = err;
+        if (attempt < attempts) {
+          const delay = attempt * 1000;
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
     }
 
-    const data = await res.json();
+    if (!res || !res.ok) {
+      throw lastError || new Error("DeepSeek API failed after all retries.");
+    }
+
+    const response = res as Response;
+    const data = await response.json();
     if (!data.choices || data.choices.length === 0) {
       throw new Error("DeepSeek API returned an empty choices array.");
     }
@@ -246,7 +295,8 @@ async function callLLM(
 
 function debugLog(msg: string) {
   try {
-    const logPath = path.join(process.cwd(), ".data", "debug.log");
+    const dbDir = process.env.DATABASE_DIR || path.join(process.cwd(), ".data");
+    const logPath = path.join(dbDir, "debug.log");
     if (!fs.existsSync(path.dirname(logPath))) {
       fs.mkdirSync(path.dirname(logPath), { recursive: true });
     }
@@ -279,6 +329,10 @@ function isDuplicateMessage(msgId: string): boolean {
 
 export async function handleWhatsAppMessage(msg: any) {
   try {
+    const remoteJid = msg?.key?.remoteJid;
+    if (!remoteJid || remoteJid === "status@broadcast" || remoteJid.endsWith("@g.us") || remoteJid.endsWith("@newsletter")) {
+      return;
+    }
     const msgId = msg?.key?.id;
     if (msgId && isDuplicateMessage(msgId)) {
       console.log(`[AI Handler] Duplicate message ignored: ${msgId}`);
