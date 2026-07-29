@@ -440,21 +440,24 @@ export async function handleWhatsAppMessage(msg: any) {
 
     console.log("=== AI HANDLER VERSION 6 (Unified callLLM) ===");
 
-    const apiKey = (config.apiKey || getEnvKey("API_KEY") || process.env.API_KEY || 
+    const apiKey = (config.apiKey || 
+                    getEnvKey("API_KEY") || process.env.API_KEY || 
+                    getEnvKey("DEEPSEEK_API_KEY") || process.env.DEEPSEEK_API_KEY ||
+                    getEnvKey("OPENAI_API_KEY") || process.env.OPENAI_API_KEY ||
                     config.anthropicApiKey || getEnvKey("ANTHROPIC_API_KEY") || process.env.ANTHROPIC_API_KEY ||
                     config.openRouterApiKey || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENROUTER_API_KEY || "").trim();
 
     debugLog(`=== Incoming Message from ${from} ===`);
     debugLog(`Content: "${content}"`);
-    debugLog(`Unified Key source: config.apiKey=${config.apiKey ? "yes" : "no"}, env.API_KEY=${getEnvKey("API_KEY") ? "yes" : "no"}, process.env.API_KEY=${process.env.API_KEY ? "yes" : "no"}`);
+    debugLog(`Unified Key source: config.apiKey=${config.apiKey ? "yes" : "no"}, env.API_KEY=${getEnvKey("API_KEY") ? "yes" : "no"}, process.env.API_KEY=${process.env.API_KEY ? "yes" : "no"}, process.env.DEEPSEEK_API_KEY=${process.env.DEEPSEEK_API_KEY ? "yes" : "no"}`);
 
     if (!apiKey) {
-      console.error("[AI Handler] No API key (API_KEY, ANTHROPIC_API_KEY, or OPENROUTER_API_KEY) is configured.");
+      console.error("[AI Handler] No API key is configured.");
       const fallback = "I'm currently experiencing a high volume of requests. A human agent will be with you shortly!";
       const sentMsg = await WhatsAppManager.sendMessage(from, fallback);
       DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: fallback });
       
-      const diagnostics = `[DIAGNOSTIC - KEY ERROR] The bot could not respond because no API keys were loaded.\n- config.apiKey: ${config.apiKey ? "Present" : "Empty"}\n- env.API_KEY: ${getEnvKey("API_KEY") ? "Present" : "Empty"}`;
+      const diagnostics = `[DIAGNOSTIC - KEY ERROR] The bot could not respond because no API keys were loaded.\n- config.apiKey: ${config.apiKey ? "Present" : "Empty"}\n- process.env.API_KEY: ${process.env.API_KEY ? "Present" : "Empty"}\n- process.env.DEEPSEEK_API_KEY: ${process.env.DEEPSEEK_API_KEY ? "Present" : "Empty"}\n- process.env.OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? "Present" : "Empty"}\n- process.env.ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? "Present" : "Empty"}\n- process.env.OPENROUTER_API_KEY: ${process.env.OPENROUTER_API_KEY ? "Present" : "Empty"}`;
       DB.addChatMessage(from, { role: "assistant", content: diagnostics });
       return;
     }
@@ -828,7 +831,10 @@ export async function handleWhatsAppMessage(msg: any) {
 
 export async function generateContextualFollowUp(phone: string, followUpPrompt: string): Promise<string> {
   const config = DB.getConfig();
-  const apiKey = (config.apiKey || getEnvKey("API_KEY") || process.env.API_KEY || 
+  const apiKey = (config.apiKey || 
+                  getEnvKey("API_KEY") || process.env.API_KEY || 
+                  getEnvKey("DEEPSEEK_API_KEY") || process.env.DEEPSEEK_API_KEY ||
+                  getEnvKey("OPENAI_API_KEY") || process.env.OPENAI_API_KEY ||
                   config.anthropicApiKey || getEnvKey("ANTHROPIC_API_KEY") || process.env.ANTHROPIC_API_KEY ||
                   config.openRouterApiKey || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENROUTER_API_KEY || "").trim();
 
@@ -864,7 +870,10 @@ export async function generateContextualFollowUp(phone: string, followUpPrompt: 
 
 export async function generateScheduledFollowUp(phone: string, contextNote: string): Promise<string> {
   const config = DB.getConfig();
-  const apiKey = (config.apiKey || getEnvKey("API_KEY") || process.env.API_KEY || 
+  const apiKey = (config.apiKey || 
+                  getEnvKey("API_KEY") || process.env.API_KEY || 
+                  getEnvKey("DEEPSEEK_API_KEY") || process.env.DEEPSEEK_API_KEY ||
+                  getEnvKey("OPENAI_API_KEY") || process.env.OPENAI_API_KEY ||
                   config.anthropicApiKey || getEnvKey("ANTHROPIC_API_KEY") || process.env.ANTHROPIC_API_KEY ||
                   config.openRouterApiKey || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENROUTER_API_KEY || "").trim();
 
