@@ -438,11 +438,23 @@ export async function handleWhatsAppMessage(msg: any) {
     
     const existingCustomer = DB.getCustomer(from);
     const currentStage = existingCustomer?.pipelineStage || "new";
+    
+    let updatedTags = existingCustomer?.tags || [];
+    let nextStage: "cold" | "new" | "qualified" | "warm" | "completed" | undefined = currentStage === "completed" ? "completed" : currentStage;
+    if (updatedTags.includes("revival-sent")) {
+      updatedTags = updatedTags.filter(t => t !== "revival-sent");
+      if (!updatedTags.includes("revival-replied")) {
+        updatedTags.push("revival-replied");
+      }
+      nextStage = "warm"; // Move revived customer to warm stage in CRM pipeline
+    }
+
     DB.updateCustomer(from, { 
       jid: msg.key.remoteJid,
       followUpLevel: 0,
       leadStatus: "hot",
-      pipelineStage: currentStage === "completed" ? "completed" : currentStage,
+      pipelineStage: nextStage,
+      tags: updatedTags,
       ...(msg.pushName ? { name: msg.pushName } : {})
     });
     DB.cancelPendingFollowUps(from);
@@ -492,6 +504,20 @@ export async function handleWhatsAppMessage(msg: any) {
 
     let aiReply = "I'm sorry, I didn't quite catch that. Could you rephrase?";
     let fullSystemPrompt = `${config.systemPrompt}\n\nToday's Date: ${new Date().toISOString().split('T')[0]}\n\nProduct Information:\n${config.productInfo}`;
+
+    const customerTags = existingCustomer?.tags || [];
+    const hasRevivalTag = customerTags.includes("revival-sent") || customerTags.includes("revival-replied");
+    if (hasRevivalTag) {
+      fullSystemPrompt += `\n\n=== DEAD LEAD REVIVAL PIPELINE FUNNEL STRATEGY ===
+This customer is a revived dead lead who recently responded to our re-engagement outreach campaign.
+Follow this funnel strategy to turn them from a dead lead into a paying customer:
+1. RE-INTRODUCTION: Re-introduce our business/brand warmly, acknowledging that they were previously in contact, and maintain a friendly, warm tone.
+2. DISCOUNT/INCENTIVE: Offer them a special revival discount, exclusive promo code, or limited-time deal to incentivize them to buy right now.
+3. CONVERSATION OVER PITCHING: Do not immediately push a hard sell. Build rapport, ask if their needs have changed, or check if they need help with their previous inquiry.
+4. ACTIVE NURTURING: Offer a direct purchase link, guide them to place an order, or answer questions about product options.
+5. PROACTIVE FOLLOW-UPS: If they go quiet, schedule a follow-up message using your schedule_followup tool in 1-2 days to check in on the offer.
+Keep their history in mind and treat them like a valued returning customer.`;
+    }
     
     fullSystemPrompt += `\n\nCRITICAL RULES FOR PRODUCT RECOMMENDATIONS:
 1. When showing a product to the customer, you must ALWAYS call the send_product_card function with the correct product data.

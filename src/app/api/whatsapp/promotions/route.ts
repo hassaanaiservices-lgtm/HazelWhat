@@ -79,7 +79,7 @@ export async function POST(req: Request) {
       const batchPromises = batch.map(async (phone) => {
         try {
           if (buffer && mimetype) {
-            await WhatsAppManager.sendMedia(phone, buffer, mimetype, message || fileName);
+            await WhatsAppManager.sendMedia(phone, buffer, mimetype, fileName || "document", message);
           } else {
             await WhatsAppManager.sendMessage(phone, message);
           }

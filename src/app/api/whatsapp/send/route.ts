@@ -17,7 +17,7 @@ export async function POST(req: Request) {
       const base64Data = mediaBase64.replace(/^data:[a-zA-Z0-9/+-]+;base64,/, "");
       const buffer = Buffer.from(base64Data, "base64");
       
-      sentMsg = await WhatsAppManager.sendMedia(to, buffer, mimetype, fileName, isVoiceNote);
+      sentMsg = await WhatsAppManager.sendMedia(to, buffer, mimetype, fileName, undefined, isVoiceNote);
       
       // Save to database
       const displayContent = isVoiceNote ? "🎤 [Voice Note]" : `📎 [Attachment] ${fileName || ""}`;

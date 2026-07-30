@@ -246,7 +246,7 @@ export class WhatsAppManager {
     if (globalForBaileys.revivalInterval) {
       clearInterval(globalForBaileys.revivalInterval);
     }
-    // Check every 60 seconds for active campaigns
+    // Check every 10 seconds for active campaigns to support responsive delays
     globalForBaileys.revivalInterval = setInterval(async () => {
       // Prevent overlapping processing
       if (globalForBaileys.revivalProcessing) return;
@@ -258,20 +258,21 @@ export class WhatsAppManager {
       } finally {
         globalForBaileys.revivalProcessing = false;
       }
-    }, 60000);
+    }, 10000);
   }
 
   static async processRevivalCampaign() {
     const campaign = DB.getActiveCampaign();
     if (!campaign) return;
 
-    // Check batch break
-    if (campaign.lastBatchSentAt && campaign.batchBreakMinutes) {
-      const lastBatchTime = new Date(campaign.lastBatchSentAt).getTime();
-      const nextBatchTime = lastBatchTime + campaign.batchBreakMinutes * 60 * 1000;
-      if (Date.now() < nextBatchTime) {
-        const minsLeft = Math.ceil((nextBatchTime - Date.now()) / 60000);
-        console.log(`[Revival] Campaign ${campaign.id} is in a batch break. ${minsLeft} minutes remaining.`);
+    // Check delay between individual messages
+    const delayMin = campaign.delayMinutes || 5;
+    if (campaign.lastSentAt) {
+      const lastSentTime = new Date(campaign.lastSentAt).getTime();
+      const nextSendTime = lastSentTime + delayMin * 60 * 1000;
+      if (Date.now() < nextSendTime) {
+        const secsLeft = Math.ceil((nextSendTime - Date.now()) / 1000);
+        console.log(`[Revival] Campaign ${campaign.id} is waiting. ${secsLeft} seconds remaining.`);
         return;
       }
     }
@@ -319,18 +320,11 @@ export class WhatsAppManager {
       return;
     }
 
-    // Pick next batch
-    const canSendMore = campaign.dailyCap - sentToday;
-    const batchCount = Math.min(campaign.batchSize, remaining.length, canSendMore);
-    const batch = remaining.slice(0, batchCount);
+    // Pick next lead
+    const phone = remaining[0];
+    console.log(`[Revival] Processing next lead ${phone} for campaign ${campaign.id} (${campaign.sentPhones.length}/${campaign.targetPhones.length} done)`);
 
-    console.log(`[Revival] Processing batch of ${batch.length} messages for campaign ${campaign.id} (${campaign.sentPhones.length}/${campaign.targetPhones.length} done)`);
-
-    const newSentPhones = [...campaign.sentPhones];
-    const newFailedPhones = [...campaign.failedPhones];
-    let batchSentCount = 0;
-
-    // Prepare media buffer once if needed
+    // Prepare media buffer if needed
     let buffer: Buffer | null = null;
     if (campaign.mediaBase64) {
       try {
@@ -340,44 +334,43 @@ export class WhatsAppManager {
       }
     }
 
-    for (const phone of batch) {
-      // Random delay between messages
-      const delayMs = (campaign.delayMinSeconds + Math.random() * (campaign.delayMaxSeconds - campaign.delayMinSeconds)) * 1000;
-      await new Promise(resolve => setTimeout(resolve, delayMs));
+    const newSentPhones = [...campaign.sentPhones];
+    const newFailedPhones = [...campaign.failedPhones];
+    let sentSuccess = false;
 
-      try {
-        if (buffer && campaign.mimetype) {
-          await this.sendMedia(phone, buffer, campaign.mimetype, campaign.message || campaign.fileName);
-        } else {
-          await this.sendMessage(phone, campaign.message);
-        }
-
-        // Log to chat DB so it appears in the inbox
-        DB.addChatMessage(phone, {
-          id: "rv-" + Math.random().toString(36).substring(2, 8),
-          role: "assistant",
-          content: campaign.message || "[Media]",
-          status: 1,
-        });
-
-        // Tag the customer as revival-contacted
-        const customer = DB.getCustomer(phone);
-        const existingTags = customer?.tags || [];
-        if (!existingTags.includes("revival-sent")) {
-          DB.updateCustomer(phone, { tags: [...existingTags, "revival-sent"] });
-        }
-
-        newSentPhones.push(phone);
-        batchSentCount++;
-        console.log(`[Revival] ✓ Sent to ${phone} (delay: ${(delayMs/1000).toFixed(0)}s)`);
-      } catch (err: any) {
-        console.error(`[Revival] ✗ Failed to send to ${phone}:`, err.message);
-        newFailedPhones.push(phone);
+    try {
+      if (buffer && campaign.mimetype) {
+        // Send document with original name and the message as the caption
+        await this.sendMedia(phone, buffer, campaign.mimetype, campaign.fileName || "document", campaign.message);
+      } else {
+        await this.sendMessage(phone, campaign.message);
       }
+
+      // Log to chat DB so it appears in the inbox
+      DB.addChatMessage(phone, {
+        id: "rv-" + Math.random().toString(36).substring(2, 8),
+        role: "assistant",
+        content: campaign.message || "[Media]",
+        status: 1,
+      });
+
+      // Tag the customer as revival-sent
+      const customer = DB.getCustomer(phone);
+      const existingTags = customer?.tags || [];
+      if (!existingTags.includes("revival-sent")) {
+        DB.updateCustomer(phone, { tags: [...existingTags, "revival-sent"] });
+      }
+
+      newSentPhones.push(phone);
+      sentSuccess = true;
+      console.log(`[Revival] ✓ Sent to ${phone}`);
+    } catch (err: any) {
+      console.error(`[Revival] ✗ Failed to send to ${phone}:`, err.message);
+      newFailedPhones.push(phone);
     }
 
     // Update campaign progress
-    const updatedSentToday = sentToday + batchSentCount;
+    const updatedSentToday = sentToday + (sentSuccess ? 1 : 0);
     const allProcessed = newSentPhones.length + newFailedPhones.length >= campaign.targetPhones.length;
 
     DB.updateRevivalCampaign(campaign.id, {
@@ -386,10 +379,11 @@ export class WhatsAppManager {
       sentToday: updatedSentToday,
       lastSentDate: today,
       status: allProcessed ? "completed" : "active",
-      lastBatchSentAt: new Date().toISOString(),
+      lastSentAt: new Date().toISOString(),
+      lastBatchSentAt: new Date().toISOString(), // keep legacy field synchronized
     });
 
-    console.log(`[Revival] Batch done. Sent: ${batchSentCount}, Total: ${newSentPhones.length}/${campaign.targetPhones.length}, Today: ${updatedSentToday}/${campaign.dailyCap}`);
+    console.log(`[Revival] Progress updated. Total: ${newSentPhones.length}/${campaign.targetPhones.length}, Today: ${updatedSentToday}/${campaign.dailyCap}`);
   }
 
   static async startSession(onMessage: (msg: any) => void) {
@@ -795,7 +789,7 @@ export class WhatsAppManager {
     return sentMsg;
   }
 
-  static async sendMedia(to: string, buffer: Buffer, mimetype: string, fileName?: string, isVoiceNote = false) {
+  static async sendMedia(to: string, buffer: Buffer, mimetype: string, fileName?: string, caption?: string, isVoiceNote = false) {
     if (globalForBaileys.baileysSession.status !== "connected" || !globalForBaileys.baileysSession.sock) {
       throw new Error("WhatsApp not connected");
     }
@@ -808,13 +802,13 @@ export class WhatsAppManager {
         msgObj = { audio: buffer, ptt: isVoiceNote, mimetype: mimetype || 'audio/mp4' };
     } else if (mimetype.startsWith('image/')) {
         await globalForBaileys.baileysSession.sock.sendPresenceUpdate('paused', jid);
-        msgObj = { image: buffer, caption: fileName };
+        msgObj = { image: buffer, caption: caption || fileName };
     } else if (mimetype.startsWith('video/')) {
         await globalForBaileys.baileysSession.sock.sendPresenceUpdate('paused', jid);
-        msgObj = { video: buffer, caption: fileName };
+        msgObj = { video: buffer, caption: caption || fileName };
     } else {
         await globalForBaileys.baileysSession.sock.sendPresenceUpdate('paused', jid);
-        msgObj = { document: buffer, mimetype, fileName: fileName || "document" };
+        msgObj = { document: buffer, mimetype, fileName: fileName || "document", caption: caption };
     }
     const sentMsg = await globalForBaileys.baileysSession.sock.sendMessage(jid, msgObj);
     return sentMsg;

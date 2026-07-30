@@ -44,10 +44,10 @@ export default function DashboardPage() {
   const [revivalAudience, setRevivalAudience] = useState("all");
   const [revivalTimeStart, setRevivalTimeStart] = useState("09:00");
   const [revivalTimeEnd, setRevivalTimeEnd] = useState("21:00");
-  const [revivalDelayMin, setRevivalDelayMin] = useState(60);
-  const [revivalDelayMax, setRevivalDelayMax] = useState(120);
-  const [revivalBatchSize, setRevivalBatchSize] = useState(10);
-  const [revivalBatchBreak, setRevivalBatchBreak] = useState(45);
+  const [revivalDelayMinutes, setRevivalDelayMinutes] = useState<number>(5);
+  const [targetDuration, setTargetDuration] = useState<number>(0);
+  const [targetDurationUnit, setTargetDurationUnit] = useState<"Days" | "Hours">("Days");
+  const [isFileUploaded, setIsFileUploaded] = useState(false);
   const [revivalDailyCap, setRevivalDailyCap] = useState(80);
   const [revivalMediaBase64, setRevivalMediaBase64] = useState<string | null>(null);
   const [revivalMediaMime, setRevivalMediaMime] = useState<string | null>(null);
@@ -70,9 +70,86 @@ export default function DashboardPage() {
     return Array.from(new Set(cleaned));
   };
 
+  const getActiveHours = (start = revivalTimeStart, end = revivalTimeEnd) => {
+    const startH = parseInt(start.split(":")[0]) || 9;
+    const endH = parseInt(end.split(":")[0]) || 21;
+    return Math.max(1, endH - startH);
+  };
+
+  const handleDelayChange = (newDelayMins: number, customCount = customPhones.length, start = revivalTimeStart, end = revivalTimeEnd) => {
+    setRevivalDelayMinutes(newDelayMins);
+    if (customCount === 0) return;
+    const activeHrs = getActiveHours(start, end);
+    if (targetDurationUnit === "Days") {
+      const days = (customCount * newDelayMins) / (activeHrs * 60);
+      setTargetDuration(Math.round(days * 10) / 10);
+    } else {
+      const hours = (customCount * newDelayMins) / 60;
+      setTargetDuration(Math.round(hours * 10) / 10);
+    }
+  };
+
+  const handleTargetDurationChange = (newDuration: number, customCount = customPhones.length, start = revivalTimeStart, end = revivalTimeEnd) => {
+    setTargetDuration(newDuration);
+    if (customCount === 0) return;
+    const activeHrs = getActiveHours(start, end);
+    if (targetDurationUnit === "Days") {
+      const delay = (newDuration * activeHrs * 60) / customCount;
+      setRevivalDelayMinutes(Math.round(delay * 10) / 10);
+    } else {
+      const delay = (newDuration * 60) / customCount;
+      setRevivalDelayMinutes(Math.round(delay * 10) / 10);
+    }
+  };
+
+  const handleTargetDurationUnitChange = (newUnit: "Days" | "Hours", currentDuration = targetDuration, start = revivalTimeStart, end = revivalTimeEnd) => {
+    setTargetDurationUnit(newUnit);
+    const activeHrs = getActiveHours(start, end);
+    if (newUnit === "Days") {
+      const days = currentDuration / activeHrs;
+      setTargetDuration(Math.round(days * 10) / 10);
+    } else {
+      const hours = currentDuration * activeHrs;
+      setTargetDuration(Math.round(hours * 10) / 10);
+    }
+  };
+
+  const handleTimeStartChange = (val: string) => {
+    setRevivalTimeStart(val);
+    if (isFileUploaded && customPhones.length > 0) {
+      const activeHrs = getActiveHours(val, revivalTimeEnd);
+      if (targetDurationUnit === "Days") {
+        const days = (customPhones.length * revivalDelayMinutes) / (activeHrs * 60);
+        setTargetDuration(Math.round(days * 10) / 10);
+      }
+    }
+  };
+
+  const handleTimeEndChange = (val: string) => {
+    setRevivalTimeEnd(val);
+    if (isFileUploaded && customPhones.length > 0) {
+      const activeHrs = getActiveHours(revivalTimeStart, val);
+      if (targetDurationUnit === "Days") {
+        const days = (customPhones.length * revivalDelayMinutes) / (activeHrs * 60);
+        setTargetDuration(Math.round(days * 10) / 10);
+      }
+    }
+  };
+
   const handleCustomPhonesChange = (val: string) => {
     setCustomPhonesInput(val);
-    setCustomPhones(parsePhones(val));
+    const parsed = parsePhones(val);
+    setCustomPhones(parsed);
+    if (parsed.length > 0 && isFileUploaded) {
+      const activeHrs = getActiveHours();
+      if (targetDurationUnit === "Days") {
+        const days = (parsed.length * revivalDelayMinutes) / (activeHrs * 60);
+        setTargetDuration(Math.round(days * 10) / 10);
+      } else {
+        const hours = (parsed.length * revivalDelayMinutes) / 60;
+        setTargetDuration(Math.round(hours * 10) / 10);
+      }
+    }
   };
 
   const handleCustomPhonesFileUploaded = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,6 +161,20 @@ export default function DashboardPage() {
       const parsed = parsePhones(text);
       setCustomPhones(parsed);
       setCustomPhonesInput(parsed.join("\n"));
+      setIsFileUploaded(true);
+      
+      const activeHrs = getActiveHours();
+      const defaultDelay = 5;
+      setRevivalDelayMinutes(defaultDelay);
+      const days = (parsed.length * defaultDelay) / (activeHrs * 60);
+      if (days < 1) {
+        setTargetDurationUnit("Hours");
+        const hours = (parsed.length * defaultDelay) / 60;
+        setTargetDuration(Math.round(hours * 10) / 10);
+      } else {
+        setTargetDurationUnit("Days");
+        setTargetDuration(Math.round(days * 10) / 10);
+      }
     };
     reader.readAsText(file);
   };
@@ -659,10 +750,7 @@ export default function DashboardPage() {
           customPhones: revivalAudience === "custom" ? customPhones : undefined,
           timeSlotStart: revivalTimeStart,
           timeSlotEnd: revivalTimeEnd,
-          delayMinSeconds: revivalDelayMin,
-          delayMaxSeconds: revivalDelayMax,
-          batchSize: revivalBatchSize,
-          batchBreakMinutes: revivalBatchBreak,
+          delayMinutes: revivalDelayMinutes,
           dailyCap: revivalDailyCap,
           mediaBase64: revivalMediaBase64,
           mimetype: revivalMediaMime,
@@ -674,6 +762,7 @@ export default function DashboardPage() {
         setRevivalMessage("");
         setCustomPhonesInput("");
         setCustomPhones([]);
+        setIsFileUploaded(false);
         removeRevivalMedia();
         fetchRevivalCampaigns();
       } else {
@@ -1770,7 +1859,6 @@ export default function DashboardPage() {
                     className="hidden" 
                     ref={promoFileInputRef}
                     onChange={handlePromoFileChange}
-                    accept="image/*,video/*,audio/*,application/pdf"
                   />
                   <button 
                     onClick={() => promoFileInputRef.current?.click()}
@@ -2100,7 +2188,6 @@ export default function DashboardPage() {
                         className="hidden" 
                         ref={revivalFileInputRef}
                         onChange={handleRevivalFileChange}
-                        accept="image/*,video/*,audio/*,application/pdf"
                       />
                       <button 
                         onClick={() => revivalFileInputRef.current?.click()}
@@ -2141,7 +2228,7 @@ export default function DashboardPage() {
                         <input 
                           type="time" 
                           value={revivalTimeStart}
-                          onChange={(e) => setRevivalTimeStart(e.target.value)}
+                          onChange={(e) => handleTimeStartChange(e.target.value)}
                           className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
                         />
                       </div>
@@ -2150,7 +2237,7 @@ export default function DashboardPage() {
                         <input 
                           type="time" 
                           value={revivalTimeEnd}
-                          onChange={(e) => setRevivalTimeEnd(e.target.value)}
+                          onChange={(e) => handleTimeEndChange(e.target.value)}
                           className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
                         />
                       </div>
@@ -2158,49 +2245,14 @@ export default function DashboardPage() {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="text-xs font-bold text-slate-500 block mb-1">Min Delay (Seconds)</label>
+                        <label className="text-xs font-bold text-slate-500 block mb-1">Delay per Reachout (Minutes)</label>
                         <input 
                           type="number" 
-                          min={10} 
-                          max={1800}
-                          value={revivalDelayMin}
-                          onChange={(e) => setRevivalDelayMin(Math.max(10, parseInt(e.target.value) || 10))}
-                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-bold text-slate-500 block mb-1">Max Delay (Seconds)</label>
-                        <input 
-                          type="number" 
-                          min={10} 
-                          max={1800}
-                          value={revivalDelayMax}
-                          onChange={(e) => setRevivalDelayMax(Math.max(revivalDelayMin, parseInt(e.target.value) || 10))}
-                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <label className="text-xs font-bold text-slate-500 block mb-1">Batch Size</label>
-                        <input 
-                          type="number" 
-                          min={1} 
-                          max={1000}
-                          value={revivalBatchSize}
-                          onChange={(e) => setRevivalBatchSize(Math.max(1, Math.min(1000, parseInt(e.target.value) || 1)))}
-                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-bold text-slate-500 block mb-1">Break (Mins)</label>
-                        <input 
-                          type="number" 
-                          min={0} 
+                          min={0.1} 
                           max={1440}
-                          value={revivalBatchBreak}
-                          onChange={(e) => setRevivalBatchBreak(Math.max(0, Math.min(1440, parseInt(e.target.value) || 0)))}
+                          step={0.1}
+                          value={revivalDelayMinutes}
+                          onChange={(e) => handleDelayChange(Math.max(0.1, parseFloat(e.target.value) || 0.1))}
                           className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
                         />
                       </div>
@@ -2209,13 +2261,40 @@ export default function DashboardPage() {
                         <input 
                           type="number" 
                           min={1} 
-                          max={500}
+                          max={1000}
                           value={revivalDailyCap}
-                          onChange={(e) => setRevivalDailyCap(Math.max(1, Math.min(500, parseInt(e.target.value) || 1)))}
+                          onChange={(e) => setRevivalDailyCap(Math.max(1, Math.min(1000, parseInt(e.target.value) || 1)))}
                           className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
                         />
                       </div>
                     </div>
+
+                    {revivalAudience === "custom" && isFileUploaded && customPhones.length > 0 && (
+                      <div className="grid grid-cols-3 gap-4 pt-4 border-t border-slate-200/60">
+                        <div className="col-span-2">
+                          <label className="text-xs font-bold text-slate-500 block mb-1">Target Campaign Duration</label>
+                          <input 
+                            type="number" 
+                            min={0.1} 
+                            step={0.1}
+                            value={targetDuration}
+                            onChange={(e) => handleTargetDurationChange(Math.max(0.1, parseFloat(e.target.value) || 0.1))}
+                            className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-slate-500 block mb-1">Unit</label>
+                          <select 
+                            value={targetDurationUnit}
+                            onChange={(e) => handleTargetDurationUnitChange(e.target.value as "Days" | "Hours")}
+                            className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-slate-700"
+                          >
+                            <option value="Days">Days</option>
+                            <option value="Hours">Hours</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <button 
@@ -2230,18 +2309,16 @@ export default function DashboardPage() {
 
                 {/* AI Calculator & Settings Summary Card */}
                 <div className="space-y-6">
-                  {(() => {
-                    const targetLeads = getSelectedLeadsCount();
-                    const avgDelay = (revivalDelayMin + revivalDelayMax) / 2;
-                    const startH = parseInt(revivalTimeStart.split(":")[0]) || 9;
-                    const endH = parseInt(revivalTimeEnd.split(":")[0]) || 21;
-                    const activeHours = Math.max(1, endH - startH);
+                  {revivalAudience === "custom" && isFileUploaded && customPhones.length > 0 && (() => {
+                    const targetLeads = customPhones.length;
+                    const delayMins = revivalDelayMinutes;
+                    const activeHours = getActiveHours();
 
-                    // Cycle in seconds
-                    const cycleSec = (revivalBatchSize * avgDelay) + (revivalBatchBreak * 60);
-                    const batchesPerDay = Math.floor((activeHours * 3600) / cycleSec);
-                    const sendCapPerDayByTime = Math.max(1, batchesPerDay * revivalBatchSize);
-                    const actualDailySend = Math.min(revivalDailyCap, sendCapPerDayByTime);
+                    const msgsPerHour = 60 / delayMins;
+                    const maxDailyByTime = activeHours * msgsPerHour;
+                    const actualDailySend = Math.min(revivalDailyCap, Math.round(maxDailyByTime * 10) / 10);
+                    
+                    const totalHoursEst = (targetLeads * delayMins) / 60;
                     const daysEst = actualDailySend > 0 ? Math.ceil(targetLeads / actualDailySend) : 0;
 
                     return (
@@ -2268,13 +2345,13 @@ export default function DashboardPage() {
                             <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">Estimated Completion</div>
                             <div className="text-2xl font-extrabold text-white flex items-center gap-2 mt-1">
                               <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
-                              {targetLeads === 0 ? "No leads selected" : daysEst === 1 ? "1 Day" : `${daysEst} Days`}
+                              {targetLeads === 0 ? "No leads selected" : daysEst <= 1 ? `${Math.round(totalHoursEst * 10) / 10} Hours` : `${daysEst} Days`}
                             </div>
                           </div>
                         </div>
 
                         <div className="bg-slate-800/50 p-4 rounded-xl text-xs text-slate-300 font-medium leading-relaxed">
-                          🛡️ <strong>Safety Autopilot:</strong> Random {revivalDelayMin}-{revivalDelayMax}s delays between messages prevent spam triggers. Breaks of {revivalBatchBreak}m between {revivalBatchSize}-message batches keep sending patterns human-like.
+                          🛡️ <strong>Safety Autopilot:</strong> Messages are sent individually with a gap of {revivalDelayMinutes} minutes. No batch limits are used, providing a steady, natural pacing pattern.
                         </div>
                       </div>
                     );

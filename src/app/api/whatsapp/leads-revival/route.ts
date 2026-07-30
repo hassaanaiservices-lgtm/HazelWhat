@@ -3,14 +3,10 @@ import { DB, RevivalCampaign } from "@/lib/db";
 
 // Safety floor constants — these cannot be bypassed
 const SAFETY = {
-  MIN_DELAY_SEC: 10,
-  MAX_DELAY_SEC: 1800,
-  MIN_BATCH_SIZE: 1,
-  MAX_BATCH_SIZE: 1000,
-  MIN_BATCH_BREAK_MIN: 0,
-  MAX_BATCH_BREAK_MIN: 1440,
+  MIN_DELAY_MIN: 0.1,  // 6 seconds
+  MAX_DELAY_MIN: 1440, // 24 hours
   MIN_DAILY_CAP: 1,
-  MAX_DAILY_CAP: 500,
+  MAX_DAILY_CAP: 1000,
   MIN_HOUR: 0,   // 00:00
   MAX_HOUR: 24,  // 24:00
 };
@@ -47,7 +43,7 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { message, audience, timeSlotStart, timeSlotEnd, delayMinSeconds, delayMaxSeconds, batchSize, batchBreakMinutes, dailyCap, mediaBase64, mimetype, fileName } = body;
+    const { message, audience, timeSlotStart, timeSlotEnd, delayMinutes, dailyCap, mediaBase64, mimetype, fileName } = body;
 
     if (!message && !mediaBase64) {
       return NextResponse.json({ success: false, error: "Message content is required." }, { status: 400 });
@@ -96,10 +92,7 @@ export async function POST(req: Request) {
     }
 
     // Enforce safety floors
-    const safeDelayMin = clamp(delayMinSeconds || 60, SAFETY.MIN_DELAY_SEC, SAFETY.MAX_DELAY_SEC);
-    const safeDelayMax = clamp(delayMaxSeconds || 120, safeDelayMin, SAFETY.MAX_DELAY_SEC);
-    const safeBatchSize = clamp(batchSize || 10, SAFETY.MIN_BATCH_SIZE, SAFETY.MAX_BATCH_SIZE);
-    const safeBatchBreak = clamp(batchBreakMinutes || 45, SAFETY.MIN_BATCH_BREAK_MIN, SAFETY.MAX_BATCH_BREAK_MIN);
+    const safeDelayMinutes = clamp(delayMinutes || 5, SAFETY.MIN_DELAY_MIN, SAFETY.MAX_DELAY_MIN);
     const safeDailyCap = clamp(dailyCap || 80, SAFETY.MIN_DAILY_CAP, SAFETY.MAX_DAILY_CAP);
     const safeTimeSlot = validateTimeSlot(timeSlotStart || "09:00", timeSlotEnd || "21:00");
 
@@ -111,10 +104,7 @@ export async function POST(req: Request) {
       audience: audience || "all",
       timeSlotStart: safeTimeSlot.start,
       timeSlotEnd: safeTimeSlot.end,
-      delayMinSeconds: safeDelayMin,
-      delayMaxSeconds: safeDelayMax,
-      batchSize: safeBatchSize,
-      batchBreakMinutes: safeBatchBreak,
+      delayMinutes: safeDelayMinutes,
       dailyCap: safeDailyCap,
       status: "active",
       targetPhones,
@@ -126,6 +116,11 @@ export async function POST(req: Request) {
       mediaBase64,
       mimetype,
       fileName,
+      // Legacy fields mapping
+      delayMinSeconds: safeDelayMinutes * 60,
+      delayMaxSeconds: safeDelayMinutes * 60,
+      batchSize: 1,
+      batchBreakMinutes: 0,
     };
 
     DB.addRevivalCampaign(campaign);

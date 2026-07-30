@@ -119,10 +119,7 @@ export interface RevivalCampaign {
   audience: string;
   timeSlotStart: string;
   timeSlotEnd: string;
-  delayMinSeconds: number;
-  delayMaxSeconds: number;
-  batchSize: number;
-  batchBreakMinutes: number;
+  delayMinutes: number;
   dailyCap: number;
   status: "active" | "paused" | "completed" | "cancelled";
   targetPhones: string[];
@@ -134,6 +131,12 @@ export interface RevivalCampaign {
   mediaBase64?: string;
   mimetype?: string;
   fileName?: string;
+  lastSentAt?: string;
+  // Optional legacy fields for backward compatibility
+  delayMinSeconds?: number;
+  delayMaxSeconds?: number;
+  batchSize?: number;
+  batchBreakMinutes?: number;
   lastBatchSentAt?: string;
 }
 
