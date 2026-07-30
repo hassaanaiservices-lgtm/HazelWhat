@@ -152,31 +152,64 @@ export default function DashboardPage() {
     }
   };
 
-  const handleCustomPhonesFileUploaded = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCustomPhonesFileUploaded = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      const parsed = parsePhones(text);
-      setCustomPhones(parsed);
-      setCustomPhonesInput(parsed.join("\n"));
+
+    const setPhones = (phones: string[]) => {
+      setCustomPhones(phones);
+      setCustomPhonesInput(phones.join("\n"));
+      setRevivalAudience("custom");
       setIsFileUploaded(true);
-      
+
       const activeHrs = getActiveHours();
       const defaultDelay = 5;
       setRevivalDelayMinutes(defaultDelay);
-      const days = (parsed.length * defaultDelay) / (activeHrs * 60);
+      const days = (phones.length * defaultDelay) / (activeHrs * 60);
       if (days < 1) {
         setTargetDurationUnit("Hours");
-        const hours = (parsed.length * defaultDelay) / 60;
-        setTargetDuration(Math.round(hours * 10) / 10);
+        setTargetDuration(Math.round(((phones.length * defaultDelay) / 60) * 10) / 10);
       } else {
         setTargetDurationUnit("Days");
         setTargetDuration(Math.round(days * 10) / 10);
       }
     };
-    reader.readAsText(file);
+
+    const isPDF = file.type === "application/pdf" || file.name.endsWith(".pdf");
+
+    if (isPDF) {
+      // Use backend PDF parser
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64 = event.target?.result as string;
+        try {
+          const res = await fetch("/api/whatsapp/parse-leads", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mediaBase64: base64, mimetype: file.type, fileName: file.name })
+          });
+          const data = await res.json();
+          if (data.success && data.count >= 1) {
+            setPhones(data.phones);
+            alert(`✅ Loaded ${data.count} phone numbers from "${file.name}"`);
+          } else {
+            alert(`No valid phone numbers found in "${file.name}".`);
+          }
+        } catch (err: any) {
+          alert(`Failed to parse PDF: ${err.message}`);
+        }
+      };
+      reader.readAsDataURL(file);
+    } else {
+      // Plain text / CSV parsing
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target?.result as string;
+        const phones = parsePhones(text);
+        setPhones(phones);
+      };
+      reader.readAsText(file);
+    }
   };
 
   const [orders, setOrders] = useState<any[]>([]);
@@ -719,58 +752,10 @@ export default function DashboardPage() {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64 = event.target?.result as string;
-        setRevivalMediaBase64(base64);
+      reader.onload = (event) => {
+        setRevivalMediaBase64(event.target?.result as string);
         setRevivalMediaMime(file.type);
         setRevivalMediaName(file.name);
-
-        // Call the backend leads parser to see if this file has leads data / numbers in it
-        try {
-          const res = await fetch("/api/whatsapp/parse-leads", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              mediaBase64: base64,
-              mimetype: file.type,
-              fileName: file.name
-            })
-          });
-          const data = await res.json();
-          if (data.success && data.count >= 3) {
-            // Treat as target leads list file!
-            setCustomPhones(data.phones);
-            setCustomPhonesInput(data.phones.join("\n"));
-            setRevivalAudience("custom");
-            setIsFileUploaded(true);
-
-            // Re-calculate duration with default delay
-            const activeHrs = getActiveHours();
-            const defaultDelay = 5;
-            setRevivalDelayMinutes(defaultDelay);
-            const days = (data.phones.length * defaultDelay) / (activeHrs * 60);
-            if (days < 1) {
-              setTargetDurationUnit("Hours");
-              const hours = (data.phones.length * defaultDelay) / 60;
-              setTargetDuration(Math.round(hours * 10) / 10);
-            } else {
-              setTargetDurationUnit("Days");
-              setTargetDuration(Math.round(days * 10) / 10);
-            }
-
-            // Clear the media attachment states since this file is the numbers list, NOT content to send out
-            setRevivalMediaBase64(null);
-            setRevivalMediaMime(null);
-            setRevivalMediaName(null);
-            if (revivalFileInputRef.current) {
-              revivalFileInputRef.current.value = "";
-            }
-
-            alert(`📎 Loaded "${file.name}" as the campaign target list. Extracted ${data.count} leads. (The media attachment has been cleared as this is your contact list).`);
-          }
-        } catch (err: any) {
-          console.error("Failed to parse uploaded leads file:", err);
-        }
       };
       reader.readAsDataURL(file);
     }
@@ -2214,13 +2199,13 @@ export default function DashboardPage() {
                             onClick={() => customPhonesFileInputRef.current?.click()} 
                             className="text-emerald-600 hover:text-emerald-700 underline cursor-pointer focus:outline-none"
                           >
-                            Upload .txt / .csv file
+                            📎 Upload .txt / .csv / .pdf file
                           </button>
                           <input
                             type="file"
                             ref={customPhonesFileInputRef}
                             className="hidden"
-                            accept=".txt,.csv"
+                            accept=".txt,.csv,.pdf"
                             onChange={handleCustomPhonesFileUploaded}
                           />
                         </div>
