@@ -719,10 +719,58 @@ export default function DashboardPage() {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (event) => {
-        setRevivalMediaBase64(event.target?.result as string);
+      reader.onload = async (event) => {
+        const base64 = event.target?.result as string;
+        setRevivalMediaBase64(base64);
         setRevivalMediaMime(file.type);
         setRevivalMediaName(file.name);
+
+        // Call the backend leads parser to see if this file has leads data / numbers in it
+        try {
+          const res = await fetch("/api/whatsapp/parse-leads", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mediaBase64: base64,
+              mimetype: file.type,
+              fileName: file.name
+            })
+          });
+          const data = await res.json();
+          if (data.success && data.count >= 3) {
+            // Treat as target leads list file!
+            setCustomPhones(data.phones);
+            setCustomPhonesInput(data.phones.join("\n"));
+            setRevivalAudience("custom");
+            setIsFileUploaded(true);
+
+            // Re-calculate duration with default delay
+            const activeHrs = getActiveHours();
+            const defaultDelay = 5;
+            setRevivalDelayMinutes(defaultDelay);
+            const days = (data.phones.length * defaultDelay) / (activeHrs * 60);
+            if (days < 1) {
+              setTargetDurationUnit("Hours");
+              const hours = (data.phones.length * defaultDelay) / 60;
+              setTargetDuration(Math.round(hours * 10) / 10);
+            } else {
+              setTargetDurationUnit("Days");
+              setTargetDuration(Math.round(days * 10) / 10);
+            }
+
+            // Clear the media attachment states since this file is the numbers list, NOT content to send out
+            setRevivalMediaBase64(null);
+            setRevivalMediaMime(null);
+            setRevivalMediaName(null);
+            if (revivalFileInputRef.current) {
+              revivalFileInputRef.current.value = "";
+            }
+
+            alert(`📎 Loaded "${file.name}" as the campaign target list. Extracted ${data.count} leads. (The media attachment has been cleared as this is your contact list).`);
+          }
+        } catch (err: any) {
+          console.error("Failed to parse uploaded leads file:", err);
+        }
       };
       reader.readAsDataURL(file);
     }
