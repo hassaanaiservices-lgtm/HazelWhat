@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-// @ts-ignore
-import pdf from "pdf-parse";
 
 const phoneRegex = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4,6}/g;
 
@@ -30,7 +28,8 @@ export async function POST(req: Request) {
 
     if (mimetype === "application/pdf" || fileName?.endsWith(".pdf")) {
       try {
-        const data = await pdf(buffer);
+        const pdfParser = require("pdf-parse");
+        const data = await pdfParser(buffer);
         text = data.text || "";
       } catch (e: any) {
         console.error("Failed to parse PDF:", e);
