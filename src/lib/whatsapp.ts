@@ -667,6 +667,25 @@ export class WhatsAppManager {
     };
   }
 
+  static async requestPairingCode(phoneNumber: string): Promise<string> {
+    const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
+    if (!cleanPhone) {
+      throw new Error("Invalid phone number format. Please enter full phone number with country code.");
+    }
+
+    if (!globalForBaileys.baileysSession.sock) {
+      await this.startSession(async () => {});
+    }
+
+    const sock = globalForBaileys.baileysSession.sock;
+    if (!sock) {
+      throw new Error("WhatsApp connection socket is not ready.");
+    }
+
+    const rawCode = await sock.requestPairingCode(cleanPhone);
+    return rawCode?.match(/.{1,4}/g)?.join('-') || rawCode;
+  }
+
   /**
    * Soft reset: closes the socket and deletes local credentials WITHOUT
    * calling sock.logout(). This is used when re-generating a QR code so

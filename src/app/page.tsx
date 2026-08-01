@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save, MessageSquare, Settings, Plus, Trash2, Search, MoreVertical, Phone, Video, Paperclip, Smile, Mic, CheckCheck, User, Check, Send, StopCircle, Inbox, Bot, Network, BookOpen, Users, AlertCircle, ShoppingCart, Activity, Eye, EyeOff, RefreshCw, Pause, Play } from "lucide-react";
+import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save, MessageSquare, Settings, Plus, Trash2, Search, MoreVertical, Phone, Video, Paperclip, Smile, Mic, CheckCheck, User, Check, Send, StopCircle, Inbox, Bot, Network, BookOpen, Users, AlertCircle, ShoppingCart, Activity, Eye, EyeOff, RefreshCw, Pause, Play, Smartphone } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
 
 export default function DashboardPage() {
@@ -52,6 +52,13 @@ export default function DashboardPage() {
   const [revivalMediaBase64, setRevivalMediaBase64] = useState<string | null>(null);
   const [revivalMediaMime, setRevivalMediaMime] = useState<string | null>(null);
   const [revivalMediaName, setRevivalMediaName] = useState<string | null>(null);
+
+  // Phone Number Pairing states
+  const [waConnectMode, setWaConnectMode] = useState<'qr' | 'pairing'>('qr');
+  const [waPairingPhone, setWaPairingPhone] = useState('');
+  const [waPairingCode, setWaPairingCode] = useState<string | null>(null);
+  const [isGeneratingPairingCode, setIsGeneratingPairingCode] = useState(false);
+  const [pairingError, setPairingError] = useState<string | null>(null);
 
   // Custom states and parsing helpers for target phone lists
   const [customPhonesInput, setCustomPhonesInput] = useState("");
@@ -1649,8 +1656,8 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {status === "scanning" && qrCode && (
-                <div className="flex flex-col items-center">
+              {status === "scanning" && qrCode && waConnectMode === "qr" && (
+                <div className="flex flex-col items-center w-full max-w-sm">
                   <div className="bg-white p-4 rounded-3xl shadow-lg border border-slate-100 mb-8 relative">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={qrCode} alt="QR" className="w-64 h-64 rounded-xl object-contain" />
@@ -1667,6 +1674,110 @@ export default function DashboardPage() {
                     <p className="text-sm text-slate-600 font-bold">1. Open WhatsApp -&gt; Settings -&gt; Linked Devices</p>
                     <p className="text-sm text-slate-600 font-bold">2. Tap Link a Device &amp; point phone to this screen.</p>
                     <p className="text-xs text-slate-400 font-medium mt-2">⚠️ Scan while the timer is green or amber — the QR auto-refreshes every 20 seconds.</p>
+                  </div>
+
+                  {/* LINK WITH PHONE NUMBER INSTEAD BUTTON */}
+                  <div className="w-full pt-6 text-center border-t border-slate-100 mt-6">
+                    <button
+                      type="button"
+                      onClick={() => setWaConnectMode('pairing')}
+                      className="text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline flex items-center justify-center gap-2 mx-auto transition cursor-pointer"
+                    >
+                      <Smartphone className="h-4 w-4" />
+                      <span>Link with phone number instead</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* LINK WITH PHONE NUMBER INSTEAD VIEW */}
+              {waConnectMode === "pairing" && status !== "connected" && (
+                <div className="w-full max-w-sm space-y-5 animate-in fade-in zoom-in duration-300">
+                  <div className="text-center space-y-1">
+                    <h3 className="text-lg font-bold text-slate-900">Link with Phone Number</h3>
+                    <p className="text-xs text-slate-500">Enter your full phone number with country code to receive an 8-digit pairing code.</p>
+                  </div>
+
+                  <form 
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!waPairingPhone.trim()) return;
+                      setIsGeneratingPairingCode(true);
+                      setPairingError(null);
+                      setWaPairingCode(null);
+                      try {
+                        const res = await fetch("/api/whatsapp/pairing-code", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ phoneNumber: waPairingPhone }),
+                        });
+                        const data = await res.json();
+                        if (data.success && data.pairingCode) {
+                          setWaPairingCode(data.pairingCode);
+                        } else {
+                          setPairingError(data.error || "Could not generate pairing code");
+                        }
+                      } catch (err: any) {
+                        setPairingError(err.message || "Failed to generate pairing code");
+                      } finally {
+                        setIsGeneratingPairingCode(false);
+                      }
+                    }} 
+                    className="space-y-4"
+                  >
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-600 uppercase mb-1 block">Phone Number</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="923001234567"
+                        value={waPairingPhone}
+                        onChange={e => setWaPairingPhone(e.target.value)}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">Include country code without '+' or spaces (e.g. 923001234567)</p>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isGeneratingPairingCode || !waPairingPhone.trim()}
+                      className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold rounded-xl h-11 text-xs shadow-md shadow-emerald-500/20 cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      {isGeneratingPairingCode ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Generating Code...</span>
+                        </>
+                      ) : (
+                        <span>Get Pairing Code</span>
+                      )}
+                    </button>
+
+                    {pairingError && (
+                      <p className="text-xs font-semibold text-rose-600 text-center">{pairingError}</p>
+                    )}
+
+                    {waPairingCode && (
+                      <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200 text-center space-y-2">
+                        <p className="text-xs font-bold text-emerald-800">Your Official WhatsApp Pairing Code:</p>
+                        <p className="text-2xl font-mono font-black text-emerald-900 tracking-widest bg-white py-2 px-4 rounded-xl border border-emerald-300 inline-block shadow-sm">
+                          {waPairingCode}
+                        </p>
+                        <p className="text-[10px] text-emerald-700">Open WhatsApp → Linked Devices → Link with phone number instead</p>
+                      </div>
+                    )}
+                  </form>
+
+                  {/* SCAN QR CODE INSTEAD BUTTON */}
+                  <div className="w-full pt-4 text-center border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setWaConnectMode('qr')}
+                      className="text-xs font-bold text-slate-600 hover:text-slate-900 hover:underline flex items-center justify-center gap-2 mx-auto transition cursor-pointer"
+                    >
+                      <QrCode className="h-4 w-4 text-emerald-500" />
+                      <span>Scan QR code instead</span>
+                    </button>
                   </div>
                 </div>
               )}
