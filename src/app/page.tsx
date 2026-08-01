@@ -53,6 +53,9 @@ export default function DashboardPage() {
   const [revivalMediaMime, setRevivalMediaMime] = useState<string | null>(null);
   const [revivalMediaName, setRevivalMediaName] = useState<string | null>(null);
 
+  // Overview Period Timeframe Filter state (Weekly / Monthly / Yearly)
+  const [periodFilter, setPeriodFilter] = useState<'weekly' | 'monthly' | 'yearly'>('weekly');
+
   // Phone Number Pairing states
   const [waConnectMode, setWaConnectMode] = useState<'qr' | 'pairing'>('qr');
   const [waPairingPhone, setWaPairingPhone] = useState('');
@@ -959,9 +962,30 @@ export default function DashboardPage() {
             </h2>
             <div className="flex items-center gap-4">
               <div className="bg-slate-100/70 p-1 rounded-lg flex items-center text-sm font-semibold">
-                <button className="px-4 py-1.5 bg-white text-slate-800 shadow-sm rounded-md">Weekly</button>
-                <button className="px-4 py-1.5 text-slate-500 hover:text-slate-700">Monthly</button>
-                <button className="px-4 py-1.5 text-slate-500 hover:text-slate-700">Yearly</button>
+                <button 
+                  onClick={() => setPeriodFilter('weekly')}
+                  className={`px-4 py-1.5 rounded-md transition-all cursor-pointer ${
+                    periodFilter === 'weekly' ? 'bg-white text-slate-800 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Weekly
+                </button>
+                <button 
+                  onClick={() => setPeriodFilter('monthly')}
+                  className={`px-4 py-1.5 rounded-md transition-all cursor-pointer ${
+                    periodFilter === 'monthly' ? 'bg-white text-slate-800 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Monthly
+                </button>
+                <button 
+                  onClick={() => setPeriodFilter('yearly')}
+                  className={`px-4 py-1.5 rounded-md transition-all cursor-pointer ${
+                    periodFilter === 'yearly' ? 'bg-white text-slate-800 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Yearly
+                </button>
               </div>
               <button className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-sm font-bold text-slate-700 hover:bg-slate-50 shadow-sm">
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
@@ -972,9 +996,11 @@ export default function DashboardPage() {
           
           <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)] p-6 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6 md:gap-0">
             <div className="flex-1 md:border-r border-slate-100 md:pr-6">
-              <div className="text-slate-500 font-medium text-[13px] mb-2">Total Revenue</div>
+              <div className="text-slate-500 font-medium text-[13px] mb-2">Total Revenue ({periodFilter})</div>
               <div className="flex items-end gap-3">
-                <div className="text-3xl font-extrabold text-slate-900">$200,45.87</div>
+                <div className="text-3xl font-extrabold text-slate-900">
+                  {periodFilter === 'weekly' ? '$200,45.87' : periodFilter === 'monthly' ? '$801,83.48' : '$9,622,01.76'}
+                </div>
                 <div className="bg-emerald-50 text-emerald-600 text-xs font-bold px-2 py-0.5 rounded-full mb-1">+2.5%</div>
               </div>
             </div>
@@ -982,7 +1008,9 @@ export default function DashboardPage() {
             <div className="flex-1 md:border-r border-slate-100 md:px-6">
               <div className="text-slate-500 font-medium text-[13px] mb-2">Active Users</div>
               <div className="flex items-end gap-3">
-                <div className="text-3xl font-extrabold text-slate-900">9,528</div>
+                <div className="text-3xl font-extrabold text-slate-900">
+                  {periodFilter === 'weekly' ? '9,528' : periodFilter === 'monthly' ? '38,112' : '457,344'}
+                </div>
                 <div className="bg-emerald-50 text-emerald-600 text-xs font-bold px-2 py-0.5 rounded-full mb-1">+9.5%</div>
               </div>
             </div>
@@ -990,7 +1018,9 @@ export default function DashboardPage() {
             <div className="flex-1 md:border-r border-slate-100 md:px-6">
               <div className="text-slate-500 font-medium text-[13px] mb-2">Customer Lifetime Value</div>
               <div className="flex items-end gap-3">
-                <div className="text-3xl font-extrabold text-slate-900">$849.54</div>
+                <div className="text-3xl font-extrabold text-slate-900">
+                  {periodFilter === 'weekly' ? '$849.54' : periodFilter === 'monthly' ? '$3,398.16' : '$40,777.92'}
+                </div>
                 <div className="bg-red-50 text-red-500 text-xs font-bold px-2 py-0.5 rounded-full mb-1">-1.6%</div>
               </div>
             </div>
@@ -998,7 +1028,9 @@ export default function DashboardPage() {
             <div className="flex-1 md:pl-6">
               <div className="text-slate-500 font-medium text-[13px] mb-2">Customer Acquisition Cost</div>
               <div className="flex items-end gap-3">
-                <div className="text-3xl font-extrabold text-slate-900">9,528</div>
+                <div className="text-3xl font-extrabold text-slate-900">
+                  {periodFilter === 'weekly' ? '9,528' : periodFilter === 'monthly' ? '38,112' : '457,344'}
+                </div>
                 <div className="bg-emerald-50 text-emerald-600 text-xs font-bold px-2 py-0.5 rounded-full mb-1">+3.5%</div>
               </div>
             </div>
