@@ -915,74 +915,38 @@ export default function DashboardPage() {
   return (
     <div className="h-screen w-full flex bg-[#f5f6f8] font-sans overflow-hidden text-slate-800">
       
-      {/* 1. Left Sidebar - DashMark Theme */}
-      <div className="w-[260px] flex-shrink-0 bg-white border-r border-slate-200/80 flex flex-col py-6 overflow-y-auto z-20 shadow-[4px_0_24px_rgba(124,58,237,0.02)] custom-scrollbar">
+      {/* 1. Left Sidebar - HazelWhat Brand with DashMark Purple Theme */}
+      <div className="w-[260px] flex-shrink-0 bg-white border-r border-slate-200/80 flex flex-col py-6 overflow-y-auto z-20 shadow-[4px_0_24px_rgba(124,58,237,0.03)] custom-scrollbar">
         
         {/* Brand Header */}
-        <div className="px-6 flex items-center justify-between mb-6">
+        <div className="px-6 flex items-center justify-between mb-8">
           <div className="flex items-center gap-3 font-extrabold text-xl text-slate-900 tracking-tight">
             <div className="bg-gradient-to-tr from-purple-600 via-purple-500 to-indigo-500 p-2 rounded-xl text-white shadow-md shadow-purple-500/20">
               <Zap className="h-5 w-5 fill-white text-white" />
             </div>
-            <span>DashMark</span>
-          </div>
-          <button className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg border border-slate-200/60 hover:bg-slate-50 transition cursor-pointer">
-            <div className="w-4 h-4 border-2 border-slate-400 rounded-sm"></div>
-          </button>
-        </div>
-
-        {/* Sidebar Search Bar */}
-        <div className="px-5 mb-6">
-          <div className="bg-slate-100/70 rounded-xl px-3 py-2 flex items-center gap-2.5 border border-slate-200/50 focus-within:ring-2 focus-within:ring-purple-500/20 focus-within:border-purple-500 transition-all">
-            <Search className="h-4 w-4 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Search" 
-              className="bg-transparent border-none outline-none text-xs font-semibold text-slate-700 w-full placeholder:text-slate-400" 
-            />
+            <span>HazelWhat</span>
           </div>
         </div>
 
-        {/* Main Section */}
-        <div className="px-6 mb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Main</div>
+        {/* Workspace Section */}
+        <div className="px-6 mb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Workspace</div>
         <div className="flex flex-col gap-1 px-4 mb-6">
           <button onClick={() => setActiveTab('dashboard')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'dashboard' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
-            <Activity className={`h-4 w-4 ${activeTab === 'dashboard' ? 'text-purple-600' : 'text-slate-400'}`} /> Overview
+            <Zap className={`h-4 w-4 ${activeTab === 'dashboard' ? 'text-purple-600' : 'text-slate-400'}`} /> Dashboard
           </button>
           <button onClick={() => setActiveTab('inbox')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'inbox' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
-            <Inbox className={`h-4 w-4 ${activeTab === 'inbox' ? 'text-purple-600' : 'text-slate-400'}`} /> Chats & Inbox
+            <Inbox className={`h-4 w-4 ${activeTab === 'inbox' ? 'text-purple-600' : 'text-slate-400'}`} /> Inbox
           </button>
           <button onClick={() => setActiveTab('orders')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'orders' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
-            <ShoppingCart className={`h-4 w-4 ${activeTab === 'orders' ? 'text-purple-600' : 'text-slate-400'}`} /> Projects & Orders
+            <ShoppingCart className={`h-4 w-4 ${activeTab === 'orders' ? 'text-purple-600' : 'text-slate-400'}`} /> Orders
           </button>
           <button onClick={() => setActiveTab('contacts')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'contacts' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
             <Users className={`h-4 w-4 ${activeTab === 'contacts' ? 'text-purple-600' : 'text-slate-400'}`} /> Contacts
           </button>
         </div>
 
-        {/* Team Section */}
-        <div className="px-6 mb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Team</div>
-        <div className="flex flex-col gap-2 px-5 mb-6">
-          <div className="flex items-center gap-2.5 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg cursor-pointer">
-            <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=100" className="w-5 h-5 rounded-full object-cover" alt="Faiza Lira" />
-            <span>Faiza Lira <span className="text-slate-400 text-[10px]">(You)</span></span>
-          </div>
-          <div className="flex items-center gap-2.5 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg cursor-pointer">
-            <img src="https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=100" className="w-5 h-5 rounded-full object-cover" alt="Dianne Russell" />
-            <span>Dianne Russell</span>
-          </div>
-          <div className="flex items-center gap-2.5 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg cursor-pointer">
-            <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=100" className="w-5 h-5 rounded-full object-cover" alt="Ralph Edwards" />
-            <span>Ralph Edwards</span>
-          </div>
-          <div className="flex items-center gap-2.5 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg cursor-pointer">
-            <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=100" className="w-5 h-5 rounded-full object-cover" alt="Annette Black" />
-            <span>Annette Black</span>
-          </div>
-        </div>
-
-        {/* Intelligence & Growth */}
-        <div className="px-6 mb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Growth</div>
+        {/* Intelligence Section */}
+        <div className="px-6 mb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Intelligence</div>
         <div className="flex flex-col gap-1 px-4 mb-6">
           <button onClick={() => setActiveTab('agents')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'agents' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
             <BookOpen className={`h-4 w-4 ${activeTab === 'agents' ? 'text-purple-600' : 'text-slate-400'}`} /> Knowledge Base
@@ -990,6 +954,11 @@ export default function DashboardPage() {
           <button onClick={() => setActiveTab('channels')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'channels' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
             <Network className={`h-4 w-4 ${activeTab === 'channels' ? 'text-purple-600' : 'text-slate-400'}`} /> Channels
           </button>
+        </div>
+
+        {/* Growth Section */}
+        <div className="px-6 mb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Growth</div>
+        <div className="flex flex-col gap-1 px-4 mb-6">
           <button onClick={() => setActiveTab('promotions')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'promotions' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
             <MessageSquare className={`h-4 w-4 ${activeTab === 'promotions' ? 'text-purple-600' : 'text-slate-400'}`} /> Promotions
           </button>
@@ -999,155 +968,244 @@ export default function DashboardPage() {
           <button onClick={() => setActiveTab('analytics')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'analytics' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
             <Activity className={`h-4 w-4 ${activeTab === 'analytics' ? 'text-purple-600' : 'text-slate-400'}`} /> Analytics
           </button>
+        </div>
+
+        {/* Account Section */}
+        <div className="px-6 mb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Account</div>
+        <div className="flex flex-col gap-1 px-4 mb-6">
           <button onClick={() => setActiveTab('settings')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'settings' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
             <Settings className={`h-4 w-4 ${activeTab === 'settings' ? 'text-purple-600' : 'text-slate-400'}`} /> Settings
           </button>
         </div>
 
-        {/* Upgrade Card Banner */}
-        <div className="mx-4 mb-4 p-4 rounded-2xl bg-gradient-to-br from-purple-100/80 via-indigo-50/60 to-pink-50/70 border border-purple-100/80 shadow-sm relative overflow-hidden group">
-          <button className="absolute top-2 right-2 text-slate-400 hover:text-slate-600 text-xs">✕</button>
-          <div className="text-2xl mb-2">👑</div>
-          <h4 className="text-xs font-extrabold text-slate-900 mb-1">Get Upto 66% off</h4>
-          <p className="text-[11px] text-slate-500 font-medium mb-3 leading-snug">Manage freelance clients professionally.</p>
-          <button className="text-xs font-extrabold text-purple-600 hover:text-purple-700 flex items-center gap-1 cursor-pointer">Start now &gt;</button>
-        </div>
-
-        {/* Bottom Profile Footer */}
-        <div className="mt-auto px-5 pt-3 border-t border-slate-100">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=100" alt="Avatar" className="h-9 w-9 rounded-full object-cover border border-purple-200 shadow-sm" />
-              <div className="flex flex-col">
-                <span className="text-xs font-bold text-slate-900">Faiza Lira</span>
-                <span className="text-[10px] text-slate-400 font-medium">lira@gmail.com</span>
-              </div>
+        {/* Bottom User Footer */}
+        <div className="mt-auto px-5 pt-4 border-t border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 bg-gradient-to-tr from-purple-600 to-indigo-500 rounded-full flex items-center justify-center text-white font-extrabold text-xs shadow-md relative">
+              H
+              <div className="absolute bottom-0 right-0 h-2.5 w-2.5 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center text-[7px]"></div>
             </div>
-            <button className="p-2 rounded-xl text-rose-500 hover:bg-rose-50 transition-colors cursor-pointer">
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
-            </button>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-xs font-extrabold text-slate-900 truncate">Hassaan</h4>
+              <p className="text-[10px] text-purple-600 font-semibold">Online</p>
+            </div>
           </div>
         </div>
       </div>
 
 
-      {/* 2. Middle Column (Chat List) */}
-      {/* Dashboard Tab - DashMark Theme */}
+      {/* 2. Overview Dashboard Tab - HazelWhat Data in DashMark Purple Theme */}
       {activeTab === 'dashboard' && (
         <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
           <div className="p-8 max-w-[1300px] mx-auto w-full space-y-6">
             
-            {/* Header Bar */}
+            {/* Header with Period Filter */}
             <div className="flex justify-between items-center mb-2">
               <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Overview</h2>
-              <div className="flex items-center gap-3">
-                <button className="p-2.5 bg-white border border-slate-200/80 rounded-xl hover:bg-slate-50 transition shadow-sm relative text-slate-600 cursor-pointer">
-                  <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full"></span>
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                </button>
-                <button className="p-2.5 bg-white border border-slate-200/80 rounded-xl hover:bg-slate-50 transition shadow-sm text-slate-600 cursor-pointer">
-                  <MoreVertical className="w-4 h-4" />
+              <div className="flex items-center gap-4">
+                <div className="bg-slate-100/80 p-1 rounded-xl flex items-center text-xs font-bold border border-slate-200/60">
+                  <button 
+                    onClick={() => setPeriodFilter('weekly')}
+                    className={`px-4 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      periodFilter === 'weekly' ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20 font-extrabold' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    Weekly
+                  </button>
+                  <button 
+                    onClick={() => setPeriodFilter('monthly')}
+                    className={`px-4 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      periodFilter === 'monthly' ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20 font-extrabold' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    Monthly
+                  </button>
+                  <button 
+                    onClick={() => setPeriodFilter('yearly')}
+                    className={`px-4 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      periodFilter === 'yearly' ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20 font-extrabold' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    Yearly
+                  </button>
+                </div>
+                <button className="flex items-center gap-2 bg-white border border-slate-200/80 px-4 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-sm cursor-pointer">
+                  <svg className="w-4 h-4 text-purple-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+                  Filter
                 </button>
               </div>
             </div>
-
-            {/* Row 1: Total Revenue & All Leads Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            {/* Top Metric Cards */}
+            <div className="dash-card p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 md:gap-0">
+              <div className="flex-1 md:border-r border-slate-100 md:pr-6">
+                <div className="text-slate-400 font-bold text-[11px] uppercase tracking-wider mb-2">Total Revenue ({periodFilter})</div>
+                <div className="flex items-end gap-3">
+                  <div className="text-2xl font-extrabold text-slate-900">
+                    {periodFilter === 'weekly' ? '$200,45.87' : periodFilter === 'monthly' ? '$801,83.48' : '$9,622,01.76'}
+                  </div>
+                  <div className="bg-purple-50 text-purple-700 border border-purple-200/60 text-xs font-extrabold px-2.5 py-0.5 rounded-full mb-0.5">+2.5%</div>
+                </div>
+              </div>
               
-              {/* Card 1: Total Revenue */}
-              <div className="dash-card p-6 flex flex-col justify-between h-[280px]">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-bold text-slate-900 text-sm">Total Revenue</h3>
-                  <div className="flex items-center gap-2">
-                    <button className="text-slate-400 hover:text-slate-600 text-xs flex items-center gap-1 border border-slate-200/60 rounded-lg px-2 py-1">
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
-                    </button>
-                    <button className="text-slate-400 hover:text-slate-600"><MoreVertical className="w-4 h-4" /></button>
+              <div className="flex-1 md:border-r border-slate-100 md:px-6">
+                <div className="text-slate-400 font-bold text-[11px] uppercase tracking-wider mb-2">Active Users</div>
+                <div className="flex items-end gap-3">
+                  <div className="text-2xl font-extrabold text-slate-900">
+                    {periodFilter === 'weekly' ? '9,528' : periodFilter === 'monthly' ? '38,112' : '457,344'}
                   </div>
+                  <div className="bg-purple-50 text-purple-700 border border-purple-200/60 text-xs font-extrabold px-2.5 py-0.5 rounded-full mb-0.5">+9.5%</div>
                 </div>
-
-                {/* Vertical Bar Chart (Glowing Violet/Purple) */}
-                <div className="flex items-end justify-between h-32 px-4 pt-4 gap-3">
-                  {[
-                    { month: 'Jan', h: '45%', active: false },
-                    { month: 'Feb', h: '60%', active: false },
-                    { month: 'Mar', h: '40%', active: false },
-                    { month: 'Apr', h: '95%', active: true },
-                    { month: 'May', h: '55%', active: false },
-                    { month: 'Jun', h: '70%', active: false }
-                  ].map((bar, i) => (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
-                      <div className="w-full max-w-[28px] rounded-full overflow-hidden bg-slate-100/80 flex items-end h-full">
-                        <div 
-                          className={`w-full rounded-full transition-all duration-500 ${
-                            bar.active 
-                              ? 'bg-gradient-to-t from-purple-700 via-indigo-600 to-purple-400 shadow-md shadow-purple-500/30' 
-                              : 'bg-gradient-to-t from-purple-200/80 to-indigo-300/80 opacity-70 hover:opacity-100'
-                          }`} 
-                          style={{ height: bar.h }}
-                        ></div>
-                      </div>
-                      <span className="text-[11px] font-semibold text-slate-400">{bar.month}</span>
-                    </div>
-                  ))}
+              </div>
+              
+              <div className="flex-1 md:border-r border-slate-100 md:px-6">
+                <div className="text-slate-400 font-bold text-[11px] uppercase tracking-wider mb-2">Customer Lifetime Value</div>
+                <div className="flex items-end gap-3">
+                  <div className="text-2xl font-extrabold text-slate-900">
+                    {periodFilter === 'weekly' ? '$849.54' : periodFilter === 'monthly' ? '$3,398.16' : '$40,777.92'}
+                  </div>
+                  <div className="bg-rose-50 text-rose-600 border border-rose-200/60 text-xs font-extrabold px-2.5 py-0.5 rounded-full mb-0.5">-1.6%</div>
                 </div>
-
-                {/* Bottom Total Stat */}
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              </div>
+              
+              <div className="flex-1 md:pl-6">
+                <div className="text-slate-400 font-bold text-[11px] uppercase tracking-wider mb-2">Customer Acquisition Cost</div>
+                <div className="flex items-end gap-3">
+                  <div className="text-2xl font-extrabold text-slate-900">
+                    {periodFilter === 'weekly' ? '9,528' : periodFilter === 'monthly' ? '38,112' : '457,344'}
+                  </div>
+                  <div className="bg-purple-50 text-purple-700 border border-purple-200/60 text-xs font-extrabold px-2.5 py-0.5 rounded-full mb-0.5">+3.5%</div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Middle Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 h-fit">
+                
+                {/* Churn Rate */}
+                <div className="dash-card p-6 flex flex-col justify-between h-[180px]">
                   <div>
-                    <span className="text-[11px] font-medium text-slate-400 block">April 2025 Total</span>
-                    <span className="text-xl font-extrabold text-slate-900">$ 23,000.00</span>
+                    <div className="flex justify-between items-start">
+                      <h3 className="font-extrabold text-slate-900 text-sm">Churn Rate</h3>
+                      <MoreVertical className="w-4 h-4 text-slate-400" />
+                    </div>
+                    <div className="text-xs font-semibold text-slate-400 mt-1">Downgrade to Free plan</div>
                   </div>
-                  <span className="bg-purple-50 text-purple-700 border border-purple-200/60 text-xs font-bold px-2.5 py-1 rounded-lg flex items-center gap-1">
-                    45% ↑
-                  </span>
+                  <div className="flex items-end justify-between">
+                    <div>
+                      <div className="text-2xl font-extrabold text-slate-900">4.26%</div>
+                      <div className="text-[11px] font-bold text-slate-500 mt-1"><span className="text-rose-500 font-extrabold">-0.31%</span> than last Week</div>
+                    </div>
+                    <div className="w-24 h-12 flex items-end">
+                      <svg viewBox="0 0 100 40" className="w-full h-full stroke-rose-500 fill-rose-500/10" strokeWidth="2"><path d="M0 30 Q 15 25, 25 35 T 40 10 T 50 25 T 60 15 T 75 35 T 100 30 L 100 40 L 0 40 Z"/></svg>
+                    </div>
+                  </div>
+                </div>
+
+                {/* User Growth */}
+                <div className="dash-card p-6 flex flex-col justify-between h-[180px]">
+                  <div>
+                    <div className="flex justify-between items-start">
+                      <h3 className="font-extrabold text-slate-900 text-sm">User Growth</h3>
+                      <MoreVertical className="w-4 h-4 text-slate-400" />
+                    </div>
+                    <div className="text-xs font-semibold text-slate-400 mt-1">New signups website + mobile</div>
+                  </div>
+                  <div className="flex items-end justify-between">
+                    <div>
+                      <div className="text-2xl font-extrabold text-slate-900">3,768</div>
+                      <div className="text-[11px] font-bold text-slate-500 mt-1"><span className="text-purple-600 font-extrabold">+3.85%</span> than last Week</div>
+                    </div>
+                    <div className="w-24 h-12 flex items-end">
+                      <svg viewBox="0 0 100 40" className="w-full h-full stroke-purple-600 fill-purple-500/10" strokeWidth="2"><path d="M0 35 Q 15 25, 25 30 T 40 20 T 50 25 T 60 20 T 75 10 T 100 5 L 100 40 L 0 40 Z"/></svg>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Conversion Funnel */}
+                <div className="dash-card p-6 md:col-span-2">
+                  <div className="flex justify-between items-start mb-6">
+                    <h3 className="font-extrabold text-slate-900 text-sm">Conversion Funnel</h3>
+                    <MoreVertical className="w-4 h-4 text-slate-400" />
+                  </div>
+                  <div className="flex items-center gap-4 mb-8 text-xs font-bold text-slate-600 flex-wrap">
+                    <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-purple-700"></div> Ad Impression</div>
+                    <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-purple-500"></div> Website Session</div>
+                    <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-indigo-400"></div> App Download</div>
+                    <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-purple-200"></div> New Users</div>
+                  </div>
+                  
+                  <div className="flex items-end justify-between h-40 pt-4 gap-2 md:gap-4 pb-2 border-l border-b border-slate-200/80 px-4 relative ml-4">
+                    <div className="absolute left-[-24px] top-0 text-[10px] text-slate-400 h-full flex flex-col justify-between pb-2 font-semibold">
+                      <span>120</span><span>100</span><span>80</span><span>60</span><span>40</span>
+                    </div>
+                    {[
+                      [20, 20, 20, 15], [30, 25, 20, 15], [25, 20, 20, 20], [30, 20, 25, 10], 
+                      [20, 15, 15, 15], [25, 20, 20, 15], [30, 25, 20, 20], [30, 25, 25, 15]
+                    ].map((heights, i) => (
+                      <div key={i} className="flex-1 flex flex-col justify-end w-4 md:w-8 max-w-[32px] rounded-t-lg overflow-hidden gap-[1px]">
+                        <div className="w-full bg-purple-200 rounded-t-sm" style={{height: `${heights[3]}%`}}></div>
+                        <div className="w-full bg-indigo-400" style={{height: `${heights[2]}%`}}></div>
+                        <div className="w-full bg-purple-500" style={{height: `${heights[1]}%`}}></div>
+                        <div className="w-full bg-purple-700 rounded-b-sm" style={{height: `${heights[0]}%`}}></div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Card 2: All Leads Chart */}
-              <div className="dash-card p-6 flex flex-col justify-between h-[280px]">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-bold text-slate-900 text-sm">All leads</h3>
-                  <div className="flex items-center gap-2">
-                    <button className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg border border-slate-200/60 text-xs">📅</button>
-                    <button className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg border border-slate-200/60 text-xs">📋</button>
+              {/* Product Performance */}
+              <div className="dash-card p-6 h-full flex flex-col">
+                <div className="flex justify-between items-start mb-6">
+                  <h3 className="font-extrabold text-slate-900 text-sm">Product Performance</h3>
+                  <MoreVertical className="w-4 h-4 text-slate-400" />
+                </div>
+                
+                <div className="bg-slate-100/80 p-1 rounded-xl flex items-center text-xs font-bold mb-6 border border-slate-200/60">
+                  <button className="flex-1 py-1.5 bg-white text-purple-700 shadow-sm rounded-lg font-extrabold cursor-pointer">Daily Sales</button>
+                  <button className="flex-1 py-1.5 text-slate-500 hover:text-slate-700 cursor-pointer">Online Sales</button>
+                  <button className="flex-1 py-1.5 text-slate-500 hover:text-slate-700 cursor-pointer">New Users</button>
+                </div>
+
+                <div className="flex justify-between border-b border-slate-100 pb-6 mb-6">
+                  <div>
+                    <div className="text-xs font-semibold text-slate-400 mb-1">Digital Product</div>
+                    <div className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                      <span className="text-purple-600 text-sm">↑</span> 790
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-400 mb-1">Physical Product</div>
+                    <div className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                      <span className="text-rose-500 text-sm">↓</span> 572
+                    </div>
                   </div>
                 </div>
 
-                {/* Dual Curve Chart with Hover Tooltip */}
-                <div className="relative h-32 w-full my-2">
-                  {/* Floating Tooltip matching DashMark */}
-                  <div className="absolute top-1 right-[30%] bg-white/95 backdrop-blur border border-purple-100 rounded-xl p-2 shadow-lg shadow-purple-500/10 text-[11px] font-semibold z-10 space-y-1">
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-slate-500">Leads</span>
-                      <span className="font-bold text-purple-700">43 <span className="text-[9px]">12% ↑</span></span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 border-t border-slate-100 pt-1">
-                      <span className="text-slate-500">Target</span>
-                      <span className="font-bold text-amber-600">123 <span className="text-[9px]">50% ◐</span></span>
-                    </div>
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <div className="text-xs font-semibold text-slate-400 mb-1">Average Daily Sales</div>
+                    <div className="text-2xl font-extrabold text-slate-900">$2,950</div>
                   </div>
-
-                  <svg viewBox="0 0 400 100" className="w-full h-full overflow-visible">
-                    {/* Background Grid Lines */}
-                    <line x1="0" y1="20" x2="400" y2="20" stroke="#f1f5f9" strokeDasharray="4 4" />
-                    <line x1="0" y1="60" x2="400" y2="60" stroke="#f1f5f9" strokeDasharray="4 4" />
-                    
-                    {/* Purple Line (Leads) */}
-                    <path d="M0,25 Q50,15 100,55 T200,80 T300,20 T400,25" fill="none" stroke="#6366f1" strokeWidth="3" strokeLinecap="round" />
-                    {/* Orange Line (Target) */}
-                    <path d="M0,60 Q50,55 100,75 T200,45 T300,70 T400,55" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" />
-                  </svg>
-
-                  <div className="flex justify-between text-[10px] font-semibold text-slate-400 pt-1">
-                    <span>Sep 12</span><span>Sep 13</span><span>Sep 14</span><span>Sep 15</span><span>Sep 16</span><span>Sep 17</span><span>Sep 18</span>
+                  <div className="bg-rose-50 text-rose-600 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 border border-rose-200/60">
+                    <span className="text-xs leading-none">↓</span> 0.52%
                   </div>
                 </div>
 
-                {/* Bottom Stat Row */}
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                  <div className="flex items-center gap-6">
-                    <div>
+                <div className="mt-auto h-40 flex items-end justify-between gap-1 md:gap-2 border-b border-l border-slate-200/80 px-2 pt-2 relative ml-4">
+                  <div className="absolute left-[-22px] top-0 text-[10px] text-slate-400 h-full flex flex-col justify-between pb-2 font-semibold">
+                      <span>400</span><span>300</span><span>200</span><span>100</span><span>0</span>
+                  </div>
+                  {[30, 80, 45, 65, 40, 40, 35].map((h, i) => (
+                    <div key={i} className="flex-1 bg-purple-600 rounded-t-md hover:bg-purple-700 transition-colors" style={{height: `${h}%`}}></div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
                       <span className="text-[11px] font-medium text-slate-400 block">Total Leads</span>
                       <span className="text-lg font-extrabold text-slate-900 flex items-center gap-1.5">
                         124 <span className="text-xs font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">55% ↑</span>
