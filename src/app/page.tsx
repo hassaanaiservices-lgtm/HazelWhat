@@ -62,12 +62,21 @@ export default function DashboardPage() {
   const [p2Enabled, setP2Enabled] = useState(true);
   const [p2IntervalDays, setP2IntervalDays] = useState(3);
   const [p2MaxFollowUps, setP2MaxFollowUps] = useState(3);
-  const [p2Mode, setP2Mode] = useState<"text" | "media" | "voice" | "mixed">("mixed");
+  const [p2Mode, setP2Mode] = useState<"text" | "media" | "voice">("text");
   const [p2Message1, setP2Message1] = useState("Hey {Name}! Just checking in to see if you had a chance to review our previous message?");
   const [p2Message2, setP2Message2] = useState("Hi {Name}, we've got a quick update regarding your request. Would love to help out!");
   const [p2Message3, setP2Message3] = useState("Final check-in! Let us know if you're still interested or if we should stop sending updates.");
   
+  const [p2MediaBase64, setP2MediaBase64] = useState<string | null>(null);
+  const [p2MediaMimetype, setP2MediaMimetype] = useState<string | null>(null);
+  const [p2MediaName, setP2MediaName] = useState<string | null>(null);
+  const [p2VoiceBase64, setP2VoiceBase64] = useState<string | null>(null);
+  const [p2VoiceMimetype, setP2VoiceMimetype] = useState<string | null>(null);
+  const [p2VoiceName, setP2VoiceName] = useState<string | null>(null);
+  
   const voiceFileInputRef = useRef<HTMLInputElement>(null);
+  const p2FileInputRef = useRef<HTMLInputElement>(null);
+  const p2VoiceFileInputRef = useRef<HTMLInputElement>(null);
 
   // Overview Period Timeframe Filter state (Weekly / Monthly / Yearly)
   const [periodFilter, setPeriodFilter] = useState<'weekly' | 'monthly' | 'yearly'>('weekly');
@@ -852,6 +861,46 @@ export default function DashboardPage() {
     }
   };
 
+  const handleP2FileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setP2MediaBase64(event.target?.result as string);
+        setP2MediaMimetype(file.type);
+        setP2MediaName(file.name);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeP2Media = () => {
+    setP2MediaBase64(null);
+    setP2MediaMimetype(null);
+    setP2MediaName(null);
+    if (p2FileInputRef.current) p2FileInputRef.current.value = "";
+  };
+
+  const handleP2VoiceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setP2VoiceBase64(event.target?.result as string);
+        setP2VoiceMimetype(file.type || "audio/mp4");
+        setP2VoiceName(file.name);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeP2Voice = () => {
+    setP2VoiceBase64(null);
+    setP2VoiceMimetype(null);
+    setP2VoiceName(null);
+    if (p2VoiceFileInputRef.current) p2VoiceFileInputRef.current.value = "";
+  };
+
   const launchRevivalCampaign = async () => {
     if (!revivalMessage.trim() && !revivalMediaBase64 && !revivalVoiceBase64) return;
     setCreatingCampaign(true);
@@ -880,10 +929,10 @@ export default function DashboardPage() {
             maxFollowUps: p2MaxFollowUps,
             mode: p2Mode,
             messages: [p2Message1, p2Message2, p2Message3].filter(Boolean),
-            mediaBase64: revivalMediaBase64 || undefined,
-            mediaMimetype: revivalMediaMime || undefined,
-            voiceBase64: revivalVoiceBase64 || undefined,
-            voiceMimetype: revivalVoiceMimetype || undefined
+            mediaBase64: p2MediaBase64 || revivalMediaBase64 || undefined,
+            mediaMimetype: p2MediaMimetype || revivalMediaMime || undefined,
+            voiceBase64: p2VoiceBase64 || revivalVoiceBase64 || undefined,
+            voiceMimetype: p2VoiceMimetype || revivalVoiceMimetype || undefined
           }
         }),
       });
@@ -895,6 +944,8 @@ export default function DashboardPage() {
         setIsFileUploaded(false);
         removeRevivalMedia();
         removeRevivalVoice();
+        removeP2Media();
+        removeP2Voice();
         fetchRevivalCampaigns();
       } else {
         alert(data.error || "Failed to launch revival campaign.");
@@ -2560,7 +2611,7 @@ export default function DashboardPage() {
                         <h3 className="text-xs font-extrabold text-slate-900 flex items-center gap-2 uppercase tracking-wider">
                           <Zap className="w-4 h-4 text-purple-600" /> Phase 2 Automated Follow-Up Cycle
                         </h3>
-                        <p className="text-[11px] text-slate-500 font-medium mt-0.5">Sends automated follow-up reminders to un-replied leads after N days.</p>
+                        <p className="text-[11px] text-slate-500 font-medium mt-0.5">Sends automated follow-up reminders to un-replied leads every N days.</p>
                       </div>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
@@ -2575,7 +2626,7 @@ export default function DashboardPage() {
 
                     {p2Enabled && (
                       <div className="space-y-5 animate-in fade-in duration-300">
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div>
                             <label className="text-[11px] font-bold text-slate-600 block mb-1">Follow-up Interval (Days)</label>
                             <input
@@ -2599,19 +2650,81 @@ export default function DashboardPage() {
                             />
                           </div>
                           <div>
-                            <label className="text-[11px] font-bold text-slate-600 block mb-1">Content Mode</label>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">Follow-up Format</label>
                             <select
                               value={p2Mode}
                               onChange={(e) => setP2Mode(e.target.value as any)}
                               className="w-full px-3 py-2 text-xs bg-white border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold text-slate-700"
                             >
-                              <option value="mixed">Mixed / Random</option>
                               <option value="text">Text Only</option>
-                              <option value="media">Media Only</option>
-                              <option value="voice">Voice Note Only</option>
+                              <option value="media">Media / PDF Attachment</option>
+                              <option value="voice">Voice Note (PTT)</option>
                             </select>
                           </div>
                         </div>
+
+                        {/* Phase 2 Voice Note Selector */}
+                        {p2Mode === "voice" && (
+                          <div className="p-4 bg-white rounded-xl border border-purple-200 space-y-3">
+                            <label className="text-xs font-bold text-slate-700 block uppercase tracking-wider">Follow-up Voice Note Audio File</label>
+                            <div className="flex items-center gap-4 flex-wrap">
+                              <input 
+                                type="file" 
+                                className="hidden" 
+                                ref={p2VoiceFileInputRef}
+                                accept="audio/*,.mp3,.wav,.ogg,.m4a"
+                                onChange={handleP2VoiceChange}
+                              />
+                              <button 
+                                type="button"
+                                onClick={() => p2VoiceFileInputRef.current?.click()}
+                                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm"
+                              >
+                                <Mic className="w-4 h-4" />
+                                {p2VoiceName ? "Change Voice File" : "Select Follow-up Voice Note"}
+                              </button>
+                              {p2VoiceName && (
+                                <div className="flex items-center gap-2 bg-purple-50 text-purple-700 px-3.5 py-2 rounded-xl text-xs font-extrabold border border-purple-200">
+                                  <span className="truncate max-w-[220px]">🎤 {p2VoiceName}</span>
+                                  <button type="button" onClick={removeP2Voice} className="text-purple-900 hover:text-rose-500 transition cursor-pointer">
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Phase 2 Media Attachment Selector */}
+                        {p2Mode === "media" && (
+                          <div className="p-4 bg-white rounded-xl border border-purple-200 space-y-3">
+                            <label className="text-xs font-bold text-slate-700 block uppercase tracking-wider">Follow-up Document / PDF / Image File</label>
+                            <div className="flex items-center gap-4 flex-wrap">
+                              <input 
+                                type="file" 
+                                className="hidden" 
+                                ref={p2FileInputRef}
+                                onChange={handleP2FileChange}
+                              />
+                              <button 
+                                type="button"
+                                onClick={() => p2FileInputRef.current?.click()}
+                                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm"
+                              >
+                                <Paperclip className="w-4 h-4" />
+                                {p2MediaName ? "Change File" : "Attach Follow-up File"}
+                              </button>
+                              {p2MediaName && (
+                                <div className="flex items-center gap-2 bg-purple-50 text-purple-700 px-3.5 py-2 rounded-xl text-xs font-extrabold border border-purple-200">
+                                  <span className="truncate max-w-[220px]">📎 {p2MediaName}</span>
+                                  <button type="button" onClick={removeP2Media} className="text-purple-900 hover:text-rose-500 transition cursor-pointer">
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
                         <div className="space-y-3">
                           <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">Follow-up Message Sequences</label>
