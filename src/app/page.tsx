@@ -965,9 +965,6 @@ export default function DashboardPage() {
           <button onClick={() => setActiveTab('leads-revival')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'leads-revival' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
             <RefreshCw className={`h-4 w-4 ${activeTab === 'leads-revival' ? 'text-purple-600' : 'text-slate-400'}`} /> Leads Revival
           </button>
-          <button onClick={() => setActiveTab('analytics')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'analytics' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
-            <Activity className={`h-4 w-4 ${activeTab === 'analytics' ? 'text-purple-600' : 'text-slate-400'}`} /> Analytics
-          </button>
         </div>
 
         {/* Account Section */}
@@ -1209,55 +1206,7 @@ export default function DashboardPage() {
 
 
 
-      {/* Analytics Tab - DashMark Theme */}
-      {activeTab === 'analytics' && (
-        <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
-          {!analytics ? (
-            <div className="flex-1 flex flex-col items-center justify-center space-y-4 bg-white rounded-3xl border border-slate-100 p-10 max-w-5xl mx-auto my-10 dash-card">
-              <Loader2 className="h-8 w-8 text-purple-600 animate-spin" />
-              <p className="text-slate-500 font-bold text-sm">Loading analytics...</p>
-            </div>
-          ) : (
-            <div className="p-10 max-w-5xl mx-auto w-full space-y-8">
-              <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
-                <Activity className="h-7 w-7 text-purple-600" /> Analytics & Reports
-              </h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="dash-card p-6">
-                  <div className="text-slate-400 font-bold text-xs uppercase tracking-wider mb-2">Total Chats</div>
-                  <div className="text-4xl font-extrabold text-slate-900">{analytics.totalChats}</div>
-                </div>
-                <div className="dash-card p-6">
-                  <div className="text-slate-400 font-bold text-xs uppercase tracking-wider mb-2">Total Bookings & Orders</div>
-                  <div className="text-4xl font-extrabold text-slate-900">{analytics.totalOrders + analytics.totalBookings}</div>
-                </div>
-                <div className="dash-card p-6">
-                  <div className="text-slate-400 font-bold text-xs uppercase tracking-wider mb-2">Conversion Rate</div>
-                  <div className="text-4xl font-extrabold text-purple-600">{analytics.conversionRate}%</div>
-                  <div className="text-xs font-bold text-slate-400 mt-2">Orders per unique contact</div>
-                </div>
-              </div>
 
-              <div className="dash-card p-8">
-                <h3 className="text-lg font-bold text-slate-900 mb-6">Most Requested Products</h3>
-                {analytics.topProducts.length > 0 ? (
-                  <div className="grid gap-3">
-                    {analytics.topProducts.map((p: any, i: number) => (
-                      <div key={i} className="flex items-center justify-between p-4 bg-slate-50/80 rounded-2xl border border-slate-200/60">
-                        <span className="font-bold text-slate-800 text-sm">{p.name}</span>
-                        <span className="bg-purple-50 text-purple-700 border border-purple-200/60 px-3 py-1 rounded-full text-xs font-bold">{p.count} requests</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-slate-400 font-medium text-sm">No product data available yet.</div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Settings Tab - DashMark Theme */}
       {activeTab === 'settings' && (
