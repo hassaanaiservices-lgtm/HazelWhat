@@ -2755,48 +2755,79 @@ export default function DashboardPage() {
 
                 {/* Right Column (4 cols): Target Audience, Estimator & Launch Action */}
                 <div className="lg:col-span-4 space-y-6">
-                  {/* Audience Segment Selection Card */}
-                  <div className="dash-card p-6 space-y-4 border border-purple-100/80 bg-white">
-                    <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                      <Users className="w-4 h-4 text-purple-600" /> Target Audience Segment
+                  {/* Audience Segment & Leads File Import Card */}
+                  <div className="dash-card p-6 space-y-5 border border-purple-100/80 bg-white">
+                    <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-3">
+                      <Users className="w-4 h-4 text-purple-600" /> Target Leads & Data Source
                     </h3>
-                    <select 
-                      value={revivalAudience}
-                      onChange={(e) => setRevivalAudience(e.target.value)}
-                      className="w-full p-3.5 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold text-slate-700"
-                    >
-                      <option value="all">All Contacts (Count: {getSelectedLeadsCount("all")})</option>
-                      <option value="cold">Cold Leads (Inactive / Abandoned) (Count: {getSelectedLeadsCount("cold")})</option>
-                      <option value="hot">Warm & Hot Leads (Active Inquiries) (Count: {getSelectedLeadsCount("hot")})</option>
-                      <option value="new">New Leads (No pipeline stage) (Count: {getSelectedLeadsCount("new")})</option>
-                      <option value="custom">Custom Phone List (Count: {getSelectedLeadsCount("custom")})</option>
-                    </select>
-                    
-                    {revivalAudience === "custom" && (
+
+                    {/* Prominent Attach Target Leads File Button */}
+                    <div className="p-4 bg-purple-50/60 border border-purple-100/80 rounded-2xl space-y-3">
+                      <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">Import Target Leads File</label>
+                      <input
+                        type="file"
+                        ref={customPhonesFileInputRef}
+                        className="hidden"
+                        accept=".txt,.csv,.pdf"
+                        onChange={(e) => {
+                          setRevivalAudience("custom");
+                          handleCustomPhonesFileUploaded(e);
+                        }}
+                      />
+                      <button 
+                        type="button" 
+                        onClick={() => customPhonesFileInputRef.current?.click()} 
+                        className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white py-3 px-4 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-md shadow-purple-500/20"
+                      >
+                        <Paperclip className="w-4 h-4" />
+                        {isFileUploaded ? `Leads Attached (${customPhones.length})` : "Attach Target Leads File (.pdf, .csv, .txt)"}
+                      </button>
+                      
+                      {isFileUploaded && (
+                        <div className="flex items-center justify-between text-xs text-purple-800 font-extrabold bg-white p-3 rounded-xl border border-purple-200 shadow-sm">
+                          <span>Parsed {customPhones.length} valid target leads</span>
+                          <button 
+                            type="button" 
+                            onClick={() => {
+                              setCustomPhones([]);
+                              setCustomPhonesInput("");
+                              setIsFileUploaded(false);
+                              setRevivalAudience("all");
+                            }}
+                            className="text-rose-600 hover:text-rose-700 font-bold ml-2 cursor-pointer"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">Or Select Saved Audience Segment</label>
+                      <select 
+                        value={revivalAudience}
+                        onChange={(e) => setRevivalAudience(e.target.value)}
+                        className="w-full p-3.5 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold text-slate-700"
+                      >
+                        <option value="all">All Contacts (Count: {getSelectedLeadsCount("all")})</option>
+                        <option value="cold">Cold Leads (Inactive / Abandoned) (Count: {getSelectedLeadsCount("cold")})</option>
+                        <option value="hot">Warm & Hot Leads (Active Inquiries) (Count: {getSelectedLeadsCount("hot")})</option>
+                        <option value="new">New Leads (No pipeline stage) (Count: {getSelectedLeadsCount("new")})</option>
+                        <option value="custom">Custom Phone List (Count: {getSelectedLeadsCount("custom")})</option>
+                      </select>
+                    </div>
+
+                    {revivalAudience === "custom" && !isFileUploaded && (
                       <div className="space-y-3 pt-2 border-t border-purple-100">
-                        <label className="text-[11px] font-bold text-slate-700 block uppercase tracking-wider">Custom Phone Numbers</label>
+                        <label className="text-[11px] font-bold text-slate-700 block uppercase tracking-wider">Paste Custom Phone Numbers</label>
                         <textarea
                           value={customPhonesInput}
                           onChange={(e) => handleCustomPhonesChange(e.target.value)}
                           placeholder="Paste numbers here...&#10;+923228487873&#10;03011660641"
                           className="w-full h-28 p-3 text-xs bg-slate-50 border border-purple-100 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800"
                         />
-                        <div className="flex flex-col gap-2 text-xs text-slate-500 font-semibold">
-                          <span>Parsed valid numbers: <strong className="text-purple-600 font-bold">{customPhones.length}</strong></span>
-                          <button 
-                            type="button" 
-                            onClick={() => customPhonesFileInputRef.current?.click()} 
-                            className="text-purple-600 hover:text-purple-700 underline font-bold cursor-pointer focus:outline-none self-start flex items-center gap-1"
-                          >
-                            <Paperclip className="w-3.5 h-3.5" /> Upload .txt / .csv / .pdf file
-                          </button>
-                          <input
-                            type="file"
-                            ref={customPhonesFileInputRef}
-                            className="hidden"
-                            accept=".txt,.csv,.pdf"
-                            onChange={handleCustomPhonesFileUploaded}
-                          />
+                        <div className="text-xs text-slate-500 font-semibold">
+                          Parsed valid numbers: <strong className="text-purple-600 font-bold">{customPhones.length}</strong>
                         </div>
                       </div>
                     )}
