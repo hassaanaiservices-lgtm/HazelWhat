@@ -1,5 +1,30 @@
 import { NextResponse } from "next/server";
-import { PDFParse } from "pdf-parse";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const PDFParser = require("pdf2json");
+
+function extractPdfText(buffer: Buffer): Promise<string> {
+  return new Promise((resolve, reject) => {
+    try {
+      const pdfParser = new PDFParser(null, 1);
+      pdfParser.on("pdfParser_dataError", (errData: any) => {
+        const errorMsg = typeof errData === "string" ? errData : (errData?.parserError || "Failed to parse PDF file");
+        reject(new Error(errorMsg));
+      });
+      pdfParser.on("pdfParser_dataReady", () => {
+        let text = pdfParser.getRawTextContent() || "";
+        try {
+          text = decodeURIComponent(text);
+        } catch {
+          // Ignore URI decoding errors if raw string is standard text
+        }
+        resolve(text);
+      });
+      pdfParser.parseBuffer(buffer);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
 
 function cleanText(text: string): string {
   return text
@@ -64,14 +89,8 @@ export async function POST(req: Request) {
 
     if (isPDF) {
       try {
-        const parser = new PDFParse({ data: new Uint8Array(buffer) });
-        const result = await parser.getText();
-        text = (result as any)?.text || "";
-        if (!text && Array.isArray((result as any)?.pages)) {
-          text = (result as any).pages.map((p: any) => p.text || "").join("\n");
-        }
+        text = await extractPdfText(buffer);
         console.log(`[parse-leads] PDF "${fileName}" extracted ${text.length} chars. First 300:`, text.substring(0, 300));
-        await parser.destroy();
       } catch (e: any) {
         console.error("Failed to parse PDF:", e);
         return NextResponse.json({ success: false, error: `Failed to parse PDF file: ${e.message}` }, { status: 500 });
@@ -90,5 +109,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
 
 
