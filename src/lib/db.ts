@@ -77,6 +77,8 @@ export interface Customer {
   leadStatus?: "hot" | "cold" | "none";
   tags?: string[];
   pipelineStage?: "new" | "qualified" | "warm" | "cold" | "completed";
+  isOptedOut?: boolean;
+  optedOutAt?: string;
 }
 
 export interface PromotionLog {
@@ -113,8 +115,30 @@ export interface ScheduledFollowUp {
   createdAt: string;
 }
 
+export interface LeadRevivalProgress {
+  phase: 1 | 2;
+  introSentAt?: string;
+  followUpCount: number;
+  nextRunAt?: string;
+  status: "pending" | "phase1_done" | "in_followup" | "replied" | "opted_out" | "completed" | "failed";
+  lastMessageType?: "text" | "media" | "voice";
+}
+
+export interface Phase2Settings {
+  enabled: boolean;
+  intervalDays: number;
+  maxFollowUps: number;
+  mode: "text" | "media" | "voice" | "mixed";
+  messages: string[];
+  mediaBase64?: string;
+  mediaMimetype?: string;
+  voiceBase64?: string;
+  voiceMimetype?: string;
+}
+
 export interface RevivalCampaign {
   id: string;
+  name?: string;
   message: string;
   audience: string;
   timeSlotStart: string;
@@ -125,12 +149,22 @@ export interface RevivalCampaign {
   targetPhones: string[];
   sentPhones: string[];
   failedPhones: string[];
+  repliedPhones?: string[];
+  optedOutPhones?: string[];
   sentToday: number;
   lastSentDate: string;
   createdAt: string;
   mediaBase64?: string;
   mimetype?: string;
   fileName?: string;
+  voiceBase64?: string;
+  voiceMimetype?: string;
+  messageType?: "text" | "media" | "voice";
+  
+  // Phase 2 Follow-up Settings & Lead progress tracking
+  phase2Settings?: Phase2Settings;
+  leadProgress?: Record<string, LeadRevivalProgress>;
+
   lastSentAt?: string;
   // Optional legacy fields for backward compatibility
   delayMinSeconds?: number;

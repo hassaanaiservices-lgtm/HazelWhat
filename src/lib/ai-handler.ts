@@ -434,6 +434,43 @@ export async function handleWhatsAppMessage(msg: any) {
       }
     }
 
+    const lowerContent = content.toLowerCase().trim();
+    const optOutKeywords = ["stop", "unsubscribe", "optout", "opt out", "hatao", "mat bhejo", "cancel", "remove me", "donotdisturb"];
+    const isOptOut = optOutKeywords.some(kw => lowerContent === kw || lowerContent.startsWith(kw + " "));
+
+    if (isOptOut) {
+      console.log(`[Opt-Out] Customer ${from} requested opt-out with text: "${content}"`);
+      const existingCustomer = DB.getCustomer(from);
+      const existingTags = existingCustomer?.tags || [];
+      const updatedTags = Array.from(new Set([...existingTags.filter(t => t !== "revival-sent"), "opted-out"]));
+
+      DB.updateCustomer(from, {
+        isOptedOut: true,
+        optedOutAt: new Date().toISOString(),
+        aiEnabled: false,
+        tags: updatedTags
+      });
+
+      // Update active campaign if lead was part of it
+      const activeCampaign = DB.getActiveCampaign();
+      if (activeCampaign) {
+        const optedOutList = Array.from(new Set([...(activeCampaign.optedOutPhones || []), from]));
+        const progressMap = activeCampaign.leadProgress || {};
+        if (progressMap[from]) {
+          progressMap[from].status = "opted_out";
+        }
+        DB.updateRevivalCampaign(activeCampaign.id, {
+          optedOutPhones: optedOutList,
+          leadProgress: progressMap
+        });
+      }
+
+      DB.addChatMessage(from, { role: "user", content });
+      await WhatsAppManager.sendMessage(from, "You have been unsubscribed from promotional updates. Reply START to opt back in.");
+      DB.addChatMessage(from, { role: "assistant", content: "You have been unsubscribed from promotional updates. Reply START to opt back in." });
+      return;
+    }
+
     DB.addChatMessage(from, { role: "user", content: hasImage ? `[Image] ${content}` : content });
     
     const existingCustomer = DB.getCustomer(from);
@@ -441,12 +478,27 @@ export async function handleWhatsAppMessage(msg: any) {
     
     let updatedTags = existingCustomer?.tags || [];
     let nextStage: "cold" | "new" | "qualified" | "warm" | "completed" | undefined = currentStage === "completed" ? "completed" : currentStage;
-    if (updatedTags.includes("revival-sent")) {
+    
+    // Check if customer was in revival flow
+    const activeCampaign = DB.getActiveCampaign();
+    if (updatedTags.includes("revival-sent") || (activeCampaign && activeCampaign.targetPhones?.includes(from))) {
       updatedTags = updatedTags.filter(t => t !== "revival-sent");
       if (!updatedTags.includes("revival-replied")) {
         updatedTags.push("revival-replied");
       }
       nextStage = "warm"; // Move revived customer to warm stage in CRM pipeline
+
+      if (activeCampaign) {
+        const repliedList = Array.from(new Set([...(activeCampaign.repliedPhones || []), from]));
+        const progressMap = activeCampaign.leadProgress || {};
+        if (progressMap[from]) {
+          progressMap[from].status = "replied";
+        }
+        DB.updateRevivalCampaign(activeCampaign.id, {
+          repliedPhones: repliedList,
+          leadProgress: progressMap
+        });
+      }
     }
 
     DB.updateCustomer(from, { 
@@ -471,7 +523,6 @@ export async function handleWhatsAppMessage(msg: any) {
       return;
     }
 
-    const lowerContent = content.toLowerCase();
     const matchedKeyword = config.keywordReplies?.find(k => 
       k.keyword.trim() !== "" && lowerContent.includes(k.keyword.toLowerCase())
     );

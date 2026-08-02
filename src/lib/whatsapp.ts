@@ -288,107 +288,196 @@ export class WhatsAppManager {
       return;
     }
 
-    // Check time slot
+    // Check active time slot window (e.g. 09:00 to 21:00)
     const now = new Date();
     const currentHour = now.getHours();
     const currentMin = now.getMinutes();
     const currentTimeMinutes = currentHour * 60 + currentMin;
-    const slotStartMinutes = parseInt(campaign.timeSlotStart.split(":")[0]) * 60 + parseInt(campaign.timeSlotStart.split(":")[1] || "0");
-    const slotEndMinutes = parseInt(campaign.timeSlotEnd.split(":")[0]) * 60 + parseInt(campaign.timeSlotEnd.split(":")[1] || "0");
+    const slotStartMinutes = parseInt((campaign.timeSlotStart || "09:00").split(":")[0]) * 60 + parseInt((campaign.timeSlotStart || "09:00").split(":")[1] || "0");
+    const slotEndMinutes = parseInt((campaign.timeSlotEnd || "21:00").split(":")[0]) * 60 + parseInt((campaign.timeSlotEnd || "21:00").split(":")[1] || "0");
 
     if (currentTimeMinutes < slotStartMinutes || currentTimeMinutes >= slotEndMinutes) {
-      console.log(`[Revival] Outside time slot (${campaign.timeSlotStart}-${campaign.timeSlotEnd}). Current: ${currentHour}:${String(currentMin).padStart(2, "0")}. Skipping.`);
+      console.log(`[Revival] Outside time slot (${campaign.timeSlotStart}-${campaign.timeSlotEnd}). Skipping.`);
       return;
     }
 
     // Reset daily counter if new day
     const today = now.toISOString().split("T")[0];
-    let sentToday = campaign.sentToday;
+    let sentToday = campaign.sentToday || 0;
     if (campaign.lastSentDate !== today) {
       sentToday = 0;
       DB.updateRevivalCampaign(campaign.id, { sentToday: 0, lastSentDate: today });
     }
 
     // Check daily cap
-    if (sentToday >= campaign.dailyCap) {
+    if (sentToday >= (campaign.dailyCap || 80)) {
       console.log(`[Revival] Daily cap reached (${sentToday}/${campaign.dailyCap}). Waiting for tomorrow.`);
       return;
     }
 
-    // Get unsent phones
-    const sentSet = new Set([...campaign.sentPhones, ...campaign.failedPhones]);
-    const remaining = campaign.targetPhones.filter(p => !sentSet.has(p));
+    // Initialize leadProgress if missing
+    let progressMap: Record<string, any> = campaign.leadProgress || {};
 
-    if (remaining.length === 0) {
-      console.log(`[Revival] Campaign ${campaign.id} completed! All ${campaign.targetPhones.length} leads processed.`);
-      DB.updateRevivalCampaign(campaign.id, { status: "completed" });
+    // 1. Check for Phase 1 sends (Introductory Send to leads not yet sent Intro)
+    const sentSet = new Set([...(campaign.sentPhones || []), ...(campaign.failedPhones || [])]);
+    const phase1Remaining = (campaign.targetPhones || []).filter(p => !sentSet.has(p));
+
+    let targetPhone = "";
+    let isPhase2FollowUp = false;
+
+    if (phase1Remaining.length > 0) {
+      targetPhone = phase1Remaining[0];
+    } else if (campaign.phase2Settings && campaign.phase2Settings.enabled) {
+      // Phase 1 completed, look for Phase 2 follow-ups that are due
+      const intervalDays = campaign.phase2Settings.intervalDays || 3;
+      const maxFollowUps = campaign.phase2Settings.maxFollowUps || 3;
+      const intervalMs = intervalDays * 24 * 60 * 60 * 1000;
+
+      for (const phone of (campaign.sentPhones || [])) {
+        // Skip if lead opted out or replied
+        const customer = DB.getCustomer(phone);
+        if (customer?.isOptedOut || (customer?.tags && customer.tags.includes("revival-replied"))) {
+          continue;
+        }
+
+        const leadProg = progressMap[phone] || {
+          phase: 1,
+          followUpCount: 0,
+          status: "phase1_done",
+          introSentAt: campaign.lastSentAt || campaign.createdAt
+        };
+
+        if (leadProg.status === "replied" || leadProg.status === "opted_out" || leadProg.status === "completed") {
+          continue;
+        }
+
+        if (leadProg.followUpCount < maxFollowUps) {
+          const lastTouch = leadProg.nextRunAt ? new Date(leadProg.nextRunAt).getTime() : 
+            (leadProg.introSentAt ? new Date(leadProg.introSentAt).getTime() : new Date(campaign.createdAt).getTime());
+          
+          if (Date.now() >= lastTouch + intervalMs) {
+            targetPhone = phone;
+            isPhase2FollowUp = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!targetPhone) {
+      // Check if all leads are completed
+      const p2Enabled = campaign.phase2Settings?.enabled;
+      if (!p2Enabled || phase1Remaining.length === 0) {
+        console.log(`[Revival] Campaign ${campaign.id} completed all phases!`);
+        DB.updateRevivalCampaign(campaign.id, { status: "completed" });
+      }
       return;
     }
 
-    // Pick next lead
-    const phone = remaining[0];
-    console.log(`[Revival] Processing next lead ${phone} for campaign ${campaign.id} (${campaign.sentPhones.length}/${campaign.targetPhones.length} done)`);
+    console.log(`[Revival] Processing ${isPhase2FollowUp ? 'Phase 2 Follow-up' : 'Phase 1 Intro'} for ${targetPhone}`);
 
-    // Prepare media buffer if needed
-    let buffer: Buffer | null = null;
-    if (campaign.mediaBase64) {
-      try {
-        buffer = Buffer.from(campaign.mediaBase64.split(",")[1] || campaign.mediaBase64, "base64");
-      } catch (e) {
-        console.error("[Revival] Failed to decode media:", e);
-      }
-    }
-
-    const newSentPhones = [...campaign.sentPhones];
-    const newFailedPhones = [...campaign.failedPhones];
     let sentSuccess = false;
+    const currentSentPhones = [...(campaign.sentPhones || [])];
+    const currentFailedPhones = [...(campaign.failedPhones || [])];
 
     try {
-      if (buffer && campaign.mimetype) {
-        // Send document with original name and the message as the caption
-        await this.sendMedia(phone, buffer, campaign.mimetype, campaign.fileName || "document", campaign.message);
+      if (!isPhase2FollowUp) {
+        // Phase 1 send: Text, Media, or Voice Note
+        if (campaign.messageType === "voice" && campaign.voiceBase64) {
+          const buffer = Buffer.from(campaign.voiceBase64.split(",")[1] || campaign.voiceBase64, "base64");
+          await this.sendMedia(targetPhone, buffer, campaign.voiceMimetype || "audio/mp4", "voice_note.mp4", "", true);
+        } else if (campaign.mediaBase64 && campaign.mimetype) {
+          const buffer = Buffer.from(campaign.mediaBase64.split(",")[1] || campaign.mediaBase64, "base64");
+          await this.sendMedia(targetPhone, buffer, campaign.mimetype, campaign.fileName || "document", campaign.message);
+        } else {
+          await this.sendMessage(targetPhone, campaign.message || "Hello! We miss you!");
+        }
+
+        DB.addChatMessage(targetPhone, {
+          id: "rv1-" + Math.random().toString(36).substring(2, 8),
+          role: "assistant",
+          content: campaign.message || (campaign.messageType === "voice" ? "[Voice Note]" : "[Media]"),
+          status: 1,
+        });
+
+        const customer = DB.getCustomer(targetPhone);
+        const existingTags = customer?.tags || [];
+        if (!existingTags.includes("revival-sent")) {
+          DB.updateCustomer(targetPhone, { tags: [...existingTags, "revival-sent"] });
+        }
+
+        progressMap[targetPhone] = {
+          phase: 1,
+          introSentAt: new Date().toISOString(),
+          followUpCount: 0,
+          status: "phase1_done",
+          lastMessageType: campaign.messageType || (campaign.mediaBase64 ? "media" : "text")
+        };
+
+        if (!currentSentPhones.includes(targetPhone)) {
+          currentSentPhones.push(targetPhone);
+        }
+        sentSuccess = true;
       } else {
-        await this.sendMessage(phone, campaign.message);
+        // Phase 2 Follow-up Send
+        const p2 = campaign.phase2Settings!;
+        const currentCount = (progressMap[targetPhone]?.followUpCount || 0) + 1;
+        
+        let msgType = p2.mode;
+        if (p2.mode === "mixed") {
+          const types: ("text" | "media" | "voice")[] = ["text", "media", "voice"];
+          msgType = types[Math.floor(Math.random() * types.length)];
+        }
+
+        let followUpText = (p2.messages && p2.messages[currentCount - 1]) || p2.messages?.[0] || "Hi there, just following up on our previous message!";
+
+        if (msgType === "voice" && p2.voiceBase64) {
+          const buffer = Buffer.from(p2.voiceBase64.split(",")[1] || p2.voiceBase64, "base64");
+          await this.sendMedia(targetPhone, buffer, p2.voiceMimetype || "audio/mp4", "followup_voice.mp4", "", true);
+        } else if (msgType === "media" && p2.mediaBase64) {
+          const buffer = Buffer.from(p2.mediaBase64.split(",")[1] || p2.mediaBase64, "base64");
+          await this.sendMedia(targetPhone, buffer, p2.mediaMimetype || "image/jpeg", "followup_media", followUpText);
+        } else {
+          await this.sendMessage(targetPhone, followUpText);
+        }
+
+        DB.addChatMessage(targetPhone, {
+          id: "rv2-" + Math.random().toString(36).substring(2, 8),
+          role: "assistant",
+          content: followUpText || `[Follow-up ${currentCount}]`,
+          status: 1,
+        });
+
+        const isFinal = currentCount >= p2.maxFollowUps;
+        progressMap[targetPhone] = {
+          ...progressMap[targetPhone],
+          phase: 2,
+          followUpCount: currentCount,
+          nextRunAt: new Date().toISOString(),
+          status: isFinal ? "completed" : "in_followup",
+          lastMessageType: msgType as any
+        };
+        sentSuccess = true;
       }
-
-      // Log to chat DB so it appears in the inbox
-      DB.addChatMessage(phone, {
-        id: "rv-" + Math.random().toString(36).substring(2, 8),
-        role: "assistant",
-        content: campaign.message || "[Media]",
-        status: 1,
-      });
-
-      // Tag the customer as revival-sent
-      const customer = DB.getCustomer(phone);
-      const existingTags = customer?.tags || [];
-      if (!existingTags.includes("revival-sent")) {
-        DB.updateCustomer(phone, { tags: [...existingTags, "revival-sent"] });
-      }
-
-      newSentPhones.push(phone);
-      sentSuccess = true;
-      console.log(`[Revival] ✓ Sent to ${phone}`);
     } catch (err: any) {
-      console.error(`[Revival] ✗ Failed to send to ${phone}:`, err.message);
-      newFailedPhones.push(phone);
+      console.error(`[Revival] Error sending to ${targetPhone}:`, err);
+      if (!isPhase2FollowUp && !currentFailedPhones.includes(targetPhone)) {
+        currentFailedPhones.push(targetPhone);
+      }
     }
 
-    // Update campaign progress
     const updatedSentToday = sentToday + (sentSuccess ? 1 : 0);
-    const allProcessed = newSentPhones.length + newFailedPhones.length >= campaign.targetPhones.length;
 
     DB.updateRevivalCampaign(campaign.id, {
-      sentPhones: newSentPhones,
-      failedPhones: newFailedPhones,
+      sentPhones: currentSentPhones,
+      failedPhones: currentFailedPhones,
       sentToday: updatedSentToday,
       lastSentDate: today,
-      status: allProcessed ? "completed" : "active",
       lastSentAt: new Date().toISOString(),
-      lastBatchSentAt: new Date().toISOString(), // keep legacy field synchronized
+      leadProgress: progressMap,
     });
 
-    console.log(`[Revival] Progress updated. Total: ${newSentPhones.length}/${campaign.targetPhones.length}, Today: ${updatedSentToday}/${campaign.dailyCap}`);
+    console.log(`[Revival] Progress updated. Total: ${currentSentPhones.length}/${campaign.targetPhones.length}, Today: ${updatedSentToday}/${campaign.dailyCap}`);
   }
 
   static startSessionWatchdog() {

@@ -43,10 +43,25 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { message, audience, timeSlotStart, timeSlotEnd, delayMinutes, dailyCap, mediaBase64, mimetype, fileName } = body;
+    const { 
+      name,
+      message, 
+      audience, 
+      timeSlotStart, 
+      timeSlotEnd, 
+      delayMinutes, 
+      dailyCap, 
+      mediaBase64, 
+      mimetype, 
+      fileName,
+      voiceBase64,
+      voiceMimetype,
+      messageType,
+      phase2Settings
+    } = body;
 
-    if (!message && !mediaBase64) {
-      return NextResponse.json({ success: false, error: "Message content is required." }, { status: 400 });
+    if (!message && !mediaBase64 && !voiceBase64) {
+      return NextResponse.json({ success: false, error: "Message or Media/Voice content is required." }, { status: 400 });
     }
 
     // Check no active campaign
@@ -57,19 +72,17 @@ export async function POST(req: Request) {
 
     // Resolve target phones
     let targetPhones: string[] = [];
+    const allCustomers = DB.getAllCustomers().filter(c => !c.isOptedOut);
+
     if (audience === "all") {
-      const customers = DB.getAllCustomers();
       const chatPhones = Object.keys(DB.getAllChats());
-      targetPhones = Array.from(new Set([...customers.map(c => c.phone), ...chatPhones]));
+      targetPhones = Array.from(new Set([...allCustomers.map(c => c.phone), ...chatPhones]));
     } else if (audience === "cold") {
-      const customers = DB.getAllCustomers();
-      targetPhones = customers.filter(c => c.leadStatus === "cold" || c.pipelineStage === "cold").map(c => c.phone);
+      targetPhones = allCustomers.filter(c => c.leadStatus === "cold" || c.pipelineStage === "cold").map(c => c.phone);
     } else if (audience === "hot") {
-      const customers = DB.getAllCustomers();
-      targetPhones = customers.filter(c => c.leadStatus === "hot" || c.pipelineStage === "warm").map(c => c.phone);
+      targetPhones = allCustomers.filter(c => c.leadStatus === "hot" || c.pipelineStage === "warm").map(c => c.phone);
     } else if (audience === "new") {
-      const customers = DB.getAllCustomers();
-      targetPhones = customers.filter(c => !c.pipelineStage || c.pipelineStage === "new").map(c => c.phone);
+      targetPhones = allCustomers.filter(c => !c.pipelineStage || c.pipelineStage === "new").map(c => c.phone);
     } else if (audience === "custom") {
       if (!Array.isArray(body.customPhones) || body.customPhones.length === 0) {
         return NextResponse.json({ success: false, error: "Custom phone list is empty." }, { status: 400 });
@@ -87,8 +100,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Invalid audience type." }, { status: 400 });
     }
 
+    // Filter out any explicitly opted-out phones
+    const optOutSet = new Set(DB.getAllCustomers().filter(c => c.isOptedOut).map(c => c.phone));
+    targetPhones = targetPhones.filter(phone => !optOutSet.has(phone));
+
     if (targetPhones.length === 0) {
-      return NextResponse.json({ success: false, error: "No leads found for the selected audience." }, { status: 400 });
+      return NextResponse.json({ success: false, error: "No non-opted-out leads found for the selected audience." }, { status: 400 });
     }
 
     // Enforce safety floors
@@ -100,6 +117,7 @@ export async function POST(req: Request) {
 
     const campaign: RevivalCampaign = {
       id: "RV-" + Math.random().toString(36).substring(2, 8).toUpperCase(),
+      name: name || `Revival ${new Date().toLocaleDateString()}`,
       message: message || "",
       audience: audience || "all",
       timeSlotStart: safeTimeSlot.start,
@@ -110,12 +128,25 @@ export async function POST(req: Request) {
       targetPhones,
       sentPhones: [],
       failedPhones: [],
+      repliedPhones: [],
+      optedOutPhones: [],
       sentToday: 0,
       lastSentDate: today,
       createdAt: new Date().toISOString(),
       mediaBase64,
       mimetype,
       fileName,
+      voiceBase64,
+      voiceMimetype,
+      messageType: messageType || (voiceBase64 ? "voice" : mediaBase64 ? "media" : "text"),
+      phase2Settings: phase2Settings || {
+        enabled: false,
+        intervalDays: 3,
+        maxFollowUps: 3,
+        mode: "text",
+        messages: ["Checking in to see if you have any questions!"]
+      },
+      leadProgress: {},
       // Legacy fields mapping
       delayMinSeconds: safeDelayMinutes * 60,
       delayMaxSeconds: safeDelayMinutes * 60,
@@ -125,7 +156,7 @@ export async function POST(req: Request) {
 
     DB.addRevivalCampaign(campaign);
 
-    return NextResponse.json({ success: true, campaign: { ...campaign, mediaBase64: undefined } });
+    return NextResponse.json({ success: true, campaign: { ...campaign, mediaBase64: undefined, voiceBase64: undefined } });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

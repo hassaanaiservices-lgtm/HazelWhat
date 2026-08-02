@@ -53,6 +53,22 @@ export default function DashboardPage() {
   const [revivalMediaMime, setRevivalMediaMime] = useState<string | null>(null);
   const [revivalMediaName, setRevivalMediaName] = useState<string | null>(null);
 
+  // Voice Note & Phase 2 Drip state
+  const [revivalMessageType, setRevivalMessageType] = useState<"text" | "media" | "voice">("text");
+  const [revivalVoiceBase64, setRevivalVoiceBase64] = useState<string | null>(null);
+  const [revivalVoiceMimetype, setRevivalVoiceMimetype] = useState<string | null>(null);
+  const [revivalVoiceName, setRevivalVoiceName] = useState<string | null>(null);
+
+  const [p2Enabled, setP2Enabled] = useState(true);
+  const [p2IntervalDays, setP2IntervalDays] = useState(3);
+  const [p2MaxFollowUps, setP2MaxFollowUps] = useState(3);
+  const [p2Mode, setP2Mode] = useState<"text" | "media" | "voice" | "mixed">("mixed");
+  const [p2Message1, setP2Message1] = useState("Hey {Name}! Just checking in to see if you had a chance to review our previous message?");
+  const [p2Message2, setP2Message2] = useState("Hi {Name}, we've got a quick update regarding your request. Would love to help out!");
+  const [p2Message3, setP2Message3] = useState("Final check-in! Let us know if you're still interested or if we should stop sending updates.");
+  
+  const voiceFileInputRef = useRef<HTMLInputElement>(null);
+
   // Overview Period Timeframe Filter state (Weekly / Monthly / Yearly)
   const [periodFilter, setPeriodFilter] = useState<'weekly' | 'monthly' | 'yearly'>('weekly');
 
@@ -814,14 +830,37 @@ export default function DashboardPage() {
     }
   };
 
+  const handleRevivalVoiceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setRevivalVoiceBase64(event.target?.result as string);
+        setRevivalVoiceMimetype(file.type || "audio/mp4");
+        setRevivalVoiceName(file.name);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeRevivalVoice = () => {
+    setRevivalVoiceBase64(null);
+    setRevivalVoiceMimetype(null);
+    setRevivalVoiceName(null);
+    if (voiceFileInputRef.current) {
+      voiceFileInputRef.current.value = "";
+    }
+  };
+
   const launchRevivalCampaign = async () => {
-    if (!revivalMessage.trim() && !revivalMediaBase64) return;
+    if (!revivalMessage.trim() && !revivalMediaBase64 && !revivalVoiceBase64) return;
     setCreatingCampaign(true);
     try {
       const res = await fetch("/api/whatsapp/leads-revival", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          name: `Campaign ${new Date().toLocaleDateString()}`,
           message: revivalMessage,
           audience: revivalAudience,
           customPhones: revivalAudience === "custom" ? customPhones : undefined,
@@ -832,6 +871,20 @@ export default function DashboardPage() {
           mediaBase64: revivalMediaBase64,
           mimetype: revivalMediaMime,
           fileName: revivalMediaName,
+          voiceBase64: revivalVoiceBase64,
+          voiceMimetype: revivalVoiceMimetype,
+          messageType: revivalMessageType,
+          phase2Settings: {
+            enabled: p2Enabled,
+            intervalDays: p2IntervalDays,
+            maxFollowUps: p2MaxFollowUps,
+            mode: p2Mode,
+            messages: [p2Message1, p2Message2, p2Message3].filter(Boolean),
+            mediaBase64: revivalMediaBase64 || undefined,
+            mediaMimetype: revivalMediaMime || undefined,
+            voiceBase64: revivalVoiceBase64 || undefined,
+            voiceMimetype: revivalVoiceMimetype || undefined
+          }
         }),
       });
       const data = await res.json();
@@ -841,6 +894,7 @@ export default function DashboardPage() {
         setCustomPhones([]);
         setIsFileUploaded(false);
         removeRevivalMedia();
+        removeRevivalVoice();
         fetchRevivalCampaigns();
       } else {
         alert(data.error || "Failed to launch revival campaign.");
@@ -1029,6 +1083,46 @@ export default function DashboardPage() {
                 <button className="flex items-center gap-2 bg-white border border-slate-200/80 px-4 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-sm cursor-pointer">
                   <svg className="w-4 h-4 text-purple-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
                   Filter
+                </button>
+              </div>
+            </div>
+
+            {/* Lead Revival Executive Dashboard Banner Widget */}
+            <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 p-6 rounded-3xl text-white shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 border border-purple-500/20">
+              <div className="flex items-center gap-4">
+                <div className="bg-white/10 p-4 rounded-2xl backdrop-blur-md border border-white/10">
+                  <RefreshCw className={`h-8 w-8 text-purple-400 ${activeRevivalCampaign?.status === 'active' ? 'animate-spin' : ''}`} style={{ animationDuration: '4s' }} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-black tracking-tight">WhatsApp Lead Revival CRM</h3>
+                    <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase ${
+                      activeRevivalCampaign?.status === 'active' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 animate-pulse' :
+                      activeRevivalCampaign?.status === 'paused' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                      'bg-white/10 text-purple-200'
+                    }`}>
+                      {activeRevivalCampaign ? `Campaign ${activeRevivalCampaign.status}` : 'Idle'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-purple-200/80 font-medium mt-1">
+                    2-Phase re-engagement engine for WhatsApp leads with voice notes, media & ban-prevention.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 w-full md:w-auto justify-end">
+                <div className="text-right hidden sm:block">
+                  <div className="text-[10px] font-bold text-purple-300 uppercase">Leads Processed</div>
+                  <div className="text-xl font-black text-white">
+                    {activeRevivalCampaign ? `${activeRevivalCampaign.sentPhones.length} / ${activeRevivalCampaign.targetPhones.length}` : '0 Leads'}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveTab('leads-revival')}
+                  className="bg-white hover:bg-purple-50 text-purple-900 font-extrabold px-5 py-3 rounded-2xl text-xs transition shadow-lg flex items-center gap-2 cursor-pointer border border-white/30"
+                >
+                  <RefreshCw className="h-4 w-4 text-purple-600" />
+                  <span>Manage Lead Revival</span>
                 </button>
               </div>
             </div>
@@ -1694,7 +1788,7 @@ export default function DashboardPage() {
             <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">WhatsApp Integration</h2>
             <div className="dash-card p-8 flex flex-col items-center">
               
-              {status === "idle" && (
+              {status === "idle" && waConnectMode === "qr" && (
                 <div className="text-center space-y-6 w-full max-w-sm">
                   <div className="mx-auto bg-purple-50 p-6 rounded-full w-max border border-purple-100">
                     <QrCode className="h-14 w-14 text-purple-400" />
@@ -1702,6 +1796,17 @@ export default function DashboardPage() {
                   <button onClick={startSession} className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold h-12 rounded-xl transition-all shadow-md shadow-purple-500/20 text-xs cursor-pointer">
                     Generate QR Code
                   </button>
+
+                  <div className="w-full pt-4 text-center border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setWaConnectMode('pairing')}
+                      className="text-xs font-extrabold text-purple-600 hover:text-purple-700 hover:underline flex items-center justify-center gap-2 mx-auto transition cursor-pointer"
+                    >
+                      <Smartphone className="h-4 w-4" />
+                      <span>Link with phone number instead</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -2380,41 +2485,202 @@ export default function DashboardPage() {
                     )}
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Media Attachment (Optional)</label>
-                    <div className="flex items-center gap-4">
-                      <input 
-                        type="file" 
-                        className="hidden" 
-                        ref={revivalFileInputRef}
-                        onChange={handleRevivalFileChange}
-                      />
-                      <button 
-                        onClick={() => revivalFileInputRef.current?.click()}
-                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer"
-                      >
-                        <Paperclip className="w-4 h-4" />
-                        Attach File
-                      </button>
-                      {revivalMediaName && (
-                        <div className="flex items-center gap-2 bg-purple-50 text-purple-700 px-4 py-3 rounded-xl text-xs font-extrabold border border-purple-200/60">
-                          <span className="truncate max-w-[200px]">{revivalMediaName}</span>
-                          <button onClick={removeRevivalMedia} className="text-purple-900 hover:text-rose-500 transition cursor-pointer">
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
+                  {/* Phase 1 Message Format Selector & Content */}
+                  <div className="space-y-4 border border-purple-100 p-6 rounded-2xl bg-purple-50/20">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-900 uppercase tracking-wider">Phase 1 Introductory Reachout Format</label>
+                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold border border-slate-200/60">
+                        <button
+                          type="button"
+                          onClick={() => setRevivalMessageType("text")}
+                          className={`px-3 py-1.5 rounded-lg transition-all ${revivalMessageType === "text" ? "bg-purple-600 text-white font-extrabold shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+                        >
+                          Text Message
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRevivalMessageType("media")}
+                          className={`px-3 py-1.5 rounded-lg transition-all ${revivalMessageType === "media" ? "bg-purple-600 text-white font-extrabold shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+                        >
+                          Media Attachment
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRevivalMessageType("voice")}
+                          className={`px-3 py-1.5 rounded-lg transition-all ${revivalMessageType === "voice" ? "bg-purple-600 text-white font-extrabold shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+                        >
+                          Voice Note (PTT)
+                        </button>
+                      </div>
                     </div>
+
+                    {revivalMessageType === "voice" ? (
+                      <div className="space-y-3 bg-white p-5 rounded-xl border border-purple-200">
+                        <label className="text-xs font-bold text-slate-700 block uppercase tracking-wider">Upload WhatsApp Voice Note (Audio File)</label>
+                        <div className="flex items-center gap-4">
+                          <input 
+                            type="file" 
+                            className="hidden" 
+                            ref={voiceFileInputRef}
+                            accept="audio/*,.mp3,.wav,.ogg,.m4a"
+                            onChange={handleRevivalVoiceChange}
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => voiceFileInputRef.current?.click()}
+                            className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-3 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm"
+                          >
+                            <Mic className="w-4 h-4" />
+                            Select Voice Audio File
+                          </button>
+                          {revivalVoiceName && (
+                            <div className="flex items-center gap-2 bg-purple-50 text-purple-700 px-4 py-3 rounded-xl text-xs font-extrabold border border-purple-200">
+                              <span className="truncate max-w-[200px]">🎤 {revivalVoiceName}</span>
+                              <button type="button" onClick={removeRevivalVoice} className="text-purple-900 hover:text-rose-500 transition cursor-pointer">
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-semibold">Audio will be delivered directly as a native WhatsApp Voice Note (PTT) with playback controls.</p>
+                      </div>
+                    ) : (
+                      <>
+                        {revivalMessageType === "media" && (
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Media Attachment</label>
+                            <div className="flex items-center gap-4">
+                              <input 
+                                type="file" 
+                                className="hidden" 
+                                ref={revivalFileInputRef}
+                                onChange={handleRevivalFileChange}
+                              />
+                              <button 
+                                type="button"
+                                onClick={() => revivalFileInputRef.current?.click()}
+                                className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer"
+                              >
+                                <Paperclip className="w-4 h-4" />
+                                Attach Media File
+                              </button>
+                              {revivalMediaName && (
+                                <div className="flex items-center gap-2 bg-purple-50 text-purple-700 px-4 py-3 rounded-xl text-xs font-extrabold border border-purple-200/60">
+                                  <span className="truncate max-w-[200px]">{revivalMediaName}</span>
+                                  <button type="button" onClick={removeRevivalMedia} className="text-purple-900 hover:text-rose-500 transition cursor-pointer">
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Introductory Campaign Message {revivalMessageType === "media" ? '(Optional Caption)' : ''}</label>
+                          <textarea 
+                            value={revivalMessage}
+                            onChange={(e) => setRevivalMessage(e.target.value)}
+                            className="w-full h-32 p-4 text-xs bg-white border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800"
+                            placeholder="Draft your revival introductory message here... (Use {Name}, {Product} for personalization)"
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Campaign Message {revivalMediaBase64 ? '(Optional Caption)' : ''}</label>
-                    <textarea 
-                      value={revivalMessage}
-                      onChange={(e) => setRevivalMessage(e.target.value)}
-                      className="w-full h-32 p-4 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800"
-                      placeholder="Draft your revival message here... (e.g. 'Hey! Just checking if you were still interested in Mehrunisa? We are running low on stock.')"
-                    />
+                  {/* Phase 2 Automated Follow-up Cycle Settings */}
+                  <div className="bg-gradient-to-br from-slate-50 to-purple-50/40 p-6 rounded-2xl border border-purple-100 space-y-6">
+                    <div className="flex items-center justify-between border-b border-purple-100 pb-4">
+                      <div>
+                        <h3 className="text-xs font-extrabold text-slate-900 flex items-center gap-2 uppercase tracking-wider">
+                          <Zap className="w-4 h-4 text-purple-600" /> Phase 2 Automated Follow-Up Cycle
+                        </h3>
+                        <p className="text-[11px] text-slate-500 font-medium mt-0.5">Sends automated follow-up reminders to un-replied leads after N days.</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={p2Enabled}
+                          onChange={(e) => setP2Enabled(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                      </label>
+                    </div>
+
+                    {p2Enabled && (
+                      <div className="space-y-5 animate-in fade-in duration-300">
+                        <div className="grid grid-cols-3 gap-4">
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">Follow-up Interval (Days)</label>
+                            <input
+                              type="number"
+                              min={1}
+                              max={60}
+                              value={p2IntervalDays}
+                              onChange={(e) => setP2IntervalDays(Math.max(1, parseInt(e.target.value) || 1))}
+                              className="w-full px-3 py-2 text-xs bg-white border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">Max Reminders</label>
+                            <input
+                              type="number"
+                              min={1}
+                              max={5}
+                              value={p2MaxFollowUps}
+                              onChange={(e) => setP2MaxFollowUps(Math.max(1, Math.min(5, parseInt(e.target.value) || 1)))}
+                              className="w-full px-3 py-2 text-xs bg-white border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 block mb-1">Content Mode</label>
+                            <select
+                              value={p2Mode}
+                              onChange={(e) => setP2Mode(e.target.value as any)}
+                              className="w-full px-3 py-2 text-xs bg-white border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold text-slate-700"
+                            >
+                              <option value="mixed">Mixed / Random</option>
+                              <option value="text">Text Only</option>
+                              <option value="media">Media Only</option>
+                              <option value="voice">Voice Note Only</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">Follow-up Message Sequences</label>
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              value={p2Message1}
+                              onChange={(e) => setP2Message1(e.target.value)}
+                              placeholder="Follow-up #1 text template..."
+                              className="w-full px-3 py-2.5 text-xs bg-white border border-slate-200/80 rounded-xl font-medium focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none"
+                            />
+                            {p2MaxFollowUps >= 2 && (
+                              <input
+                                type="text"
+                                value={p2Message2}
+                                onChange={(e) => setP2Message2(e.target.value)}
+                                placeholder="Follow-up #2 text template..."
+                                className="w-full px-3 py-2.5 text-xs bg-white border border-slate-200/80 rounded-xl font-medium focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none"
+                              />
+                            )}
+                            {p2MaxFollowUps >= 3 && (
+                              <input
+                                type="text"
+                                value={p2Message3}
+                                onChange={(e) => setP2Message3(e.target.value)}
+                                placeholder="Follow-up #3 text template..."
+                                className="w-full px-3 py-2.5 text-xs bg-white border border-slate-200/80 rounded-xl font-medium focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none"
+                              />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="bg-slate-50/80 p-6 rounded-2xl border border-slate-200/60 space-y-6">
@@ -2499,7 +2765,7 @@ export default function DashboardPage() {
 
                   <button 
                     onClick={launchRevivalCampaign}
-                    disabled={creatingCampaign || (!revivalMessage.trim() && !revivalMediaBase64) || getSelectedLeadsCount() === 0}
+                    disabled={creatingCampaign || (!revivalMessage.trim() && !revivalMediaBase64 && !revivalVoiceBase64) || getSelectedLeadsCount() === 0}
                     className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white font-extrabold h-13 rounded-xl shadow-md shadow-purple-500/20 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
                   >
                     {creatingCampaign ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
