@@ -1965,10 +1965,10 @@ export default function DashboardPage() {
         </div>
       )}
 
-        {/* Agents Tab (Knowledge Base & Config) - DashMark Theme */}
+        {/* Agents Tab - DashMark Theme */}
         {activeTab === 'agents' && (
           <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
-            <div className="p-10 max-w-4xl mx-auto w-full space-y-8">
+            <div className="p-8 md:p-10 max-w-[1400px] mx-auto w-full space-y-8">
             <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
               <Bot className="h-7 w-7 text-purple-600" /> Bot Configuration & Knowledge Base
             </h2>
@@ -2136,7 +2136,7 @@ export default function DashboardPage() {
         {/* Promotions Tab - DashMark Theme */}
         {activeTab === 'promotions' && (
           <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
-            <div className="p-10 max-w-4xl mx-auto w-full space-y-8">
+            <div className="p-8 md:p-10 max-w-[1400px] mx-auto w-full space-y-8">
             <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
               <MessageSquare className="h-7 w-7 text-purple-600" /> Promotions & Broadcasts
             </h2>
@@ -2297,7 +2297,7 @@ export default function DashboardPage() {
         {/* Leads Revival Tab - DashMark Theme */}
         {activeTab === 'leads-revival' && (
           <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
-            <div className="p-10 max-w-4xl mx-auto w-full space-y-8">
+            <div className="p-8 md:p-10 max-w-[1400px] mx-auto w-full space-y-8">
             <div className="flex justify-between items-center mb-2">
               <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
                 <RefreshCw className={`h-7 w-7 text-purple-600 ${activeRevivalCampaign?.status === 'active' ? 'animate-spin' : ''}`} style={{ animationDuration: '4s' }} /> Leads Revival
@@ -2438,58 +2438,18 @@ export default function DashboardPage() {
               </div>
             ) : (
               /* Campaign Creator Form */
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 dash-card p-8 space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Audience Segment</label>
-                    <select 
-                      value={revivalAudience}
-                      onChange={(e) => setRevivalAudience(e.target.value)}
-                      className="w-full p-4 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold text-slate-700"
-                    >
-                      <option value="all">All Contacts (Count: {getSelectedLeadsCount("all")})</option>
-                      <option value="cold">Cold Leads (Inactive / Abandoned) (Count: {getSelectedLeadsCount("cold")})</option>
-                      <option value="hot">Warm & Hot Leads (Active Inquiries) (Count: {getSelectedLeadsCount("hot")})</option>
-                      <option value="new">New Leads (No pipeline stage) (Count: {getSelectedLeadsCount("new")})</option>
-                      <option value="custom">Custom Phone List (Count: {getSelectedLeadsCount("custom")})</option>
-                    </select>
-                    <p className="text-xs text-slate-500 font-medium mt-1">Select the target segment to trigger the revival sequence.</p>
-                    
-                    {revivalAudience === "custom" && (
-                      <div className="space-y-3 mt-4 border border-purple-100 p-5 rounded-2xl bg-purple-50/40">
-                        <label className="text-xs font-bold text-slate-700 block uppercase tracking-wider">Custom Phone Numbers (One per line or comma-separated)</label>
-                        <textarea
-                          value={customPhonesInput}
-                          onChange={(e) => handleCustomPhonesChange(e.target.value)}
-                          placeholder="e.g.&#10;+923228487873&#10;03011660641&#10;+92 300 1234567"
-                          className="w-full h-32 p-4 text-xs bg-white border border-purple-100 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800"
-                        />
-                        <div className="flex items-center justify-between text-xs text-slate-500 font-semibold">
-                          <span>Parsed valid numbers: <strong className="text-purple-600 font-bold">{customPhones.length}</strong></span>
-                          <button 
-                            type="button" 
-                            onClick={() => customPhonesFileInputRef.current?.click()} 
-                            className="text-purple-600 hover:text-purple-700 underline font-bold cursor-pointer focus:outline-none"
-                          >
-                            📎 Upload .txt / .csv / .pdf file
-                          </button>
-                          <input
-                            type="file"
-                            ref={customPhonesFileInputRef}
-                            className="hidden"
-                            accept=".txt,.csv,.pdf"
-                            onChange={handleCustomPhonesFileUploaded}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Left Column (8 cols): Campaign Content & Sequence */}
+                <div className="lg:col-span-8 space-y-6">
+                  
                   {/* Phase 1 Message Format Selector & Content */}
-                  <div className="space-y-4 border border-purple-100 p-6 rounded-2xl bg-purple-50/20">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-slate-900 uppercase tracking-wider">Phase 1 Introductory Reachout Format</label>
-                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold border border-slate-200/60">
+                  <div className="dash-card p-8 space-y-6 border border-purple-100/80 bg-white">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+                      <div>
+                        <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">Phase 1 Introductory Reachout Format</h3>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5">Define your initial revival message or attach promotional files/voices.</p>
+                      </div>
+                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold border border-slate-200/60 self-start sm:self-auto">
                         <button
                           type="button"
                           onClick={() => setRevivalMessageType("text")}
@@ -2515,9 +2475,9 @@ export default function DashboardPage() {
                     </div>
 
                     {revivalMessageType === "voice" ? (
-                      <div className="space-y-3 bg-white p-5 rounded-xl border border-purple-200">
+                      <div className="space-y-4 bg-purple-50/40 p-6 rounded-2xl border border-purple-100">
                         <label className="text-xs font-bold text-slate-700 block uppercase tracking-wider">Upload WhatsApp Voice Note (Audio File)</label>
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-4 flex-wrap">
                           <input 
                             type="file" 
                             className="hidden" 
@@ -2528,64 +2488,68 @@ export default function DashboardPage() {
                           <button 
                             type="button"
                             onClick={() => voiceFileInputRef.current?.click()}
-                            className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-3 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm"
+                            className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-6 py-3.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition cursor-pointer shadow-md shadow-purple-500/20"
                           >
                             <Mic className="w-4 h-4" />
                             Select Voice Audio File
                           </button>
                           {revivalVoiceName && (
-                            <div className="flex items-center gap-2 bg-purple-50 text-purple-700 px-4 py-3 rounded-xl text-xs font-extrabold border border-purple-200">
-                              <span className="truncate max-w-[200px]">🎤 {revivalVoiceName}</span>
+                            <div className="flex items-center gap-2 bg-white text-purple-700 px-4 py-3 rounded-xl text-xs font-extrabold border border-purple-200 shadow-sm">
+                              <span className="truncate max-w-[240px]">🎤 {revivalVoiceName}</span>
                               <button type="button" onClick={removeRevivalVoice} className="text-purple-900 hover:text-rose-500 transition cursor-pointer">
                                 <X className="w-4 h-4" />
                               </button>
                             </div>
                           )}
                         </div>
-                        <p className="text-[10px] text-slate-400 font-semibold">Audio will be delivered directly as a native WhatsApp Voice Note (PTT) with playback controls.</p>
+                        <p className="text-xs text-slate-500 font-medium">Audio will be delivered directly as a native WhatsApp Voice Note (PTT) with instant playback.</p>
                       </div>
                     ) : (
-                      <>
-                        {revivalMessageType === "media" && (
-                          <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Media Attachment</label>
-                            <div className="flex items-center gap-4">
-                              <input 
-                                type="file" 
-                                className="hidden" 
-                                ref={revivalFileInputRef}
-                                onChange={handleRevivalFileChange}
-                              />
-                              <button 
-                                type="button"
-                                onClick={() => revivalFileInputRef.current?.click()}
-                                className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer"
-                              >
-                                <Paperclip className="w-4 h-4" />
-                                Attach Media File
-                              </button>
-                              {revivalMediaName && (
-                                <div className="flex items-center gap-2 bg-purple-50 text-purple-700 px-4 py-3 rounded-xl text-xs font-extrabold border border-purple-200/60">
-                                  <span className="truncate max-w-[200px]">{revivalMediaName}</span>
-                                  <button type="button" onClick={removeRevivalMedia} className="text-purple-900 hover:text-rose-500 transition cursor-pointer">
-                                    <X className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              )}
-                            </div>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                            Introductory Campaign Message {revivalMessageType === "media" ? '(Optional Caption)' : ''}
+                          </label>
+                          
+                          {/* Prominent Direct Attach File Button */}
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="file" 
+                              className="hidden" 
+                              ref={revivalFileInputRef}
+                              onChange={(e) => {
+                                setRevivalMessageType("media");
+                                handleRevivalFileChange(e);
+                              }}
+                            />
+                            <button 
+                              type="button"
+                              onClick={() => revivalFileInputRef.current?.click()}
+                              className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200/80 px-3.5 py-1.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition cursor-pointer"
+                            >
+                              <Paperclip className="w-3.5 h-3.5" />
+                              {revivalMediaName ? "Change File" : "Attach File / Media"}
+                            </button>
+                          </div>
+                        </div>
+
+                        {revivalMediaName && (
+                          <div className="flex items-center gap-2 bg-purple-50 text-purple-700 px-4 py-3 rounded-xl text-xs font-extrabold border border-purple-200/80 w-fit">
+                            <Paperclip className="w-4 h-4 text-purple-600" />
+                            <span className="truncate max-w-[300px]">{revivalMediaName}</span>
+                            <button type="button" onClick={removeRevivalMedia} className="text-purple-900 hover:text-rose-500 transition cursor-pointer ml-2">
+                              <X className="w-4 h-4" />
+                            </button>
                           </div>
                         )}
 
-                        <div className="space-y-2">
-                          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Introductory Campaign Message {revivalMessageType === "media" ? '(Optional Caption)' : ''}</label>
-                          <textarea 
-                            value={revivalMessage}
-                            onChange={(e) => setRevivalMessage(e.target.value)}
-                            className="w-full h-32 p-4 text-xs bg-white border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800"
-                            placeholder="Draft your revival introductory message here... (Use {Name}, {Product} for personalization)"
-                          />
-                        </div>
-                      </>
+                        <textarea 
+                          value={revivalMessage}
+                          onChange={(e) => setRevivalMessage(e.target.value)}
+                          className="w-full h-36 p-4 text-xs bg-slate-50 border border-slate-200/80 rounded-2xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800 leading-relaxed"
+                          placeholder="Draft your revival introductory message here... (Use {Name}, {Product} for personalization)"
+                        />
+                      </div>
                     )}
                   </div>
 
@@ -2773,8 +2737,65 @@ export default function DashboardPage() {
                   </button>
                 </div>
 
-                {/* AI Calculator & Settings Summary Card */}
-                <div className="space-y-6">
+                {/* Right Column (4 cols): Target Audience, Estimator & Launch Action */}
+                <div className="lg:col-span-4 space-y-6">
+                  {/* Audience Segment Selection Card */}
+                  <div className="dash-card p-6 space-y-4 border border-purple-100/80 bg-white">
+                    <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                      <Users className="w-4 h-4 text-purple-600" /> Target Audience Segment
+                    </h3>
+                    <select 
+                      value={revivalAudience}
+                      onChange={(e) => setRevivalAudience(e.target.value)}
+                      className="w-full p-3.5 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold text-slate-700"
+                    >
+                      <option value="all">All Contacts (Count: {getSelectedLeadsCount("all")})</option>
+                      <option value="cold">Cold Leads (Inactive / Abandoned) (Count: {getSelectedLeadsCount("cold")})</option>
+                      <option value="hot">Warm & Hot Leads (Active Inquiries) (Count: {getSelectedLeadsCount("hot")})</option>
+                      <option value="new">New Leads (No pipeline stage) (Count: {getSelectedLeadsCount("new")})</option>
+                      <option value="custom">Custom Phone List (Count: {getSelectedLeadsCount("custom")})</option>
+                    </select>
+                    
+                    {revivalAudience === "custom" && (
+                      <div className="space-y-3 pt-2 border-t border-purple-100">
+                        <label className="text-[11px] font-bold text-slate-700 block uppercase tracking-wider">Custom Phone Numbers</label>
+                        <textarea
+                          value={customPhonesInput}
+                          onChange={(e) => handleCustomPhonesChange(e.target.value)}
+                          placeholder="Paste numbers here...&#10;+923228487873&#10;03011660641"
+                          className="w-full h-28 p-3 text-xs bg-slate-50 border border-purple-100 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800"
+                        />
+                        <div className="flex flex-col gap-2 text-xs text-slate-500 font-semibold">
+                          <span>Parsed valid numbers: <strong className="text-purple-600 font-bold">{customPhones.length}</strong></span>
+                          <button 
+                            type="button" 
+                            onClick={() => customPhonesFileInputRef.current?.click()} 
+                            className="text-purple-600 hover:text-purple-700 underline font-bold cursor-pointer focus:outline-none self-start flex items-center gap-1"
+                          >
+                            <Paperclip className="w-3.5 h-3.5" /> Upload .txt / .csv / .pdf file
+                          </button>
+                          <input
+                            type="file"
+                            ref={customPhonesFileInputRef}
+                            className="hidden"
+                            accept=".txt,.csv,.pdf"
+                            onChange={handleCustomPhonesFileUploaded}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <button 
+                      onClick={launchRevivalCampaign}
+                      disabled={creatingCampaign || (!revivalMessage.trim() && !revivalMediaBase64 && !revivalVoiceBase64) || getSelectedLeadsCount() === 0}
+                      className="w-full mt-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white font-extrabold h-13 rounded-xl shadow-md shadow-purple-500/20 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
+                    >
+                      {creatingCampaign ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                      {creatingCampaign ? "Launching Campaign..." : "Launch Campaign"}
+                    </button>
+                  </div>
+
+                  {/* AI Calculator & Settings Summary Card */}
                   {revivalAudience === "custom" && isFileUploaded && customPhones.length > 0 && (() => {
                     const targetLeads = customPhones.length;
                     const delayMins = revivalDelayMinutes;
@@ -2788,35 +2809,35 @@ export default function DashboardPage() {
                     const daysEst = actualDailySend > 0 ? Math.ceil(targetLeads / actualDailySend) : 0;
 
                     return (
-                      <div className="bg-gradient-to-br from-purple-900 via-indigo-900 to-slate-900 text-white p-8 rounded-3xl shadow-xl space-y-6 border border-purple-500/20">
-                        <h3 className="text-sm font-extrabold flex items-center gap-2 border-b border-white/10 pb-4 tracking-tight">
+                      <div className="bg-gradient-to-br from-purple-900 via-indigo-900 to-slate-900 text-white p-6 rounded-3xl shadow-xl space-y-5 border border-purple-500/20">
+                        <h3 className="text-xs font-extrabold flex items-center gap-2 border-b border-white/10 pb-3 tracking-tight uppercase">
                           <Eye className="w-4 h-4 text-purple-400" /> AI Campaign Estimator
                         </h3>
                         
                         <div className="space-y-4">
                           <div>
-                            <div className="text-[11px] text-purple-200 font-bold uppercase tracking-wider">Target Leads Selected</div>
-                            <div className="text-3xl font-extrabold text-white">{targetLeads}</div>
+                            <div className="text-[10px] text-purple-200 font-bold uppercase tracking-wider">Target Leads Selected</div>
+                            <div className="text-2xl font-extrabold text-white">{targetLeads}</div>
                           </div>
                           
                           <div>
-                            <div className="text-[11px] text-purple-200 font-bold uppercase tracking-wider">Daily Send Speed (Estimated)</div>
-                            <div className="text-base font-bold text-white">{actualDailySend} leads / day</div>
+                            <div className="text-[10px] text-purple-200 font-bold uppercase tracking-wider">Daily Send Speed (Estimated)</div>
+                            <div className="text-sm font-bold text-white">{actualDailySend} leads / day</div>
                             <div className="text-[10px] text-purple-300 font-semibold mt-0.5">
                               Limits: {revivalDailyCap} cap, {activeHours} hrs/day slot
                             </div>
                           </div>
 
                           <div className="pt-2 border-t border-white/10">
-                            <div className="text-[11px] text-purple-200 font-bold uppercase tracking-wider">Estimated Completion</div>
-                            <div className="text-xl font-extrabold text-white flex items-center gap-2 mt-1">
+                            <div className="text-[10px] text-purple-200 font-bold uppercase tracking-wider">Estimated Completion</div>
+                            <div className="text-lg font-extrabold text-white flex items-center gap-2 mt-1">
                               <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
                               {targetLeads === 0 ? "No leads selected" : daysEst <= 1 ? `${Math.round(totalHoursEst * 10) / 10} Hours` : `${daysEst} Days`}
                             </div>
                           </div>
                         </div>
 
-                        <div className="bg-slate-800/50 p-4 rounded-xl text-xs text-slate-300 font-medium leading-relaxed">
+                        <div className="bg-slate-800/50 p-3 rounded-xl text-[11px] text-slate-300 font-medium leading-relaxed">
                           🛡️ <strong>Safety Autopilot:</strong> Messages are sent individually with a gap of {revivalDelayMinutes} minutes. No batch limits are used, providing a steady, natural pacing pattern.
                         </div>
                       </div>
@@ -2879,7 +2900,7 @@ export default function DashboardPage() {
         {/* Orders Tab - DashMark Theme */}
         {activeTab === 'orders' && (
           <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
-            <div className="p-10 max-w-4xl mx-auto w-full space-y-8">
+            <div className="p-8 md:p-10 max-w-[1400px] mx-auto w-full space-y-8">
             <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
               <ShoppingCart className="h-7 w-7 text-purple-600" /> Incoming Orders & Projects
             </h2>
