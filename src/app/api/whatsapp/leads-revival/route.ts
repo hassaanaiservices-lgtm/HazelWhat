@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { DB, RevivalCampaign } from "@/lib/db";
+import { WhatsAppManager } from "@/lib/whatsapp";
 
 // Safety floor constants — these cannot be bypassed
 const SAFETY = {
@@ -62,6 +63,15 @@ export async function POST(req: Request) {
 
     if (!message && !mediaBase64 && !voiceBase64) {
       return NextResponse.json({ success: false, error: "Message or Media/Voice content is required." }, { status: 400 });
+    }
+
+    // Check if WhatsApp is connected
+    const statusInfo = WhatsAppManager.getStatus();
+    if (statusInfo.status !== "connected") {
+      return NextResponse.json({ 
+        success: false, 
+        error: "WhatsApp is NOT connected! Please connect your WhatsApp device from the dashboard (WhatsApp Connect) before launching a campaign." 
+      }, { status: 400 });
     }
 
     // Check no active campaign

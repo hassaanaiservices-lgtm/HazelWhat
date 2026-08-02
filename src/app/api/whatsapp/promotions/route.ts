@@ -25,6 +25,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Missing content or audience" }, { status: 400 });
     }
 
+    const statusInfo = WhatsAppManager.getStatus();
+    if (statusInfo.status !== "connected") {
+      return NextResponse.json({ 
+        success: false, 
+        error: "WhatsApp is NOT connected! Please connect your WhatsApp device from the dashboard before sending a broadcast." 
+      }, { status: 400 });
+    }
+
     let targetPhones: string[] = [];
 
     if (audience === "all") {

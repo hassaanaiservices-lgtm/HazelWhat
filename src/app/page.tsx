@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save, MessageSquare, Settings, Plus, Trash2, Search, MoreVertical, Phone, Video, Paperclip, Smile, Mic, CheckCheck, User, Check, Send, StopCircle, Inbox, Bot, Network, BookOpen, Users, AlertCircle, ShoppingCart, Activity, Eye, EyeOff, RefreshCw, Pause, Play, Smartphone } from "lucide-react";
+import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save, MessageSquare, Settings, Plus, Trash2, Search, MoreVertical, Phone, Video, Paperclip, Smile, Mic, CheckCheck, User, Check, Send, StopCircle, Inbox, Bot, Network, BookOpen, Users, AlertCircle, ShoppingCart, Activity, Eye, EyeOff, RefreshCw, Pause, Play, Smartphone, Square } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
 
 export default function DashboardPage() {
@@ -39,13 +39,13 @@ export default function DashboardPage() {
   const [activeRevivalCampaign, setActiveRevivalCampaign] = useState<any | null>(null);
   const [creatingCampaign, setCreatingCampaign] = useState(false);
 
-  // Form states for Leads Revival
-  const [revivalMessage, setRevivalMessage] = useState("");
+  // Campaign Form State
+  const [revivalMessage, setRevivalMessage] = useState("Hi {Name}! We noticed you had an inquiry with us regarding {Product}. We'd love to help you get started — do you have any questions?");
   const [revivalAudience, setRevivalAudience] = useState("all");
   const [revivalTimeStart, setRevivalTimeStart] = useState("09:00");
   const [revivalTimeEnd, setRevivalTimeEnd] = useState("21:00");
-  const [revivalDelayMinutes, setRevivalDelayMinutes] = useState<number>(5);
-  const [targetDuration, setTargetDuration] = useState<number>(0);
+  const [revivalDelayMinutes, setRevivalDelayMinutes] = useState(5);
+  const [targetDuration, setTargetDuration] = useState(1);
   const [targetDurationUnit, setTargetDurationUnit] = useState<"Days" | "Hours">("Days");
   const [isFileUploaded, setIsFileUploaded] = useState(false);
   const [revivalDailyCap, setRevivalDailyCap] = useState(80);
@@ -58,6 +58,13 @@ export default function DashboardPage() {
   const [revivalVoiceBase64, setRevivalVoiceBase64] = useState<string | null>(null);
   const [revivalVoiceMimetype, setRevivalVoiceMimetype] = useState<string | null>(null);
   const [revivalVoiceName, setRevivalVoiceName] = useState<string | null>(null);
+  const [revivalVoicePreviewUrl, setRevivalVoicePreviewUrl] = useState<string | null>(null);
+
+  // Live mic recording states for Revival Phase 1 & Phase 2
+  const [isRevivalRecording, setIsRevivalRecording] = useState(false);
+  const [revivalRecordTimer, setRevivalRecordTimer] = useState(0);
+  const revivalRecorderRef = useRef<MediaRecorder | null>(null);
+  const revivalTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [p2Enabled, setP2Enabled] = useState(true);
   const [p2IntervalDays, setP2IntervalDays] = useState(3);
@@ -73,6 +80,12 @@ export default function DashboardPage() {
   const [p2VoiceBase64, setP2VoiceBase64] = useState<string | null>(null);
   const [p2VoiceMimetype, setP2VoiceMimetype] = useState<string | null>(null);
   const [p2VoiceName, setP2VoiceName] = useState<string | null>(null);
+  const [p2VoicePreviewUrl, setP2VoicePreviewUrl] = useState<string | null>(null);
+
+  const [isP2Recording, setIsP2Recording] = useState(false);
+  const [p2RecordTimer, setP2RecordTimer] = useState(0);
+  const p2RecorderRef = useRef<MediaRecorder | null>(null);
+  const p2TimerRef = useRef<NodeJS.Timeout | null>(null);
   
   const voiceFileInputRef = useRef<HTMLInputElement>(null);
   const p2FileInputRef = useRef<HTMLInputElement>(null);
@@ -871,6 +884,83 @@ export default function DashboardPage() {
     }
   };
 
+  const startRevivalRecording = async (target: "p1" | "p2") => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      const chunks: BlobPart[] = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        const mimeType = mediaRecorder.mimeType || "audio/webm";
+        const blob = new Blob(chunks, { type: mimeType });
+        const blobUrl = URL.createObjectURL(blob);
+        const reader = new FileReader();
+
+        reader.onloadend = () => {
+          const base64 = reader.result as string;
+          if (target === "p1") {
+            setRevivalVoiceBase64(base64);
+            setRevivalVoiceMimetype(mimeType);
+            setRevivalVoiceName(`Live Voice Note (${revivalRecordTimer}s)`);
+            setRevivalVoicePreviewUrl(blobUrl);
+            setRevivalMessageType("voice");
+            setIsRevivalRecording(false);
+          } else {
+            setP2VoiceBase64(base64);
+            setP2VoiceMimetype(mimeType);
+            setP2VoiceName(`Live Voice Note (${p2RecordTimer}s)`);
+            setP2VoicePreviewUrl(blobUrl);
+            setP2Mode("voice");
+            setIsP2Recording(false);
+          }
+        };
+        reader.readAsDataURL(blob);
+        stream.getTracks().forEach((track) => track.stop());
+      };
+
+      if (target === "p1") {
+        revivalRecorderRef.current = mediaRecorder;
+        setIsRevivalRecording(true);
+        setRevivalRecordTimer(0);
+        if (revivalTimerRef.current) clearInterval(revivalTimerRef.current);
+        revivalTimerRef.current = setInterval(() => {
+          setRevivalRecordTimer((prev) => prev + 1);
+        }, 1000);
+      } else {
+        p2RecorderRef.current = mediaRecorder;
+        setIsP2Recording(true);
+        setP2RecordTimer(0);
+        if (p2TimerRef.current) clearInterval(p2TimerRef.current);
+        p2TimerRef.current = setInterval(() => {
+          setP2RecordTimer((prev) => prev + 1);
+        }, 1000);
+      }
+
+      mediaRecorder.start();
+    } catch (err) {
+      console.error("Microphone access error:", err);
+      alert("Could not access microphone. Please ensure microphone permissions are granted.");
+    }
+  };
+
+  const stopRevivalRecording = (target: "p1" | "p2") => {
+    if (target === "p1") {
+      if (revivalRecorderRef.current && isRevivalRecording) {
+        revivalRecorderRef.current.stop();
+      }
+      if (revivalTimerRef.current) clearInterval(revivalTimerRef.current);
+    } else {
+      if (p2RecorderRef.current && isP2Recording) {
+        p2RecorderRef.current.stop();
+      }
+      if (p2TimerRef.current) clearInterval(p2TimerRef.current);
+    }
+  };
+
   const handleRevivalVoiceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -879,6 +969,7 @@ export default function DashboardPage() {
         setRevivalVoiceBase64(event.target?.result as string);
         setRevivalVoiceMimetype(file.type || "audio/mp4");
         setRevivalVoiceName(file.name);
+        setRevivalMessageType("voice");
       };
       reader.readAsDataURL(file);
     }
@@ -888,6 +979,10 @@ export default function DashboardPage() {
     setRevivalVoiceBase64(null);
     setRevivalVoiceMimetype(null);
     setRevivalVoiceName(null);
+    if (revivalVoicePreviewUrl) {
+      URL.revokeObjectURL(revivalVoicePreviewUrl);
+      setRevivalVoicePreviewUrl(null);
+    }
     if (voiceFileInputRef.current) {
       voiceFileInputRef.current.value = "";
     }
@@ -930,10 +1025,19 @@ export default function DashboardPage() {
     setP2VoiceBase64(null);
     setP2VoiceMimetype(null);
     setP2VoiceName(null);
+    if (p2VoicePreviewUrl) {
+      URL.revokeObjectURL(p2VoicePreviewUrl);
+      setP2VoicePreviewUrl(null);
+    }
     if (p2VoiceFileInputRef.current) p2VoiceFileInputRef.current.value = "";
   };
 
   const launchRevivalCampaign = async () => {
+    if (status !== "connected") {
+      alert("⚠️ WhatsApp is NOT connected!\n\nPlease pair/connect your WhatsApp account first from the dashboard before launching a campaign.");
+      setActiveTab("settings");
+      return;
+    }
     if (!revivalMessage.trim() && !revivalMediaBase64 && !revivalVoiceBase64) return;
     setCreatingCampaign(true);
     try {
@@ -1018,6 +1122,11 @@ export default function DashboardPage() {
   };
 
   const sendPromotion = async () => {
+    if (status !== "connected") {
+      alert("⚠️ WhatsApp is NOT connected!\n\nPlease pair/connect your WhatsApp device first from the dashboard before sending a broadcast.");
+      setActiveTab("settings");
+      return;
+    }
     if (!promoMessage.trim() && !promoMediaBase64) return;
     setSendingPromo(true);
     try {
@@ -2525,18 +2634,158 @@ export default function DashboardPage() {
                 {/* Left Column (8 cols): Campaign Content & Sequence */}
                 <div className="lg:col-span-8 space-y-6">
                   
-                  {/* Phase 1 Introductory Message (Text Only) */}
-                  <div className="dash-card p-8 space-y-4 border border-purple-100/80 bg-white">
-                    <div>
-                      <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">Phase 1 Introductory Reachout Message</h3>
-                      <p className="text-xs text-slate-500 font-medium mt-0.5">Initial text message sent to target leads (e.g. Welcome back Ahmad!).</p>
+                  {/* Phase 1 Introductory Message & Format */}
+                  <div className="dash-card p-8 space-y-5 border border-purple-100/80 bg-white">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                      <div>
+                        <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">Phase 1 Introductory Reachout Message</h3>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5">Initial message sent to target leads (e.g. Welcome back Ahmad!).</p>
+                      </div>
+
+                      {/* Format selector */}
+                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold self-start sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => setRevivalMessageType("text")}
+                          className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${revivalMessageType === "text" ? "bg-purple-600 text-white shadow-sm font-extrabold" : "text-slate-600 hover:text-slate-900"}`}
+                        >
+                          Text Only
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRevivalMessageType("media")}
+                          className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${revivalMessageType === "media" ? "bg-purple-600 text-white shadow-sm font-extrabold" : "text-slate-600 hover:text-slate-900"}`}
+                        >
+                          Media / PDF
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRevivalMessageType("voice")}
+                          className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${revivalMessageType === "voice" ? "bg-purple-600 text-white shadow-sm font-extrabold" : "text-slate-600 hover:text-slate-900"}`}
+                        >
+                          🎤 Voice Note
+                        </button>
+                      </div>
                     </div>
+
                     <textarea 
                       value={revivalMessage}
                       onChange={(e) => setRevivalMessage(e.target.value)}
-                      className="w-full h-32 p-4 text-xs bg-slate-50 border border-slate-200/80 rounded-2xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800 leading-relaxed"
+                      className="w-full h-28 p-4 text-xs bg-slate-50 border border-slate-200/80 rounded-2xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800 leading-relaxed"
                       placeholder="Draft your revival introductory message... (Use {Name}, {Product} for personalization)"
                     />
+
+                    {/* Phase 1 Media Selector */}
+                    {revivalMessageType === "media" && (
+                      <div className="p-4 bg-purple-50/60 rounded-xl border border-purple-100 space-y-3">
+                        <label className="text-xs font-bold text-slate-700 block uppercase tracking-wider">Document / PDF / Image File</label>
+                        <div className="flex items-center gap-4 flex-wrap">
+                          <input 
+                            type="file" 
+                            className="hidden" 
+                            ref={revivalFileInputRef}
+                            onChange={handleRevivalFileChange}
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => revivalFileInputRef.current?.click()}
+                            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm"
+                          >
+                            <Paperclip className="w-4 h-4" />
+                            {revivalMediaName ? "Change File" : "Attach File"}
+                          </button>
+                          {revivalMediaName && (
+                            <div className="flex items-center gap-2 bg-white text-purple-700 px-3.5 py-2 rounded-xl text-xs font-extrabold border border-purple-200 shadow-sm">
+                              <span className="truncate max-w-[220px]">📎 {revivalMediaName}</span>
+                              <button type="button" onClick={removeRevivalMedia} className="text-purple-900 hover:text-rose-500 transition cursor-pointer">
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Phase 1 Voice Note Recorder & Player */}
+                    {revivalMessageType === "voice" && (
+                      <div className="p-5 bg-gradient-to-r from-purple-50 to-indigo-50/60 rounded-2xl border border-purple-200/80 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="text-xs font-extrabold text-purple-900 uppercase tracking-wider flex items-center gap-2">
+                              <Mic className="w-4 h-4 text-purple-600" /> Phase 1 Voice Note Recording
+                            </h4>
+                            <p className="text-[11px] text-slate-500 font-medium mt-0.5">Record a live voice note from your mic or upload an audio file.</p>
+                          </div>
+                          {isRevivalRecording && (
+                            <span className="flex items-center gap-2 text-xs font-black text-rose-600 animate-pulse bg-rose-50 px-3 py-1 rounded-full border border-rose-200">
+                              <span className="w-2.5 h-2.5 rounded-full bg-rose-600" />
+                              Recording... {String(Math.floor(revivalRecordTimer / 60)).padStart(2, "0")}:{String(revivalRecordTimer % 60).padStart(2, "0")}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-3 flex-wrap">
+                          {!isRevivalRecording ? (
+                            <button
+                              type="button"
+                              onClick={() => startRevivalRecording("p1")}
+                              className="bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition cursor-pointer shadow-md shadow-rose-500/20"
+                            >
+                              <Mic className="w-4 h-4" />
+                              {revivalVoiceName ? "Re-Record Voice Note" : "Record Voice Note Now"}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => stopRevivalRecording("p1")}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition cursor-pointer shadow-md shadow-emerald-500/20 animate-pulse"
+                            >
+                              <Square className="w-4 h-4 fill-white" />
+                              Stop & Attach Recording
+                            </button>
+                          )}
+
+                          <input 
+                            type="file" 
+                            className="hidden" 
+                            ref={voiceFileInputRef}
+                            accept="audio/*,.mp3,.wav,.ogg,.m4a"
+                            onChange={handleRevivalVoiceChange}
+                          />
+                          <button 
+                            type="button"
+                            onClick={() => voiceFileInputRef.current?.click()}
+                            className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/80 px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm"
+                          >
+                            <Paperclip className="w-4 h-4 text-slate-500" />
+                            Upload Audio File Instead
+                          </button>
+                        </div>
+
+                        {revivalVoiceName && (
+                          <div className="space-y-3 pt-3 border-t border-purple-200/60">
+                            <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-purple-200 shadow-sm">
+                              <span className="text-xs font-extrabold text-purple-900 truncate max-w-[320px]">
+                                🎤 {revivalVoiceName}
+                              </span>
+                              <button 
+                                type="button" 
+                                onClick={removeRevivalVoice} 
+                                className="text-rose-600 hover:text-rose-700 font-bold text-xs flex items-center gap-1 cursor-pointer"
+                              >
+                                <X className="w-4 h-4" /> Delete
+                              </button>
+                            </div>
+                            {revivalVoicePreviewUrl && (
+                              <div className="bg-white p-2.5 rounded-xl border border-purple-100 shadow-inner">
+                                <p className="text-[10px] font-bold text-purple-700 uppercase tracking-wider mb-1">Audio Playback Preview:</p>
+                                <audio controls src={revivalVoicePreviewUrl} className="w-full h-9 rounded-lg" />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Phase 2 Automated Follow-up Cycle Settings */}
@@ -2598,11 +2847,45 @@ export default function DashboardPage() {
                           </div>
                         </div>
 
-                        {/* Phase 2 Voice Note Selector */}
+                        {/* Phase 2 Voice Note Live Recorder & Player */}
                         {p2Mode === "voice" && (
-                          <div className="p-4 bg-white rounded-xl border border-purple-200 space-y-3">
-                            <label className="text-xs font-bold text-slate-700 block uppercase tracking-wider">Follow-up Voice Note Audio File</label>
-                            <div className="flex items-center gap-4 flex-wrap">
+                          <div className="p-5 bg-gradient-to-r from-purple-50 to-indigo-50/60 rounded-2xl border border-purple-200/80 space-y-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h4 className="text-xs font-extrabold text-purple-900 uppercase tracking-wider flex items-center gap-2">
+                                  <Mic className="w-4 h-4 text-purple-600" /> Phase 2 Follow-up Voice Note
+                                </h4>
+                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">Record a live voice note for follow-up reminders or upload an audio file.</p>
+                              </div>
+                              {isP2Recording && (
+                                <span className="flex items-center gap-2 text-xs font-black text-rose-600 animate-pulse bg-rose-50 px-3 py-1 rounded-full border border-rose-200">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-rose-600" />
+                                  Recording... {String(Math.floor(p2RecordTimer / 60)).padStart(2, "0")}:{String(p2RecordTimer % 60).padStart(2, "0")}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-3 flex-wrap">
+                              {!isP2Recording ? (
+                                <button
+                                  type="button"
+                                  onClick={() => startRevivalRecording("p2")}
+                                  className="bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition cursor-pointer shadow-md shadow-rose-500/20"
+                                >
+                                  <Mic className="w-4 h-4" />
+                                  {p2VoiceName ? "Re-Record Follow-up Voice" : "Record Follow-up Voice Note"}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => stopRevivalRecording("p2")}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition cursor-pointer shadow-md shadow-emerald-500/20 animate-pulse"
+                                >
+                                  <Square className="w-4 h-4 fill-white" />
+                                  Stop & Attach Recording
+                                </button>
+                              )}
+
                               <input 
                                 type="file" 
                                 className="hidden" 
@@ -2613,20 +2896,35 @@ export default function DashboardPage() {
                               <button 
                                 type="button"
                                 onClick={() => p2VoiceFileInputRef.current?.click()}
-                                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm"
+                                className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/80 px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm"
                               >
-                                <Mic className="w-4 h-4" />
-                                {p2VoiceName ? "Change Voice File" : "Select Follow-up Voice Note"}
+                                <Paperclip className="w-4 h-4 text-slate-500" />
+                                Upload Audio File Instead
                               </button>
-                              {p2VoiceName && (
-                                <div className="flex items-center gap-2 bg-purple-50 text-purple-700 px-3.5 py-2 rounded-xl text-xs font-extrabold border border-purple-200">
-                                  <span className="truncate max-w-[220px]">🎤 {p2VoiceName}</span>
-                                  <button type="button" onClick={removeP2Voice} className="text-purple-900 hover:text-rose-500 transition cursor-pointer">
-                                    <X className="w-4 h-4" />
+                            </div>
+
+                            {p2VoiceName && (
+                              <div className="space-y-3 pt-3 border-t border-purple-200/60">
+                                <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-purple-200 shadow-sm">
+                                  <span className="text-xs font-extrabold text-purple-900 truncate max-w-[320px]">
+                                    🎤 {p2VoiceName}
+                                  </span>
+                                  <button 
+                                    type="button" 
+                                    onClick={removeP2Voice} 
+                                    className="text-rose-600 hover:text-rose-700 font-bold text-xs flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <X className="w-4 h-4" /> Delete
                                   </button>
                                 </div>
-                              )}
-                            </div>
+                                {p2VoicePreviewUrl && (
+                                  <div className="bg-white p-2.5 rounded-xl border border-purple-100 shadow-inner">
+                                    <p className="text-[10px] font-bold text-purple-700 uppercase tracking-wider mb-1">Follow-up Audio Playback Preview:</p>
+                                    <audio controls src={p2VoicePreviewUrl} className="w-full h-9 rounded-lg" />
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
 
