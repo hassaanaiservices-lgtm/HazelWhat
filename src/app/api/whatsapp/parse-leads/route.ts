@@ -34,9 +34,9 @@ export async function POST(req: Request) {
     if (mimetype === "application/pdf" || fileName?.endsWith(".pdf")) {
       try {
         const parser = new PDFParse({ data: new Uint8Array(buffer) });
-        // getText() with no args extracts text from all pages automatically
+        // getText() returns an object with .text property containing all pages' text
         const result = await parser.getText();
-        text = (result as any)?.toString() || String(result) || "";
+        text = (result as any)?.text || "";
         console.log(`[parse-leads] PDF "${fileName}" extracted ${text.length} chars. First 500:`, text.substring(0, 500));
         await parser.destroy();
       } catch (e: any) {
