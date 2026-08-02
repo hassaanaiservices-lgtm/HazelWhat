@@ -2493,115 +2493,18 @@ export default function DashboardPage() {
                 {/* Left Column (8 cols): Campaign Content & Sequence */}
                 <div className="lg:col-span-8 space-y-6">
                   
-                  {/* Phase 1 Message Format Selector & Content */}
-                  <div className="dash-card p-8 space-y-6 border border-purple-100/80 bg-white">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-                      <div>
-                        <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">Phase 1 Introductory Reachout Format</h3>
-                        <p className="text-xs text-slate-500 font-medium mt-0.5">Define your initial revival message or attach promotional files/voices.</p>
-                      </div>
-                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold border border-slate-200/60 self-start sm:self-auto">
-                        <button
-                          type="button"
-                          onClick={() => setRevivalMessageType("text")}
-                          className={`px-3 py-1.5 rounded-lg transition-all ${revivalMessageType === "text" ? "bg-purple-600 text-white font-extrabold shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
-                        >
-                          Text Message
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setRevivalMessageType("media")}
-                          className={`px-3 py-1.5 rounded-lg transition-all ${revivalMessageType === "media" ? "bg-purple-600 text-white font-extrabold shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
-                        >
-                          Media Attachment
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setRevivalMessageType("voice")}
-                          className={`px-3 py-1.5 rounded-lg transition-all ${revivalMessageType === "voice" ? "bg-purple-600 text-white font-extrabold shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
-                        >
-                          Voice Note (PTT)
-                        </button>
-                      </div>
+                  {/* Phase 1 Introductory Message (Text Only) */}
+                  <div className="dash-card p-8 space-y-4 border border-purple-100/80 bg-white">
+                    <div>
+                      <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">Phase 1 Introductory Reachout Message</h3>
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">Initial text message sent to target leads (e.g. Welcome back Ahmad!).</p>
                     </div>
-
-                    {revivalMessageType === "voice" ? (
-                      <div className="space-y-4 bg-purple-50/40 p-6 rounded-2xl border border-purple-100">
-                        <label className="text-xs font-bold text-slate-700 block uppercase tracking-wider">Upload WhatsApp Voice Note (Audio File)</label>
-                        <div className="flex items-center gap-4 flex-wrap">
-                          <input 
-                            type="file" 
-                            className="hidden" 
-                            ref={voiceFileInputRef}
-                            accept="audio/*,.mp3,.wav,.ogg,.m4a"
-                            onChange={handleRevivalVoiceChange}
-                          />
-                          <button 
-                            type="button"
-                            onClick={() => voiceFileInputRef.current?.click()}
-                            className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-6 py-3.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition cursor-pointer shadow-md shadow-purple-500/20"
-                          >
-                            <Mic className="w-4 h-4" />
-                            Select Voice Audio File
-                          </button>
-                          {revivalVoiceName && (
-                            <div className="flex items-center gap-2 bg-white text-purple-700 px-4 py-3 rounded-xl text-xs font-extrabold border border-purple-200 shadow-sm">
-                              <span className="truncate max-w-[240px]">🎤 {revivalVoiceName}</span>
-                              <button type="button" onClick={removeRevivalVoice} className="text-purple-900 hover:text-rose-500 transition cursor-pointer">
-                                <X className="w-4 h-4" />
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-500 font-medium">Audio will be delivered directly as a native WhatsApp Voice Note (PTT) with instant playback.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                            Introductory Campaign Message {revivalMessageType === "media" ? '(Optional Caption)' : ''}
-                          </label>
-                          
-                          {/* Prominent Direct Attach File Button */}
-                          <div className="flex items-center gap-2">
-                            <input 
-                              type="file" 
-                              className="hidden" 
-                              ref={revivalFileInputRef}
-                              onChange={(e) => {
-                                setRevivalMessageType("media");
-                                handleRevivalFileChange(e);
-                              }}
-                            />
-                            <button 
-                              type="button"
-                              onClick={() => revivalFileInputRef.current?.click()}
-                              className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200/80 px-3.5 py-1.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition cursor-pointer"
-                            >
-                              <Paperclip className="w-3.5 h-3.5" />
-                              {revivalMediaName ? "Change File" : "Attach File / Media"}
-                            </button>
-                          </div>
-                        </div>
-
-                        {revivalMediaName && (
-                          <div className="flex items-center gap-2 bg-purple-50 text-purple-700 px-4 py-3 rounded-xl text-xs font-extrabold border border-purple-200/80 w-fit">
-                            <Paperclip className="w-4 h-4 text-purple-600" />
-                            <span className="truncate max-w-[300px]">{revivalMediaName}</span>
-                            <button type="button" onClick={removeRevivalMedia} className="text-purple-900 hover:text-rose-500 transition cursor-pointer ml-2">
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
-
-                        <textarea 
-                          value={revivalMessage}
-                          onChange={(e) => setRevivalMessage(e.target.value)}
-                          className="w-full h-36 p-4 text-xs bg-slate-50 border border-slate-200/80 rounded-2xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800 leading-relaxed"
-                          placeholder="Draft your revival introductory message here... (Use {Name}, {Product} for personalization)"
-                        />
-                      </div>
-                    )}
+                    <textarea 
+                      value={revivalMessage}
+                      onChange={(e) => setRevivalMessage(e.target.value)}
+                      className="w-full h-32 p-4 text-xs bg-slate-50 border border-slate-200/80 rounded-2xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800 leading-relaxed"
+                      placeholder="Draft your revival introductory message... (Use {Name}, {Product} for personalization)"
+                    />
                   </div>
 
                   {/* Phase 2 Automated Follow-up Cycle Settings */}
