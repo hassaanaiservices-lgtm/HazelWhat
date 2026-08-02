@@ -33,7 +33,7 @@ export default function DashboardPage() {
   const [isScraping, setIsScraping] = useState(false);
 
   const [activeTab, setActiveTab] = useState<"dashboard" | "inbox" | "agents" | "channels" | "promotions" | "orders" | "knowledge" | "contacts" | "analytics" | "settings" | "leads-revival">("dashboard");
-  const [inboxFilter, setInboxFilter] = useState<"all" | "normal" | "revival">("all");
+  const [inboxFilter, setInboxFilter] = useState<"all" | "normal" | "groups" | "revival">("all");
   const [inboxSearch, setInboxSearch] = useState<string>("");
   const [revivalCampaigns, setRevivalCampaigns] = useState<any[]>([]);
   const [activeRevivalCampaign, setActiveRevivalCampaign] = useState<any | null>(null);
@@ -284,10 +284,29 @@ export default function DashboardPage() {
   const promoFileInputRef = useRef<HTMLInputElement>(null);
   const revivalFileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const [userScrolledUp, setUserScrolledUp] = useState(false);
+
+  const handleChatScroll = () => {
+    if (!chatContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+    // If distance from bottom > 120px, user is reading older history
+    const isUp = scrollHeight - scrollTop - clientHeight > 120;
+    setUserScrolledUp(isUp);
+  };
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView();
-  }, [chats, selectedChat, activeTab]);
+    // When changing selected chat, reset scroll state and scroll to bottom
+    setUserScrolledUp(false);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'instant' as any });
+  }, [selectedChat]);
+
+  useEffect(() => {
+    // Only auto-scroll to bottom on chat updates if user is not reading history
+    if (!userScrolledUp) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chats]);
 
   useEffect(() => {
     fetchSession();
@@ -483,6 +502,21 @@ export default function DashboardPage() {
           console.error("Polling error", e);
         }
       }, 750);
+    } else if (status === "connected") {
+      pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch("/api/whatsapp/session");
+          const data = await res.json();
+          if (data.success && data.session) {
+            setSessionData(data.session);
+            if (data.session.status === "disconnected") {
+              setStatus("idle");
+            }
+          }
+        } catch (e) {
+          console.warn("Session health check error", e);
+        }
+      }, 10000);
     }
 
     return () => clearInterval(pollInterval);
@@ -881,373 +915,540 @@ export default function DashboardPage() {
   return (
     <div className="h-screen w-full flex bg-[#f5f6f8] font-sans overflow-hidden text-slate-800">
       
-      {/* 1. Left Sidebar */}
-      <div className="w-[260px] flex-shrink-0 bg-white border-r border-slate-100 flex flex-col py-6 overflow-y-auto z-20 shadow-[4px_0_24px_rgba(0,0,0,0.01)]">
-        <div className="px-6 flex items-center gap-3 font-bold text-2xl mb-10 text-slate-900 tracking-tight">
-          <div className="bg-slate-900 p-1.5 rounded-lg shadow-sm">
-            <Zap className="text-white h-6 w-6" />
+      {/* 1. Left Sidebar - DashMark Theme */}
+      <div className="w-[260px] flex-shrink-0 bg-white border-r border-slate-200/80 flex flex-col py-6 overflow-y-auto z-20 shadow-[4px_0_24px_rgba(124,58,237,0.02)] custom-scrollbar">
+        
+        {/* Brand Header */}
+        <div className="px-6 flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3 font-extrabold text-xl text-slate-900 tracking-tight">
+            <div className="bg-gradient-to-tr from-purple-600 via-purple-500 to-indigo-500 p-2 rounded-xl text-white shadow-md shadow-purple-500/20">
+              <Zap className="h-5 w-5 fill-white text-white" />
+            </div>
+            <span>DashMark</span>
           </div>
-          HazelWhat
-        </div>
-
-        <div className="px-6 mb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Workspace</div>
-        <div className="flex flex-col gap-1 px-4 mb-8">
-          <button onClick={() => setActiveTab('dashboard')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'dashboard' ? 'bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <Zap className={`h-[18px] w-[18px] ${activeTab === 'dashboard' ? 'text-emerald-500' : 'text-slate-400'}`} /> Dashboard
-          </button>
-          <button onClick={() => setActiveTab('inbox')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'inbox' ? 'bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <Inbox className={`h-[18px] w-[18px] ${activeTab === 'inbox' ? 'text-emerald-500' : 'text-slate-400'}`} /> Inbox
-          </button>
-          <button onClick={() => setActiveTab('orders')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'orders' ? 'bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <ShoppingCart className={`h-[18px] w-[18px] ${activeTab === 'orders' ? 'text-emerald-500' : 'text-slate-400'}`} /> Orders
-          </button>
-          <button onClick={() => setActiveTab('contacts')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'contacts' ? 'bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <Users className={`h-[18px] w-[18px] ${activeTab === 'contacts' ? 'text-emerald-500' : 'text-slate-400'}`} /> Contacts
+          <button className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg border border-slate-200/60 hover:bg-slate-50 transition cursor-pointer">
+            <div className="w-4 h-4 border-2 border-slate-400 rounded-sm"></div>
           </button>
         </div>
 
-        <div className="px-6 mb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Intelligence</div>
-        <div className="flex flex-col gap-1 px-4 mb-8">
-          <button onClick={() => setActiveTab('agents')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'agents' ? 'bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <BookOpen className={`h-[18px] w-[18px] ${activeTab === 'agents' ? 'text-emerald-500' : 'text-slate-400'}`} /> Knowledge Base
+        {/* Sidebar Search Bar */}
+        <div className="px-5 mb-6">
+          <div className="bg-slate-100/70 rounded-xl px-3 py-2 flex items-center gap-2.5 border border-slate-200/50 focus-within:ring-2 focus-within:ring-purple-500/20 focus-within:border-purple-500 transition-all">
+            <Search className="h-4 w-4 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Search" 
+              className="bg-transparent border-none outline-none text-xs font-semibold text-slate-700 w-full placeholder:text-slate-400" 
+            />
+          </div>
+        </div>
+
+        {/* Main Section */}
+        <div className="px-6 mb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Main</div>
+        <div className="flex flex-col gap-1 px-4 mb-6">
+          <button onClick={() => setActiveTab('dashboard')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'dashboard' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+            <Activity className={`h-4 w-4 ${activeTab === 'dashboard' ? 'text-purple-600' : 'text-slate-400'}`} /> Overview
           </button>
-          <button onClick={() => setActiveTab('channels')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'channels' ? 'bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <Network className={`h-[18px] w-[18px] ${activeTab === 'channels' ? 'text-emerald-500' : 'text-slate-400'}`} /> Channels
+          <button onClick={() => setActiveTab('inbox')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'inbox' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+            <Inbox className={`h-4 w-4 ${activeTab === 'inbox' ? 'text-purple-600' : 'text-slate-400'}`} /> Chats & Inbox
+          </button>
+          <button onClick={() => setActiveTab('orders')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'orders' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+            <ShoppingCart className={`h-4 w-4 ${activeTab === 'orders' ? 'text-purple-600' : 'text-slate-400'}`} /> Projects & Orders
+          </button>
+          <button onClick={() => setActiveTab('contacts')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'contacts' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+            <Users className={`h-4 w-4 ${activeTab === 'contacts' ? 'text-purple-600' : 'text-slate-400'}`} /> Contacts
           </button>
         </div>
 
-        <div className="px-6 mb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Growth</div>
-        <div className="flex flex-col gap-1 px-4 mb-8">
-          <button onClick={() => setActiveTab('promotions')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'promotions' ? 'bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <MessageSquare className={`h-[18px] w-[18px] ${activeTab === 'promotions' ? 'text-emerald-500' : 'text-slate-400'}`} /> Promotions
+        {/* Team Section */}
+        <div className="px-6 mb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Team</div>
+        <div className="flex flex-col gap-2 px-5 mb-6">
+          <div className="flex items-center gap-2.5 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg cursor-pointer">
+            <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=100" className="w-5 h-5 rounded-full object-cover" alt="Faiza Lira" />
+            <span>Faiza Lira <span className="text-slate-400 text-[10px]">(You)</span></span>
+          </div>
+          <div className="flex items-center gap-2.5 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg cursor-pointer">
+            <img src="https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=100" className="w-5 h-5 rounded-full object-cover" alt="Dianne Russell" />
+            <span>Dianne Russell</span>
+          </div>
+          <div className="flex items-center gap-2.5 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg cursor-pointer">
+            <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=100" className="w-5 h-5 rounded-full object-cover" alt="Ralph Edwards" />
+            <span>Ralph Edwards</span>
+          </div>
+          <div className="flex items-center gap-2.5 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg cursor-pointer">
+            <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=100" className="w-5 h-5 rounded-full object-cover" alt="Annette Black" />
+            <span>Annette Black</span>
+          </div>
+        </div>
+
+        {/* Intelligence & Growth */}
+        <div className="px-6 mb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Growth</div>
+        <div className="flex flex-col gap-1 px-4 mb-6">
+          <button onClick={() => setActiveTab('agents')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'agents' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+            <BookOpen className={`h-4 w-4 ${activeTab === 'agents' ? 'text-purple-600' : 'text-slate-400'}`} /> Knowledge Base
           </button>
-          <button onClick={() => setActiveTab('leads-revival')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'leads-revival' ? 'bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <RefreshCw className={`h-[18px] w-[18px] ${activeTab === 'leads-revival' ? 'text-emerald-500' : 'text-slate-400'}`} /> Leads Revival
+          <button onClick={() => setActiveTab('channels')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'channels' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+            <Network className={`h-4 w-4 ${activeTab === 'channels' ? 'text-purple-600' : 'text-slate-400'}`} /> Channels
           </button>
-          <button onClick={() => setActiveTab('analytics')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'analytics' ? 'bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <Activity className={`h-[18px] w-[18px] ${activeTab === 'analytics' ? 'text-emerald-500' : 'text-slate-400'}`} /> Analytics
+          <button onClick={() => setActiveTab('promotions')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'promotions' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+            <MessageSquare className={`h-4 w-4 ${activeTab === 'promotions' ? 'text-purple-600' : 'text-slate-400'}`} /> Promotions
+          </button>
+          <button onClick={() => setActiveTab('leads-revival')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'leads-revival' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+            <RefreshCw className={`h-4 w-4 ${activeTab === 'leads-revival' ? 'text-purple-600' : 'text-slate-400'}`} /> Leads Revival
+          </button>
+          <button onClick={() => setActiveTab('analytics')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'analytics' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+            <Activity className={`h-4 w-4 ${activeTab === 'analytics' ? 'text-purple-600' : 'text-slate-400'}`} /> Analytics
+          </button>
+          <button onClick={() => setActiveTab('settings')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'settings' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+            <Settings className={`h-4 w-4 ${activeTab === 'settings' ? 'text-purple-600' : 'text-slate-400'}`} /> Settings
           </button>
         </div>
 
-        <div className="px-6 mb-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Account</div>
-        <div className="flex flex-col gap-1 px-4 mb-8">
-          <button onClick={() => setActiveTab('settings')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === 'settings' ? 'bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <Settings className={`h-[18px] w-[18px] ${activeTab === 'settings' ? 'text-emerald-500' : 'text-slate-400'}`} /> Settings
-          </button>
+        {/* Upgrade Card Banner */}
+        <div className="mx-4 mb-4 p-4 rounded-2xl bg-gradient-to-br from-purple-100/80 via-indigo-50/60 to-pink-50/70 border border-purple-100/80 shadow-sm relative overflow-hidden group">
+          <button className="absolute top-2 right-2 text-slate-400 hover:text-slate-600 text-xs">✕</button>
+          <div className="text-2xl mb-2">👑</div>
+          <h4 className="text-xs font-extrabold text-slate-900 mb-1">Get Upto 66% off</h4>
+          <p className="text-[11px] text-slate-500 font-medium mb-3 leading-snug">Manage freelance clients professionally.</p>
+          <button className="text-xs font-extrabold text-purple-600 hover:text-purple-700 flex items-center gap-1 cursor-pointer">Start now &gt;</button>
         </div>
 
-        <div className="mt-auto px-6">
-          <div className="flex items-center gap-3 pt-6 border-t border-slate-100">
-            <div className="h-10 w-10 bg-gradient-to-tr from-emerald-500 to-teal-400 rounded-full flex items-center justify-center text-white font-bold shadow-md relative">
-              H
-              <div className="absolute bottom-0 right-0 h-3 w-3 bg-red-500 rounded-full border-2 border-white flex items-center justify-center text-[8px]">2</div>
+        {/* Bottom Profile Footer */}
+        <div className="mt-auto px-5 pt-3 border-t border-slate-100">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=100" alt="Avatar" className="h-9 w-9 rounded-full object-cover border border-purple-200 shadow-sm" />
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-slate-900">Faiza Lira</span>
+                <span className="text-[10px] text-slate-400 font-medium">lira@gmail.com</span>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <h4 className="text-sm font-bold text-slate-900 truncate">Hassaan</h4>
-              <p className="text-xs text-emerald-500 font-medium">Online</p>
-            </div>
+            <button className="p-2 rounded-xl text-rose-500 hover:bg-rose-50 transition-colors cursor-pointer">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+            </button>
           </div>
         </div>
       </div>
 
 
       {/* 2. Middle Column (Chat List) */}
-      {/* Dashboard Tab */}
+      {/* Dashboard Tab - DashMark Theme */}
       {activeTab === 'dashboard' && (
-        <div className="flex-1 h-full overflow-y-auto bg-slate-50/50">
-          <div className="p-8 max-w-[1200px] mx-auto w-full">
-          <div className="flex justify-between items-center mb-8">
-            <h2 className="text-[22px] font-bold text-slate-900">
-              Overview
-            </h2>
-            <div className="flex items-center gap-4">
-              <div className="bg-slate-100/70 p-1 rounded-lg flex items-center text-sm font-semibold">
-                <button 
-                  onClick={() => setPeriodFilter('weekly')}
-                  className={`px-4 py-1.5 rounded-md transition-all cursor-pointer ${
-                    periodFilter === 'weekly' ? 'bg-white text-slate-800 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  Weekly
+        <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
+          <div className="p-8 max-w-[1300px] mx-auto w-full space-y-6">
+            
+            {/* Header Bar */}
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Overview</h2>
+              <div className="flex items-center gap-3">
+                <button className="p-2.5 bg-white border border-slate-200/80 rounded-xl hover:bg-slate-50 transition shadow-sm relative text-slate-600 cursor-pointer">
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full"></span>
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                 </button>
-                <button 
-                  onClick={() => setPeriodFilter('monthly')}
-                  className={`px-4 py-1.5 rounded-md transition-all cursor-pointer ${
-                    periodFilter === 'monthly' ? 'bg-white text-slate-800 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  Monthly
-                </button>
-                <button 
-                  onClick={() => setPeriodFilter('yearly')}
-                  className={`px-4 py-1.5 rounded-md transition-all cursor-pointer ${
-                    periodFilter === 'yearly' ? 'bg-white text-slate-800 shadow-sm font-bold' : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  Yearly
+                <button className="p-2.5 bg-white border border-slate-200/80 rounded-xl hover:bg-slate-50 transition shadow-sm text-slate-600 cursor-pointer">
+                  <MoreVertical className="w-4 h-4" />
                 </button>
               </div>
-              <button className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-sm font-bold text-slate-700 hover:bg-slate-50 shadow-sm">
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
-                Filter
-              </button>
             </div>
-          </div>
-          
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)] p-6 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6 md:gap-0">
-            <div className="flex-1 md:border-r border-slate-100 md:pr-6">
-              <div className="text-slate-500 font-medium text-[13px] mb-2">Total Revenue ({periodFilter})</div>
-              <div className="flex items-end gap-3">
-                <div className="text-3xl font-extrabold text-slate-900">
-                  {periodFilter === 'weekly' ? '$200,45.87' : periodFilter === 'monthly' ? '$801,83.48' : '$9,622,01.76'}
-                </div>
-                <div className="bg-emerald-50 text-emerald-600 text-xs font-bold px-2 py-0.5 rounded-full mb-1">+2.5%</div>
-              </div>
-            </div>
-            
-            <div className="flex-1 md:border-r border-slate-100 md:px-6">
-              <div className="text-slate-500 font-medium text-[13px] mb-2">Active Users</div>
-              <div className="flex items-end gap-3">
-                <div className="text-3xl font-extrabold text-slate-900">
-                  {periodFilter === 'weekly' ? '9,528' : periodFilter === 'monthly' ? '38,112' : '457,344'}
-                </div>
-                <div className="bg-emerald-50 text-emerald-600 text-xs font-bold px-2 py-0.5 rounded-full mb-1">+9.5%</div>
-              </div>
-            </div>
-            
-            <div className="flex-1 md:border-r border-slate-100 md:px-6">
-              <div className="text-slate-500 font-medium text-[13px] mb-2">Customer Lifetime Value</div>
-              <div className="flex items-end gap-3">
-                <div className="text-3xl font-extrabold text-slate-900">
-                  {periodFilter === 'weekly' ? '$849.54' : periodFilter === 'monthly' ? '$3,398.16' : '$40,777.92'}
-                </div>
-                <div className="bg-red-50 text-red-500 text-xs font-bold px-2 py-0.5 rounded-full mb-1">-1.6%</div>
-              </div>
-            </div>
-            
-            <div className="flex-1 md:pl-6">
-              <div className="text-slate-500 font-medium text-[13px] mb-2">Customer Acquisition Cost</div>
-              <div className="flex items-end gap-3">
-                <div className="text-3xl font-extrabold text-slate-900">
-                  {periodFilter === 'weekly' ? '9,528' : periodFilter === 'monthly' ? '38,112' : '457,344'}
-                </div>
-                <div className="bg-emerald-50 text-emerald-600 text-xs font-bold px-2 py-0.5 rounded-full mb-1">+3.5%</div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-            <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 h-fit">
-              <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col justify-between h-[180px]">
-                <div>
-                  <div className="flex justify-between items-start">
-                    <h3 className="font-bold text-slate-900">Churn Rate</h3>
-                    <MoreVertical className="w-4 h-4 text-slate-400" />
-                  </div>
-                  <div className="text-xs font-medium text-slate-500 mt-1">Downgrade to Free plan</div>
-                </div>
-                <div className="flex items-end justify-between">
-                  <div>
-                    <div className="text-2xl font-extrabold text-slate-900">4.26%</div>
-                    <div className="text-[11px] font-semibold text-slate-500 mt-1"><span className="text-red-500">-0.31%</span> than last Week</div>
-                  </div>
-                  <div className="w-24 h-12 flex items-end">
-                    <svg viewBox="0 0 100 40" className="w-full h-full stroke-red-500 fill-red-500/10" strokeWidth="2"><path d="M0 30 Q 15 25, 25 35 T 40 10 T 50 25 T 60 15 T 75 35 T 100 30 L 100 40 L 0 40 Z"/></svg>
-                  </div>
-                </div>
-              </div>
 
-              <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)] flex flex-col justify-between h-[180px]">
-                <div>
-                  <div className="flex justify-between items-start">
-                    <h3 className="font-bold text-slate-900">User Growth</h3>
-                    <MoreVertical className="w-4 h-4 text-slate-400" />
-                  </div>
-                  <div className="text-xs font-medium text-slate-500 mt-1">New signups website + mobile</div>
-                </div>
-                <div className="flex items-end justify-between">
-                  <div>
-                    <div className="text-2xl font-extrabold text-slate-900">3,768</div>
-                    <div className="text-[11px] font-semibold text-slate-500 mt-1"><span className="text-emerald-500">+3.85%</span> than last Week</div>
-                  </div>
-                  <div className="w-24 h-12 flex items-end">
-                    <svg viewBox="0 0 100 40" className="w-full h-full stroke-emerald-500 fill-emerald-500/10" strokeWidth="2"><path d="M0 35 Q 15 25, 25 30 T 40 20 T 50 25 T 60 20 T 75 10 T 100 5 L 100 40 L 0 40 Z"/></svg>
+            {/* Row 1: Total Revenue & All Leads Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              
+              {/* Card 1: Total Revenue */}
+              <div className="dash-card p-6 flex flex-col justify-between h-[280px]">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-slate-900 text-sm">Total Revenue</h3>
+                  <div className="flex items-center gap-2">
+                    <button className="text-slate-400 hover:text-slate-600 text-xs flex items-center gap-1 border border-slate-200/60 rounded-lg px-2 py-1">
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+                    </button>
+                    <button className="text-slate-400 hover:text-slate-600"><MoreVertical className="w-4 h-4" /></button>
                   </div>
                 </div>
-              </div>
 
-              <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)] md:col-span-2">
-                <div className="flex justify-between items-start mb-6">
-                  <h3 className="font-bold text-slate-900">Conversion Funnel</h3>
-                  <MoreVertical className="w-4 h-4 text-slate-400" />
-                </div>
-                <div className="flex items-center gap-4 mb-8 text-xs font-semibold text-slate-600 flex-wrap">
-                  <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-600"></div> Ad Impression</div>
-                  <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500"></div> Website Session</div>
-                  <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-400"></div> App Download</div>
-                  <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-200"></div> New Users</div>
-                </div>
-                
-                <div className="flex items-end justify-between h-40 pt-4 gap-2 md:gap-4 pb-2 border-l border-b border-slate-200 px-4 relative ml-4">
-                  <div className="absolute left-[-24px] top-0 text-[10px] text-slate-400 h-full flex flex-col justify-between pb-2 font-medium">
-                    <span>120</span><span>100</span><span>80</span><span>60</span><span>40</span>
-                  </div>
+                {/* Vertical Bar Chart (Glowing Violet/Purple) */}
+                <div className="flex items-end justify-between h-32 px-4 pt-4 gap-3">
                   {[
-                    [20, 20, 20, 15], [30, 25, 20, 15], [25, 20, 20, 20], [30, 20, 25, 10], 
-                    [20, 15, 15, 15], [25, 20, 20, 15], [30, 25, 20, 20], [30, 25, 25, 15]
-                  ].map((heights, i) => (
-                    <div key={i} className="flex-1 flex flex-col justify-end w-4 md:w-8 max-w-[32px] rounded-t-lg overflow-hidden gap-[1px]">
-                      <div className="w-full bg-blue-200 rounded-t-sm" style={{height: `${heights[3]}%`}}></div>
-                      <div className="w-full bg-blue-400" style={{height: `${heights[2]}%`}}></div>
-                      <div className="w-full bg-blue-500" style={{height: `${heights[1]}%`}}></div>
-                      <div className="w-full bg-blue-600 rounded-b-sm" style={{height: `${heights[0]}%`}}></div>
+                    { month: 'Jan', h: '45%', active: false },
+                    { month: 'Feb', h: '60%', active: false },
+                    { month: 'Mar', h: '40%', active: false },
+                    { month: 'Apr', h: '95%', active: true },
+                    { month: 'May', h: '55%', active: false },
+                    { month: 'Jun', h: '70%', active: false }
+                  ].map((bar, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
+                      <div className="w-full max-w-[28px] rounded-full overflow-hidden bg-slate-100/80 flex items-end h-full">
+                        <div 
+                          className={`w-full rounded-full transition-all duration-500 ${
+                            bar.active 
+                              ? 'bg-gradient-to-t from-purple-700 via-indigo-600 to-purple-400 shadow-md shadow-purple-500/30' 
+                              : 'bg-gradient-to-t from-purple-200/80 to-indigo-300/80 opacity-70 hover:opacity-100'
+                          }`} 
+                          style={{ height: bar.h }}
+                        ></div>
+                      </div>
+                      <span className="text-[11px] font-semibold text-slate-400">{bar.month}</span>
                     </div>
                   ))}
                 </div>
+
+                {/* Bottom Total Stat */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] font-medium text-slate-400 block">April 2025 Total</span>
+                    <span className="text-xl font-extrabold text-slate-900">$ 23,000.00</span>
+                  </div>
+                  <span className="bg-purple-50 text-purple-700 border border-purple-200/60 text-xs font-bold px-2.5 py-1 rounded-lg flex items-center gap-1">
+                    45% ↑
+                  </span>
+                </div>
+              </div>
+
+              {/* Card 2: All Leads Chart */}
+              <div className="dash-card p-6 flex flex-col justify-between h-[280px]">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-slate-900 text-sm">All leads</h3>
+                  <div className="flex items-center gap-2">
+                    <button className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg border border-slate-200/60 text-xs">📅</button>
+                    <button className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg border border-slate-200/60 text-xs">📋</button>
+                  </div>
+                </div>
+
+                {/* Dual Curve Chart with Hover Tooltip */}
+                <div className="relative h-32 w-full my-2">
+                  {/* Floating Tooltip matching DashMark */}
+                  <div className="absolute top-1 right-[30%] bg-white/95 backdrop-blur border border-purple-100 rounded-xl p-2 shadow-lg shadow-purple-500/10 text-[11px] font-semibold z-10 space-y-1">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-slate-500">Leads</span>
+                      <span className="font-bold text-purple-700">43 <span className="text-[9px]">12% ↑</span></span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4 border-t border-slate-100 pt-1">
+                      <span className="text-slate-500">Target</span>
+                      <span className="font-bold text-amber-600">123 <span className="text-[9px]">50% ◐</span></span>
+                    </div>
+                  </div>
+
+                  <svg viewBox="0 0 400 100" className="w-full h-full overflow-visible">
+                    {/* Background Grid Lines */}
+                    <line x1="0" y1="20" x2="400" y2="20" stroke="#f1f5f9" strokeDasharray="4 4" />
+                    <line x1="0" y1="60" x2="400" y2="60" stroke="#f1f5f9" strokeDasharray="4 4" />
+                    
+                    {/* Purple Line (Leads) */}
+                    <path d="M0,25 Q50,15 100,55 T200,80 T300,20 T400,25" fill="none" stroke="#6366f1" strokeWidth="3" strokeLinecap="round" />
+                    {/* Orange Line (Target) */}
+                    <path d="M0,60 Q50,55 100,75 T200,45 T300,70 T400,55" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" />
+                  </svg>
+
+                  <div className="flex justify-between text-[10px] font-semibold text-slate-400 pt-1">
+                    <span>Sep 12</span><span>Sep 13</span><span>Sep 14</span><span>Sep 15</span><span>Sep 16</span><span>Sep 17</span><span>Sep 18</span>
+                  </div>
+                </div>
+
+                {/* Bottom Stat Row */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-6">
+                    <div>
+                      <span className="text-[11px] font-medium text-slate-400 block">Total Leads</span>
+                      <span className="text-lg font-extrabold text-slate-900 flex items-center gap-1.5">
+                        124 <span className="text-xs font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">55% ↑</span>
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] font-medium text-slate-400 block">Target Leads</span>
+                      <span className="text-lg font-extrabold text-slate-900 flex items-center gap-1.5">
+                        500 <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">23% completed</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)] h-full flex flex-col">
-              <div className="flex justify-between items-start mb-6">
-                <h3 className="font-bold text-slate-900">Product Performance</h3>
-                <MoreVertical className="w-4 h-4 text-slate-400" />
-              </div>
+            {/* Row 2: 4 DashMark Metric Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
               
-              <div className="bg-slate-50 p-1 rounded-xl flex items-center text-[11px] md:text-xs font-bold mb-6">
-                <button className="flex-1 py-1.5 bg-white text-slate-900 shadow-sm rounded-lg">Daily Sales</button>
-                <button className="flex-1 py-1.5 text-slate-500 hover:text-slate-700">Online Sales</button>
-                <button className="flex-1 py-1.5 text-slate-500 hover:text-slate-700">New Users</button>
-              </div>
-
-              <div className="flex justify-between border-b border-slate-100 pb-6 mb-6">
-                <div>
-                  <div className="text-xs font-medium text-slate-500 mb-1">Digital Product</div>
-                  <div className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
-                    <span className="text-emerald-500 text-sm">↑</span> 790
+              {/* Card 1: Total Sales */}
+              <div className="dash-card p-5 flex flex-col justify-between">
+                <div className="flex justify-between items-center mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 bg-purple-50 text-purple-600 rounded-lg text-xs font-bold">🏷️</span>
+                    <span className="text-xs font-bold text-slate-900">Total Sales</span>
                   </div>
+                  <span className="text-[11px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md">7.3% ↑</span>
                 </div>
-                <div>
-                  <div className="text-xs font-medium text-slate-500 mb-1">Physical Product</div>
-                  <div className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
-                    <span className="text-red-500 text-sm">↓</span> 572
+                <div className="flex items-baseline justify-between mt-1">
+                  <span className="text-xl font-extrabold text-slate-900">429 <span className="text-xs font-semibold text-slate-400">Records</span></span>
+                  <span className="text-[11px] font-bold text-slate-400 border border-slate-200/60 px-2 py-0.5 rounded-md">30D</span>
+                </div>
+              </div>
+
+              {/* Card 2: Subscribers */}
+              <div className="dash-card p-5 flex flex-col justify-between">
+                <div className="flex justify-between items-center mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold">🛡️</span>
+                    <span className="text-xs font-bold text-slate-900">Subscribers</span>
                   </div>
+                  <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">44% ↑</span>
+                </div>
+                <div className="flex items-baseline justify-between mt-1">
+                  <span className="text-xl font-extrabold text-slate-900">994 <span className="text-xs font-semibold text-slate-400">Records</span></span>
+                  <span className="text-[11px] font-bold text-slate-400 border border-slate-200/60 px-2 py-0.5 rounded-md">30D</span>
                 </div>
               </div>
 
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <div className="text-xs font-medium text-slate-500 mb-1">Average Daily Sales</div>
-                  <div className="text-3xl font-extrabold text-slate-900">$2,950</div>
+              {/* Card 3: Unsubscribes */}
+              <div className="dash-card p-5 flex flex-col justify-between">
+                <div className="flex justify-between items-center mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 bg-rose-50 text-rose-600 rounded-lg text-xs font-bold">✕</span>
+                    <span className="text-xs font-bold text-slate-900">Unsubscribes</span>
+                  </div>
+                  <span className="text-[11px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">34% v</span>
                 </div>
-                <div className="bg-red-50 text-red-500 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1"><span className="text-sm leading-none">↓</span> 0.52%</div>
+                <div className="flex items-baseline justify-between mt-1">
+                  <span className="text-xl font-extrabold text-slate-900">238 <span className="text-xs font-semibold text-slate-400">Records</span></span>
+                  <span className="text-[11px] font-bold text-slate-400 border border-slate-200/60 px-2 py-0.5 rounded-md">30D</span>
+                </div>
               </div>
 
-              <div className="mt-auto h-40 flex items-end justify-between gap-1 md:gap-2 border-b border-l border-slate-200 px-2 pt-2 relative ml-4">
-                <div className="absolute left-[-22px] top-0 text-[10px] text-slate-400 h-full flex flex-col justify-between pb-2 font-medium">
-                    <span>400</span><span>300</span><span>200</span><span>100</span><span>0</span>
+              {/* Card 4: Email Sent */}
+              <div className="dash-card p-5 flex flex-col justify-between">
+                <div className="flex justify-between items-center mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 bg-purple-50 text-purple-600 rounded-lg text-xs font-bold">✉️</span>
+                    <span className="text-xs font-bold text-slate-900">Email Sent</span>
+                  </div>
+                  <span className="text-[11px] font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-md">65% ↑</span>
                 </div>
-                {[30, 80, 45, 65, 40, 40, 35].map((h, i) => (
-                  <div key={i} className="flex-1 bg-blue-600 rounded-t-sm" style={{height: `${h}%`}}></div>
-                ))}
+                <div className="flex items-baseline justify-between mt-1">
+                  <span className="text-xl font-extrabold text-slate-900">540 <span className="text-xs font-semibold text-slate-400">Records</span></span>
+                  <span className="text-[11px] font-bold text-slate-400 border border-slate-200/60 px-2 py-0.5 rounded-md">30D</span>
+                </div>
               </div>
+
             </div>
+
+            {/* Row 3: Weekly Task Timetable / Scheduler Grid */}
+            <div className="dash-card p-6">
+              
+              {/* Task Tabs & Actions Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div className="flex items-center gap-6 border-b sm:border-b-0 border-slate-100 pb-2 sm:pb-0 overflow-x-auto text-xs font-bold">
+                  <button className="text-slate-900 border-b-2 border-slate-900 pb-1 font-extrabold cursor-pointer">All Tasks</button>
+                  <button className="text-slate-400 hover:text-slate-700 cursor-pointer">Design Standup</button>
+                  <button className="text-slate-400 hover:text-slate-700 cursor-pointer">Dev hand off</button>
+                  <button className="text-slate-400 hover:text-slate-700 cursor-pointer">Client Meetings</button>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <button className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1.5 border border-slate-200/70 rounded-xl px-3 py-1.5 bg-white shadow-sm cursor-pointer">
+                    Filter
+                  </button>
+                  <button className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1.5 border border-slate-200/70 rounded-xl px-3 py-1.5 bg-white shadow-sm cursor-pointer">
+                    Sort
+                  </button>
+                  <button className="p-2 border border-slate-200/70 rounded-xl bg-white text-slate-400 hover:text-slate-600 cursor-pointer">
+                    <Search className="w-3.5 h-3.5" />
+                  </button>
+                  <button className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md shadow-purple-500/20 hover:from-purple-700 hover:to-indigo-700 flex items-center gap-1.5 cursor-pointer">
+                    Create <span className="text-[10px]">▼</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Weekly Timetable Schedule Table */}
+              <div className="overflow-x-auto custom-scrollbar">
+                <table className="w-full text-left text-xs min-w-[700px]">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-slate-400 font-bold text-[11px]">
+                      <th className="py-3 px-3 w-16">GMT+6</th>
+                      <th className="py-3 px-3">26 Mon</th>
+                      <th className="py-3 px-3">27 Tue</th>
+                      <th className="py-3 px-3">28 Wed</th>
+                      <th className="py-3 px-3">29 Thu</th>
+                      <th className="py-3 px-3">30 Fri</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100/60 font-semibold text-slate-700">
+                    
+                    {/* 1 am Row */}
+                    <tr>
+                      <td className="py-4 px-3 text-slate-400 text-[11px]">1 am</td>
+                      <td className="p-2">
+                        <div className="bg-gradient-to-r from-purple-100/90 to-indigo-100/90 border border-purple-200/60 p-2.5 rounded-xl font-bold text-purple-900 shadow-sm">
+                          Design Standup
+                        </div>
+                      </td>
+                      <td className="p-2"></td>
+                      <td className="p-2">
+                        <div className="bg-amber-100/80 border border-amber-200/70 p-2.5 rounded-xl font-bold text-amber-900 shadow-sm">
+                          Client meeting
+                        </div>
+                      </td>
+                      <td className="p-2"></td>
+                      <td className="p-2">
+                        <div className="bg-blue-100/80 border border-blue-200/70 p-2.5 rounded-xl font-bold text-blue-900 shadow-sm">
+                          Dev hand off
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* 2 am Row */}
+                    <tr>
+                      <td className="py-4 px-3 text-slate-400 text-[11px]">2 am</td>
+                      <td className="p-2"></td>
+                      <td className="p-2">
+                        <div className="bg-blue-100/80 border border-blue-200/70 p-2.5 rounded-xl font-bold text-blue-900 shadow-sm">
+                          Dev hand off
+                        </div>
+                      </td>
+                      <td className="p-2"></td>
+                      <td className="p-2">
+                        <div className="bg-amber-100/80 border border-amber-200/70 p-2.5 rounded-xl font-bold text-amber-900 shadow-sm">
+                          Client meeting
+                        </div>
+                      </td>
+                      <td className="p-2">
+                        <div className="bg-gradient-to-r from-purple-100/90 to-indigo-100/90 border border-purple-200/60 p-2.5 rounded-xl font-bold text-purple-900 shadow-sm">
+                          Design Standup
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* 3 am Row */}
+                    <tr>
+                      <td className="py-4 px-3 text-slate-400 text-[11px]">3 am</td>
+                      <td className="p-2"></td>
+                      <td className="p-2"></td>
+                      <td className="p-2">
+                        <div className="bg-gradient-to-r from-purple-100/90 to-indigo-100/90 border border-purple-200/60 p-2.5 rounded-xl font-bold text-purple-900 shadow-sm">
+                          Design Standup
+                        </div>
+                      </td>
+                      <td className="p-2"></td>
+                      <td className="p-2"></td>
+                    </tr>
+
+                    {/* 4 am Row */}
+                    <tr>
+                      <td className="py-4 px-3 text-slate-400 text-[11px]">4 am</td>
+                      <td className="p-2"></td>
+                      <td className="p-2">
+                        <div className="bg-amber-100/80 border border-amber-200/70 p-2.5 rounded-xl font-bold text-amber-900 shadow-sm">
+                          Client meeting
+                        </div>
+                      </td>
+                      <td className="p-2"></td>
+                      <td className="p-2"></td>
+                      <td className="p-2">
+                        <div className="bg-amber-100/80 border border-amber-200/70 p-2.5 rounded-xl font-bold text-amber-900 shadow-sm">
+                          Client meeting
+                        </div>
+                      </td>
+                    </tr>
+
+                  </tbody>
+                </table>
+              </div>
+
+            </div>
+
           </div>
         </div>
-      </div>
       )}
 
-      {/* Analytics Tab */}
+      {/* Analytics Tab - DashMark Theme */}
       {activeTab === 'analytics' && (
-        <div className="flex-1 h-full overflow-y-auto">
+        <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
           {!analytics ? (
-            <div className="flex-1 flex flex-col items-center justify-center space-y-4 bg-white rounded-3xl border border-slate-100 p-10 max-w-5xl mx-auto my-10">
-              <Loader2 className="h-8 w-8 text-emerald-500 animate-spin" />
-              <p className="text-slate-500 font-bold">Loading analytics...</p>
+            <div className="flex-1 flex flex-col items-center justify-center space-y-4 bg-white rounded-3xl border border-slate-100 p-10 max-w-5xl mx-auto my-10 dash-card">
+              <Loader2 className="h-8 w-8 text-purple-600 animate-spin" />
+              <p className="text-slate-500 font-bold text-sm">Loading analytics...</p>
             </div>
           ) : (
-            <div className="p-10 max-w-5xl mx-auto w-full">
-          <h2 className="text-3xl font-extrabold text-slate-900 mb-8 flex items-center gap-3">
-            <Activity className="h-8 w-8 text-emerald-500" /> Analytics
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
-              <div className="text-slate-400 font-bold text-sm uppercase tracking-wider mb-2">Total Chats</div>
-              <div className="text-4xl font-extrabold text-slate-900">{analytics.totalChats}</div>
-            </div>
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
-              <div className="text-slate-400 font-bold text-sm uppercase tracking-wider mb-2">Total Bookings & Orders</div>
-              <div className="text-4xl font-extrabold text-slate-900">{analytics.totalOrders + analytics.totalBookings}</div>
-            </div>
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
-              <div className="text-slate-400 font-bold text-sm uppercase tracking-wider mb-2">Conversion Rate</div>
-              <div className="text-4xl font-extrabold text-emerald-500">{analytics.conversionRate}%</div>
-              <div className="text-xs font-bold text-slate-400 mt-2">Orders per unique contact</div>
-            </div>
-          </div>
-
-          <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
-            <h3 className="text-xl font-bold text-slate-900 mb-6">Most Requested Products</h3>
-            {analytics.topProducts.length > 0 ? (
-              <div className="grid gap-4">
-                {analytics.topProducts.map((p: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <span className="font-bold text-slate-800">{p.name}</span>
-                    <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-sm font-bold">{p.count} requests</span>
-                  </div>
-                ))}
+            <div className="p-10 max-w-5xl mx-auto w-full space-y-8">
+              <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
+                <Activity className="h-7 w-7 text-purple-600" /> Analytics & Reports
+              </h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="dash-card p-6">
+                  <div className="text-slate-400 font-bold text-xs uppercase tracking-wider mb-2">Total Chats</div>
+                  <div className="text-4xl font-extrabold text-slate-900">{analytics.totalChats}</div>
+                </div>
+                <div className="dash-card p-6">
+                  <div className="text-slate-400 font-bold text-xs uppercase tracking-wider mb-2">Total Bookings & Orders</div>
+                  <div className="text-4xl font-extrabold text-slate-900">{analytics.totalOrders + analytics.totalBookings}</div>
+                </div>
+                <div className="dash-card p-6">
+                  <div className="text-slate-400 font-bold text-xs uppercase tracking-wider mb-2">Conversion Rate</div>
+                  <div className="text-4xl font-extrabold text-purple-600">{analytics.conversionRate}%</div>
+                  <div className="text-xs font-bold text-slate-400 mt-2">Orders per unique contact</div>
+                </div>
               </div>
-            ) : (
-              <div className="text-slate-400 font-medium">No product data available yet.</div>
-            )}
+
+              <div className="dash-card p-8">
+                <h3 className="text-lg font-bold text-slate-900 mb-6">Most Requested Products</h3>
+                {analytics.topProducts.length > 0 ? (
+                  <div className="grid gap-3">
+                    {analytics.topProducts.map((p: any, i: number) => (
+                      <div key={i} className="flex items-center justify-between p-4 bg-slate-50/80 rounded-2xl border border-slate-200/60">
+                        <span className="font-bold text-slate-800 text-sm">{p.name}</span>
+                        <span className="bg-purple-50 text-purple-700 border border-purple-200/60 px-3 py-1 rounded-full text-xs font-bold">{p.count} requests</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-slate-400 font-medium text-sm">No product data available yet.</div>
+                )}
+              </div>
             </div>
-            </div>
-          )
-        }
+          )}
         </div>
       )}
 
-      {/* Settings Tab */}
+      {/* Settings Tab - DashMark Theme */}
       {activeTab === 'settings' && (
-        <div className="flex-1 h-full overflow-y-auto">
-          <div className="p-10 max-w-4xl mx-auto w-full">
-          <h2 className="text-3xl font-extrabold text-slate-900 mb-8 flex items-center gap-3">
-            <Settings className="h-8 w-8 text-emerald-500" /> Account Settings
-          </h2>
-          
-          <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
-            <div className="grid gap-6">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Business Name</label>
-                <input 
-                  type="text" 
-                  value={config.businessName || ''} 
-                  onChange={e => setConfig({...config, businessName: e.target.value})}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-medium focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
-                  placeholder="e.g. Acme Corp"
-                />
+        <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
+          <div className="p-10 max-w-4xl mx-auto w-full space-y-8">
+            <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
+              <Settings className="h-7 w-7 text-purple-600" /> Account Settings
+            </h2>
+            
+            <div className="dash-card p-8 space-y-6">
+              <div className="grid gap-6">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">Business Name</label>
+                  <input 
+                    type="text" 
+                    value={config.businessName || ''} 
+                    onChange={e => setConfig({...config, businessName: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200/80 rounded-xl px-4 py-3 text-slate-900 font-semibold focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 text-sm transition-all"
+                    placeholder="e.g. DashMark Corp"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">Timezone</label>
+                  <input 
+                    type="text" 
+                    value={config.timezone || ''} 
+                    onChange={e => setConfig({...config, timezone: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200/80 rounded-xl px-4 py-3 text-slate-900 font-semibold focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 text-sm transition-all"
+                    placeholder="e.g. UTC, America/New_York"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">Working Hours</label>
+                  <input 
+                    type="text" 
+                    value={config.workingHours || ''} 
+                    onChange={e => setConfig({...config, workingHours: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200/80 rounded-xl px-4 py-3 text-slate-900 font-semibold focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 text-sm transition-all"
+                    placeholder="e.g. 9:00 AM - 5:00 PM"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Timezone</label>
-                <input 
-                  type="text" 
-                  value={config.timezone || ''} 
-                  onChange={e => setConfig({...config, timezone: e.target.value})}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-medium focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
-                  placeholder="e.g. UTC, America/New_York"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Working Hours</label>
-                <input 
-                  type="text" 
-                  value={config.workingHours || ''} 
-                  onChange={e => setConfig({...config, workingHours: e.target.value})}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-medium focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
-                  placeholder="e.g. 9:00 AM - 5:00 PM"
-                />
-              </div>
-            </div>
 
             {/* API Key Configuration */}
             <div className="border-t border-slate-100 pt-6 mt-6">
@@ -1303,7 +1504,7 @@ export default function DashboardPage() {
               <button 
                 onClick={saveConfig}
                 disabled={savingConfig}
-                className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-sm flex items-center gap-2"
+                className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold py-3 px-8 rounded-xl transition-all shadow-md shadow-purple-500/20 flex items-center gap-2 cursor-pointer"
               >
                 {savingConfig ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                 Save Settings
@@ -1314,29 +1515,29 @@ export default function DashboardPage() {
       </div>
       )}
       {activeTab === 'inbox' && (
-        <div className="w-[360px] flex-shrink-0 bg-white border-r border-slate-100 flex flex-col relative z-10">
+        <div className="w-[360px] flex-shrink-0 bg-white border-r border-slate-200/80 flex flex-col relative z-10">
           
           {/* Connection Status Banner */}
           {status !== 'connected' && (
-            <div className="bg-[#fff9e6] px-4 py-3 border-b border-yellow-200/50 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-yellow-600 text-[13px] font-semibold">
-                <div className="bg-emerald-500 p-1 rounded-full"><MessageCircle className="h-3 w-3 text-white" /></div> 
-                WhatsApp App Disconnected
+            <div className="bg-amber-50/80 px-4 py-3 border-b border-amber-200/60 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-amber-700 text-xs font-bold">
+                <div className="bg-purple-600 p-1 rounded-full"><MessageCircle className="h-3 w-3 text-white" /></div> 
+                WhatsApp Disconnected
               </div>
-              <button onClick={() => setActiveTab('channels')} className="text-blue-500 text-[13px] font-medium hover:underline">Reconnect</button>
+              <button onClick={() => setActiveTab('channels')} className="text-purple-600 text-xs font-extrabold hover:underline">Reconnect</button>
             </div>
           )}
 
           {/* Search */}
           <div className="p-4 pb-2">
-            <div className="bg-[#f5f6f8] border border-slate-200/60 rounded-xl flex items-center px-4 py-2.5 gap-3 focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500 transition-all relative">
+            <div className="bg-slate-100/70 border border-slate-200/60 rounded-xl flex items-center px-4 py-2.5 gap-3 focus-within:ring-2 focus-within:ring-purple-500/20 focus-within:border-purple-500 transition-all relative">
               <Search className="h-4 w-4 text-slate-400" />
               <input 
                 type="text" 
-                placeholder="Search" 
+                placeholder="Search chats" 
                 value={inboxSearch}
                 onChange={(e) => setInboxSearch(e.target.value)}
-                className="bg-transparent border-none outline-none text-[15px] w-full placeholder:text-slate-400 text-slate-700 font-medium pr-6" 
+                className="bg-transparent border-none outline-none text-xs w-full placeholder:text-slate-400 text-slate-700 font-semibold pr-6" 
               />
               {inboxSearch && (
                 <button 
@@ -1353,24 +1554,32 @@ export default function DashboardPage() {
           <div className="flex gap-1.5 px-4 pb-3 border-b border-slate-100 mt-1">
             <button 
               onClick={() => setInboxFilter("all")}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                inboxFilter === "all" ? "bg-slate-900 text-white shadow-sm" : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+              className={`px-3 py-1.5 rounded-full text-xs font-extrabold transition-all cursor-pointer ${
+                inboxFilter === "all" ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100/80 text-slate-600 hover:bg-slate-200/60"
               }`}
             >
               All
             </button>
             <button 
               onClick={() => setInboxFilter("normal")}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                inboxFilter === "normal" ? "bg-emerald-500 text-white shadow-sm" : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+              className={`px-3 py-1.5 rounded-full text-xs font-extrabold transition-all cursor-pointer ${
+                inboxFilter === "normal" ? "bg-purple-600 text-white shadow-sm shadow-purple-500/20" : "bg-slate-100/80 text-slate-600 hover:bg-slate-200/60"
               }`}
             >
               Conversations
             </button>
             <button 
+              onClick={() => setInboxFilter("groups")}
+              className={`px-3 py-1.5 rounded-full text-xs font-extrabold transition-all cursor-pointer ${
+                inboxFilter === "groups" ? "bg-indigo-600 text-white shadow-sm shadow-indigo-500/20" : "bg-slate-100/80 text-slate-600 hover:bg-slate-200/60"
+              }`}
+            >
+              Groups
+            </button>
+            <button 
               onClick={() => setInboxFilter("revival")}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                inboxFilter === "revival" ? "bg-blue-500 text-white shadow-sm" : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+              className={`px-3 py-1.5 rounded-full text-xs font-extrabold transition-all cursor-pointer ${
+                inboxFilter === "revival" ? "bg-pink-600 text-white shadow-sm shadow-pink-500/20" : "bg-slate-100/80 text-slate-600 hover:bg-slate-200/60"
               }`}
             >
               Leads Revival
@@ -1394,7 +1603,9 @@ export default function DashboardPage() {
                   // 2. Inbox segment filter
                   const customer = customers[phone];
                   const isRevival = customer?.tags?.includes("revival-sent");
-                  if (inboxFilter === "normal" && isRevival) return false;
+                  const isGroup = phone.includes("@g.us");
+                  if (inboxFilter === "normal" && (isRevival || isGroup)) return false;
+                  if (inboxFilter === "groups" && !isGroup) return false;
                   if (inboxFilter === "revival" && !isRevival) return false;
 
                   return true;
@@ -1410,7 +1621,7 @@ export default function DashboardPage() {
               if (filteredChats.length === 0) {
                 return (
                   <div className="h-full flex flex-col items-center justify-center text-slate-400 p-4 text-center">
-                    <p className="text-sm font-medium">No chats found.</p>
+                    <p className="text-xs font-bold">No chats found.</p>
                   </div>
                 );
               }
@@ -1440,27 +1651,27 @@ export default function DashboardPage() {
                       setSelectedChat(phone);
                       markChatAsRead(phone);
                     }}
-                    className={`cursor-pointer px-5 py-4 flex items-start gap-4 transition-all border-b border-slate-50/50 relative ${isSelected ? 'bg-[#f0f2f5] before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:bg-emerald-500' : 'hover:bg-slate-50'}`}
+                    className={`cursor-pointer px-5 py-4 flex items-start gap-3.5 transition-all border-b border-slate-100/60 relative ${isSelected ? 'bg-purple-50/70 before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:bg-purple-600' : 'hover:bg-slate-50'}`}
                   >
                     {/* Avatar with ring */}
                     <div className="relative flex-shrink-0 mt-0.5">
-                      <div className="h-[46px] w-[46px] rounded-full border-[2.5px] border-emerald-500 p-0.5 relative flex items-center justify-center bg-white">
-                        <div className="h-full w-full bg-slate-200 rounded-full flex items-center justify-center overflow-hidden">
-                          <User className="text-slate-400 h-6 w-6" />
+                      <div className="h-[44px] w-[44px] rounded-full border-2 border-purple-500 p-0.5 relative flex items-center justify-center bg-white shadow-sm">
+                        <div className="h-full w-full bg-slate-100 rounded-full flex items-center justify-center overflow-hidden">
+                          <User className="text-purple-400 h-5 w-5" />
                         </div>
                       </div>
-                      <div className="absolute -bottom-1 -left-1 bg-emerald-500 text-white text-[9px] font-bold px-1.5 rounded-full border-2 border-white shadow-sm">
+                      <div className="absolute -bottom-1 -left-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[9px] font-extrabold px-1.5 rounded-full border-2 border-white shadow-sm">
                         {ringPercent}%
                       </div>
                     </div>
                     
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-baseline mb-1">
-                        <h4 className="text-[15px] font-bold text-slate-900 truncate">{displayName}</h4>
-                        <span className="text-[12px] font-semibold text-emerald-500">{timeStr}</span>
+                        <h4 className="text-xs font-bold text-slate-900 truncate">{displayName}</h4>
+                        <span className="text-[11px] font-bold text-purple-600">{timeStr}</span>
                       </div>
-                      <div className="flex items-center gap-1.5 text-[14px] text-slate-500 font-medium">
-                        {lastMessage?.role === 'assistant' && <CheckCheck className="h-4 w-4 text-slate-400 flex-shrink-0" />}
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                        {lastMessage?.role === 'assistant' && <CheckCheck className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />}
                         <span className="truncate">{lastMessage?.content}</span>
                       </div>
                     </div>
@@ -1474,23 +1685,25 @@ export default function DashboardPage() {
 
       {/* 3. Main Content View */}
       {activeTab === 'inbox' && (
-        <div className="flex-1 flex flex-col min-w-0 relative z-0 bg-[#efeae2]" style={{ backgroundImage: "url('https://cdn.pixabay.com/photo/2021/07/25/08/03/pattern-6491187_960_720.png')", backgroundSize: "400px", backgroundBlendMode: "overlay", backgroundColor: "rgba(240, 242, 245, 0.95)" }}>
+        <div className="flex-1 flex flex-col min-w-0 relative z-0 bg-[#f8f9fc]">
           {!selectedChat ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-4">
-              <div className="h-64 w-64 bg-[url('https://static.whatsapp.net/rsrc.php/v3/y6/r/wa669aeJeom.png')] bg-contain bg-no-repeat bg-center opacity-40 mix-blend-multiply"></div>
-              <h2 className="text-3xl font-light text-slate-600">WhatsApp for Web</h2>
-              <p className="text-sm">Select a chat to start messaging.</p>
+              <div className="h-20 w-20 bg-purple-50 rounded-full flex items-center justify-center border border-purple-100 text-purple-600 text-3xl shadow-sm">
+                💬
+              </div>
+              <h2 className="text-xl font-bold text-slate-800 tracking-tight">Client Messaging Panel</h2>
+              <p className="text-xs text-slate-400 font-medium">Select a contact from the list to start messaging.</p>
             </div>
           ) : (
             <>
               {/* Chat Header */}
-              <div className="h-[72px] bg-white border-b border-slate-200 px-6 flex items-center justify-between z-10 flex-shrink-0 shadow-sm">
-                <div className="flex items-center gap-4 cursor-pointer">
-                  <div className="h-12 w-12 rounded-full bg-emerald-500 flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm">
-                    <User className="h-7 w-7 text-white/90" />
+              <div className="h-[72px] bg-white border-b border-slate-200/80 px-6 flex items-center justify-between z-10 flex-shrink-0 shadow-sm">
+                <div className="flex items-center gap-3.5 cursor-pointer">
+                  <div className="h-11 w-11 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center overflow-hidden flex-shrink-0 shadow-md shadow-purple-500/20">
+                    <User className="h-6 w-6 text-white" />
                   </div>
                   <div className="flex flex-col">
-                    <h4 className="font-bold text-slate-900 text-[16px]">
+                    <h4 className="font-extrabold text-slate-900 text-sm">
                       {(() => {
                         const savedName = customers[selectedChat]?.name;
                         if (savedName && savedName !== selectedChat) return savedName;
@@ -1500,25 +1713,25 @@ export default function DashboardPage() {
                         return `+${selectedChat}`;
                       })()}
                     </h4>
-                    <span className="text-[13px] text-slate-500 font-medium">({selectedChat.split('@')[0]}) | Pakistan</span>
+                    <span className="text-[11px] text-slate-400 font-semibold">({selectedChat.split('@')[0]}) | Active Contact</span>
                   </div>
                 </div>
                 
                 {/* Autopilot Toggle */}
-                <div className="flex items-center bg-white border border-emerald-500 rounded-full p-1 shadow-sm">
+                <div className="flex items-center bg-slate-100/80 border border-slate-200/80 rounded-full p-1 shadow-sm">
                   {(() => {
                     const isAiEnabled = customers[selectedChat]?.aiEnabled !== undefined ? customers[selectedChat].aiEnabled : (config.globalAiEnabled !== false);
                     return (
                       <>
                         <button 
                           onClick={() => toggleChatAi(true)}
-                          className={`${isAiEnabled ? 'bg-emerald-500 text-white' : 'text-emerald-600 hover:bg-emerald-50'} text-[13px] font-bold px-4 py-1.5 rounded-full shadow-sm transition`}
+                          className={`${isAiEnabled ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/20' : 'text-slate-600 hover:text-slate-900'} text-xs font-bold px-4 py-1.5 rounded-full transition cursor-pointer`}
                         >
                           Autopilot
                         </button>
                         <button 
                           onClick={() => toggleChatAi(false)}
-                          className={`${!isAiEnabled ? 'bg-emerald-500 text-white' : 'text-emerald-600 hover:bg-emerald-50'} text-[13px] font-bold px-4 py-1.5 rounded-full shadow-sm transition`}
+                          className={`${!isAiEnabled ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/20' : 'text-slate-600 hover:text-slate-900'} text-xs font-bold px-4 py-1.5 rounded-full transition cursor-pointer`}
                         >
                           Copilot
                         </button>
@@ -1529,40 +1742,51 @@ export default function DashboardPage() {
               </div>
               
               {/* Chat Messages */}
-              <div className="flex-1 overflow-y-auto px-[10%] py-6 flex flex-col space-y-3 z-10 custom-scrollbar">
+              <div 
+                ref={chatContainerRef}
+                onScroll={handleChatScroll}
+                className="flex-1 overflow-y-auto px-[8%] py-6 flex flex-col space-y-3 z-10 custom-scrollbar"
+              >
                 
                 {chats[selectedChat]?.map((m, i) => {
                   const isSent = m.role === 'assistant';
+                  const isDataUri = m.content?.startsWith('data:image/');
+                  const isImageUrl = m.content?.match(/^https?:\/\/.*\.(png|jpg|jpeg|gif|webp)(\?.*)?$/i);
+                  const displayMediaUrl = m.mediaUrl || (isDataUri ? m.content : isImageUrl ? m.content : null);
+                  const isSticker = m.content?.includes('[Sticker]') || m.mediaType === 'image/webp';
+
                   return (
                     <div key={i} className={`flex w-full ${isSent ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`relative max-w-[65%] rounded-xl px-3 py-2 text-[15px] font-medium leading-relaxed shadow-sm ${
+                      <div className={`relative max-w-[65%] rounded-2xl px-4 py-2.5 text-xs font-semibold leading-relaxed shadow-sm ${
                         isSent 
-                          ? 'bg-[#d9fdd3] text-[#111b21] rounded-tr-sm border border-[#d9fdd3]' 
-                          : 'bg-white text-[#111b21] rounded-tl-sm border border-slate-100'
+                          ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-tr-xs shadow-md shadow-purple-500/10' 
+                          : 'bg-white text-slate-900 rounded-tl-xs border border-slate-200/70'
                       }`}>
-                        {m.mediaUrl && (
-                          <div className="mb-2 rounded-lg overflow-hidden border border-black/5 bg-black/5">
-                            {m.mediaType?.startsWith('image/') ? (
-                              <img src={m.mediaUrl} alt="Attached Media" className="max-w-full max-h-[300px] object-cover" />
+                        {displayMediaUrl && (
+                          <div className="mb-2 rounded-xl overflow-hidden border border-black/5 bg-black/5 flex items-center justify-center p-1">
+                            {isSticker || m.mediaType?.startsWith('image/') || isDataUri || isImageUrl ? (
+                              <img src={displayMediaUrl} alt="Media Preview" className="max-w-[260px] max-h-[260px] object-contain rounded-lg shadow-sm" />
                             ) : m.mediaType?.startsWith('video/') ? (
-                              <video src={m.mediaUrl} controls className="max-w-full max-h-[300px] object-cover" />
+                              <video src={displayMediaUrl} controls className="max-w-full max-h-[300px] object-cover" />
                             ) : m.mediaType?.startsWith('audio/') ? (
-                              <audio src={m.mediaUrl} controls className="max-w-full" />
+                              <audio src={displayMediaUrl} controls className="max-w-full" />
                             ) : (
-                              <a href={m.mediaUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-3 text-emerald-600 hover:bg-emerald-50 transition">
+                              <a href={displayMediaUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-3 text-purple-600 hover:bg-purple-50 transition">
                                 <Paperclip className="h-5 w-5" />
-                                <span className="font-bold underline text-sm truncate">Document Attachment</span>
+                                <span className="font-bold underline text-xs truncate">Document Attachment</span>
                               </a>
                             )}
                           </div>
                         )}
-                        {m.content && <span className="pr-14 block whitespace-pre-wrap">{m.content}</span>}
-                        <div className="absolute bottom-1 right-2 flex items-center gap-1 text-[11px] text-[#667781] font-semibold">
+                        {m.content && !isDataUri && !isImageUrl && (
+                          <span className="pr-14 block whitespace-pre-wrap">{m.content}</span>
+                        )}
+                        <div className={`absolute bottom-1 right-3 flex items-center gap-1 text-[10px] font-bold ${isSent ? 'text-purple-200' : 'text-slate-400'}`}>
                           <span>{new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                           {isSent && (
-                            m.status === 4 ? <CheckCheck className="h-4 w-4 text-[#53bdeb]" /> :
-                            m.status === 3 ? <CheckCheck className="h-4 w-4 text-slate-400" /> :
-                            <Check className="h-4 w-4 text-slate-400" />
+                            m.status === 4 ? <CheckCheck className="h-3.5 w-3.5 text-white" /> :
+                            m.status === 3 ? <CheckCheck className="h-3.5 w-3.5 text-purple-200" /> :
+                            <Check className="h-3.5 w-3.5 text-purple-200" />
                           )}
                         </div>
                       </div>
@@ -1574,20 +1798,20 @@ export default function DashboardPage() {
               
               {/* Status warning if disconnected in input area */}
               {status !== 'connected' ? (
-                <div className="h-[80px] bg-white border-t border-slate-200 px-6 flex items-center justify-center z-10 flex-shrink-0 shadow-[0_-4px_24px_rgba(0,0,0,0.02)]">
+                <div className="h-[80px] bg-white border-t border-slate-200/80 px-6 flex items-center justify-center z-10 flex-shrink-0 shadow-sm">
                   <div className="flex flex-col items-center">
-                    <p className="text-slate-500 text-sm font-medium mb-2">WhatsApp is disconnected</p>
-                    <button onClick={() => setActiveTab('channels')} className="bg-emerald-500 text-white font-bold px-6 py-2 rounded-lg hover:bg-emerald-600 transition flex items-center gap-2">
+                    <p className="text-slate-500 text-xs font-semibold mb-2">WhatsApp is disconnected</p>
+                    <button onClick={() => setActiveTab('channels')} className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-extrabold text-xs px-5 py-2 rounded-xl transition shadow-md shadow-purple-500/20 flex items-center gap-2 cursor-pointer">
                       <Zap className="h-4 w-4" /> Reconnect
                     </button>
                   </div>
                 </div>
               ) : (
                 /* Chat Input Bar */
-                <div className="h-[80px] bg-white border-t border-slate-200 px-6 flex items-center gap-4 z-10 flex-shrink-0 relative shadow-[0_-4px_24px_rgba(0,0,0,0.02)]">
+                <div className="h-[80px] bg-white border-t border-slate-200/80 px-6 flex items-center gap-4 z-10 flex-shrink-0 relative shadow-sm">
                   
                   {showEmojiPicker && (
-                    <div className="absolute bottom-[90px] left-6 z-50 shadow-2xl rounded-xl">
+                    <div className="absolute bottom-[90px] left-6 z-50 shadow-2xl rounded-2xl">
                       <EmojiPicker 
                         onEmojiClick={(emojiData) => {
                           setMessageInput(prev => prev + emojiData.emoji);
@@ -1600,7 +1824,7 @@ export default function DashboardPage() {
 
                   {isRecording ? (
                     <div className="flex-1 flex items-center gap-4 animate-in fade-in duration-300">
-                      <div className="flex items-center gap-2 text-rose-500 font-bold">
+                      <div className="flex items-center gap-2 text-rose-500 font-bold text-xs">
                         <span className="relative flex h-3 w-3">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                           <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
@@ -1614,18 +1838,18 @@ export default function DashboardPage() {
                           setIsRecording(false);
                           if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
                         }
-                      }} className="text-slate-500 hover:text-slate-700 text-sm font-bold">
+                      }} className="text-slate-500 hover:text-slate-700 text-xs font-bold cursor-pointer">
                         Cancel
                       </button>
-                      <button onClick={stopRecording} className="bg-rose-500 text-white rounded-full p-3 hover:bg-rose-600 transition shadow-md">
-                        <Send className="h-5 w-5 ml-0.5" />
+                      <button onClick={stopRecording} className="bg-rose-500 text-white rounded-full p-2.5 hover:bg-rose-600 transition shadow-md cursor-pointer">
+                        <Send className="h-4 w-4 ml-0.5" />
                       </button>
                     </div>
                   ) : (
                     <>
-                      <div className="flex items-center gap-5 text-slate-400">
-                        <Smile onClick={() => setShowEmojiPicker(!showEmojiPicker)} className={`h-7 w-7 cursor-pointer transition-colors ${showEmojiPicker ? 'text-emerald-500' : 'hover:text-slate-600'}`} />
-                        <Paperclip onClick={() => fileInputRef.current?.click()} className="h-6 w-6 cursor-pointer hover:text-slate-600 transition-colors" />
+                      <div className="flex items-center gap-4 text-slate-400">
+                        <Smile onClick={() => setShowEmojiPicker(!showEmojiPicker)} className={`h-6 w-6 cursor-pointer transition-colors ${showEmojiPicker ? 'text-purple-600' : 'hover:text-slate-600'}`} />
+                        <Paperclip onClick={() => fileInputRef.current?.click()} className="h-5 w-5 cursor-pointer hover:text-slate-600 transition-colors" />
                       </div>
                       
                       <div className="flex-1">
@@ -1642,16 +1866,16 @@ export default function DashboardPage() {
                           }}
                           onClick={() => setShowEmojiPicker(false)}
                           onFocus={() => { if (selectedChat) markChatAsRead(selectedChat); }}
-                          className="w-full h-12 bg-[#f0f2f5] rounded-full px-6 text-[15px] text-slate-800 focus:outline-none placeholder:text-slate-500 border border-transparent focus:border-slate-300 font-medium transition-all"
+                          className="w-full h-11 bg-slate-100/80 rounded-full px-5 text-xs text-slate-800 focus:outline-none placeholder:text-slate-400 border border-transparent focus:border-purple-500/50 font-semibold transition-all"
                         />
                       </div>
                       
                       {messageInput.trim() ? (
-                        <div onClick={() => { sendManualMessage(); setShowEmojiPicker(false); }} className="bg-emerald-500 h-12 w-12 rounded-full flex items-center justify-center cursor-pointer hover:bg-emerald-600 shadow-md transition-colors">
-                          <Send className="h-5 w-5 text-white ml-0.5" />
+                        <div onClick={() => { sendManualMessage(); setShowEmojiPicker(false); }} className="bg-gradient-to-r from-purple-600 to-indigo-600 h-10 w-10 rounded-full flex items-center justify-center cursor-pointer hover:from-purple-700 hover:to-indigo-700 shadow-md shadow-purple-500/25 transition-all">
+                          <Send className="h-4 w-4 text-white ml-0.5" />
                         </div>
                       ) : (
-                        <Mic onClick={startRecording} className="h-7 w-7 text-slate-400 cursor-pointer hover:text-emerald-500 transition-colors" />
+                        <Mic onClick={startRecording} className="h-6 w-6 text-slate-400 cursor-pointer hover:text-purple-600 transition-colors" />
                       )}
                     </>
                   )}
@@ -1665,17 +1889,17 @@ export default function DashboardPage() {
 
         {/* Channels Tab (QR Connection) */}
         {activeTab === 'channels' && (
-          <div className="flex-1 h-full overflow-y-auto">
-            <div className="p-10 max-w-4xl mx-auto w-full">
-            <h2 className="text-3xl font-extrabold text-slate-900 mb-8">WhatsApp Integration</h2>
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center">
+          <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
+            <div className="p-10 max-w-4xl mx-auto w-full space-y-8">
+            <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">WhatsApp Integration</h2>
+            <div className="dash-card p-8 flex flex-col items-center">
               
               {status === "idle" && (
                 <div className="text-center space-y-6 w-full max-w-sm">
-                  <div className="mx-auto bg-slate-50 p-6 rounded-full w-max border border-slate-100">
-                    <QrCode className="h-16 w-16 text-slate-300" />
+                  <div className="mx-auto bg-purple-50 p-6 rounded-full w-max border border-purple-100">
+                    <QrCode className="h-14 w-14 text-purple-400" />
                   </div>
-                  <button onClick={startSession} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold h-12 rounded-xl transition-all shadow-md">
+                  <button onClick={startSession} className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold h-12 rounded-xl transition-all shadow-md shadow-purple-500/20 text-xs cursor-pointer">
                     Generate QR Code
                   </button>
                 </div>
@@ -1683,8 +1907,8 @@ export default function DashboardPage() {
 
               {(status === "creating" || status === "waiting_qr") && (
                 <div className="flex flex-col items-center justify-center space-y-6 py-10">
-                  <Loader2 className="h-12 w-12 text-emerald-500 animate-spin" />
-                  <p className="text-slate-500 font-bold">Initializing Secure Connection...</p>
+                  <Loader2 className="h-10 w-10 text-purple-600 animate-spin" />
+                  <p className="text-slate-500 font-bold text-xs">Initializing Secure Connection...</p>
                 </div>
               )}
 
@@ -1713,7 +1937,7 @@ export default function DashboardPage() {
                     <button
                       type="button"
                       onClick={() => setWaConnectMode('pairing')}
-                      className="text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline flex items-center justify-center gap-2 mx-auto transition cursor-pointer"
+                      className="text-xs font-extrabold text-purple-600 hover:text-purple-700 hover:underline flex items-center justify-center gap-2 mx-auto transition cursor-pointer"
                     >
                       <Smartphone className="h-4 w-4" />
                       <span>Link with phone number instead</span>
@@ -1765,7 +1989,7 @@ export default function DashboardPage() {
                         placeholder="923001234567"
                         value={waPairingPhone}
                         onChange={e => setWaPairingPhone(e.target.value)}
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
                       />
                       <p className="text-[10px] text-slate-400 mt-1">Include country code without '+' or spaces (e.g. 923001234567)</p>
                     </div>
@@ -1773,7 +1997,7 @@ export default function DashboardPage() {
                     <button
                       type="submit"
                       disabled={isGeneratingPairingCode || !waPairingPhone.trim()}
-                      className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold rounded-xl h-11 text-xs shadow-md shadow-emerald-500/20 cursor-pointer flex items-center justify-center gap-2"
+                      className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white font-extrabold rounded-xl h-11 text-xs shadow-md shadow-purple-500/20 cursor-pointer flex items-center justify-center gap-2"
                     >
                       {isGeneratingPairingCode ? (
                         <>
@@ -1790,12 +2014,12 @@ export default function DashboardPage() {
                     )}
 
                     {waPairingCode && (
-                      <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200 text-center space-y-2">
-                        <p className="text-xs font-bold text-emerald-800">Your Official WhatsApp Pairing Code:</p>
-                        <p className="text-2xl font-mono font-black text-emerald-900 tracking-widest bg-white py-2 px-4 rounded-xl border border-emerald-300 inline-block shadow-sm">
+                      <div className="bg-purple-50 p-4 rounded-2xl border border-purple-200 text-center space-y-2">
+                        <p className="text-xs font-bold text-purple-900">Your Official WhatsApp Pairing Code:</p>
+                        <p className="text-2xl font-mono font-black text-purple-900 tracking-widest bg-white py-2 px-4 rounded-xl border border-purple-300 inline-block shadow-sm">
                           {waPairingCode}
                         </p>
-                        <p className="text-[10px] text-emerald-700">Open WhatsApp → Linked Devices → Link with phone number instead</p>
+                        <p className="text-[10px] text-purple-700">Open WhatsApp → Linked Devices → Link with phone number instead</p>
                       </div>
                     )}
                   </form>
@@ -1807,7 +2031,7 @@ export default function DashboardPage() {
                       onClick={() => setWaConnectMode('qr')}
                       className="text-xs font-bold text-slate-600 hover:text-slate-900 hover:underline flex items-center justify-center gap-2 mx-auto transition cursor-pointer"
                     >
-                      <QrCode className="h-4 w-4 text-emerald-500" />
+                      <QrCode className="h-4 w-4 text-purple-600" />
                       <span>Scan QR code instead</span>
                     </button>
                   </div>
@@ -1816,13 +2040,13 @@ export default function DashboardPage() {
 
               {status === "connected" && (
                 <div className="flex flex-col items-center justify-center text-center space-y-6 py-10 w-full max-w-sm">
-                  <div className="bg-emerald-100 p-6 rounded-full shadow-inner">
-                    <CheckCircle2 className="h-20 w-20 text-emerald-500" />
+                  <div className="bg-purple-100 p-6 rounded-full shadow-inner">
+                    <CheckCircle2 className="h-20 w-20 text-purple-600" />
                   </div>
                   <div className="space-y-1">
                     <p className="text-xl text-slate-900 font-extrabold mb-2">Device Linked Successfully!</p>
                     {sessionData?.phoneNumber && (
-                      <p className="text-sm text-slate-500 font-bold">+{sessionData.phoneNumber}</p>
+                      <p className="text-sm text-purple-700 font-bold">+{sessionData.phoneNumber}</p>
                     )}
                   </div>
                   <button onClick={disconnectSession} className="text-sm font-bold text-rose-500 bg-rose-50 hover:bg-rose-100 w-full py-3 rounded-xl transition-colors mt-4">
@@ -1836,54 +2060,54 @@ export default function DashboardPage() {
         </div>
       )}
 
-        {/* Agents Tab (Config) */}
+        {/* Agents Tab (Knowledge Base & Config) - DashMark Theme */}
         {activeTab === 'agents' && (
-          <div className="flex-1 h-full overflow-y-auto">
-            <div className="p-10 max-w-4xl mx-auto w-full">
-            <h2 className="text-3xl font-extrabold text-slate-900 mb-8 flex items-center gap-3">
-              <Bot className="h-8 w-8 text-emerald-500" /> Bot Configuration
+          <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
+            <div className="p-10 max-w-4xl mx-auto w-full space-y-8">
+            <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
+              <Bot className="h-7 w-7 text-purple-600" /> Bot Configuration & Knowledge Base
             </h2>
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-8">
+            <div className="dash-card p-8 space-y-8">
               
               {/* Global Autopilot Toggle */}
-              <div className="flex items-center justify-between bg-slate-50 p-6 rounded-2xl border border-slate-200">
+              <div className="flex items-center justify-between bg-slate-50/80 p-6 rounded-2xl border border-slate-200/60">
                 <div>
-                  <h3 className="text-[16px] font-bold text-slate-900">Global AI Autopilot</h3>
-                  <p className="text-[13px] text-slate-500 font-medium mt-1">When disabled, the AI will stop automatically replying to all incoming messages by default.</p>
+                  <h3 className="text-sm font-extrabold text-slate-900">Global AI Autopilot</h3>
+                  <p className="text-xs text-slate-500 font-medium mt-1">When disabled, the AI will stop automatically replying to all incoming messages by default.</p>
                 </div>
                 <div 
                   onClick={() => setConfig({ ...config, globalAiEnabled: config.globalAiEnabled === false ? true : false })}
-                  className={`w-14 h-8 flex items-center rounded-full p-1 cursor-pointer transition-colors shadow-inner ${config.globalAiEnabled !== false ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                  className={`w-14 h-8 flex items-center rounded-full p-1 cursor-pointer transition-colors shadow-inner ${config.globalAiEnabled !== false ? 'bg-purple-600' : 'bg-slate-300'}`}
                 >
                   <div className={`bg-white w-6 h-6 rounded-full shadow-md transform transition-transform ${config.globalAiEnabled !== false ? 'translate-x-6' : 'translate-x-0'}`} />
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <label className="text-sm font-bold text-slate-900">System Prompt / Persona</label>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">System Prompt / Persona</label>
                 <textarea 
                   value={config.systemPrompt}
                   onChange={(e) => setConfig({ ...config, systemPrompt: e.target.value })}
-                  className="w-full h-32 p-4 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition font-medium"
+                  className="w-full h-32 p-4 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800"
                   placeholder="Tell the AI how to act..."
                 />
               </div>
               
-              <div className="space-y-3">
-                <label className="text-sm font-bold text-slate-900">Product Information Knowledge Base</label>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Product Information Knowledge Base</label>
                 <textarea 
                   value={config.productInfo}
                   onChange={(e) => setConfig({ ...config, productInfo: e.target.value })}
-                  className="w-full h-32 p-4 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition font-medium"
+                  className="w-full h-32 p-4 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800"
                   placeholder="Paste your pricing, features, and product details here..."
                 />
               </div>
 
               {/* Website Scraper */}
-              <div className="bg-[#f8fafc] p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+              <div className="bg-purple-50/40 p-6 rounded-2xl border border-purple-100/80 shadow-sm space-y-4">
                 <div>
-                  <h3 className="text-[15px] font-bold text-slate-900">Universal Website Scraper</h3>
-                  <p className="text-[13px] text-slate-500 font-medium mt-1">Paste your store link to automatically extract products, images, and links into the Knowledge Base.</p>
+                  <h3 className="text-sm font-extrabold text-slate-900">Universal Website Scraper</h3>
+                  <p className="text-xs text-slate-500 font-medium mt-1">Paste your store link to automatically extract products, images, and links into the Knowledge Base.</p>
                 </div>
                 <div className="flex gap-3">
                   <input 
@@ -1891,19 +2115,19 @@ export default function DashboardPage() {
                     value={scrapeUrl}
                     onChange={(e) => setScrapeUrl(e.target.value)}
                     placeholder="https://yourstore.com"
-                    className="flex-1 px-4 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition"
+                    className="flex-1 px-4 py-2.5 text-xs bg-white border border-purple-100 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold"
                   />
                   <input 
                     type="text" 
                     value={scrapeCurrency}
                     onChange={(e) => setScrapeCurrency(e.target.value)}
                     placeholder="Rs."
-                    className="w-20 px-4 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition text-center font-bold"
+                    className="w-20 px-4 py-2.5 text-xs bg-white border border-purple-100 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition text-center font-bold"
                   />
                   <button 
                     onClick={handleScrape}
                     disabled={isScraping || !scrapeUrl.trim()}
-                    className={`px-6 py-2.5 rounded-xl text-sm font-bold text-white shadow-md transition-all ${isScraping || !scrapeUrl.trim() ? 'bg-slate-300 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 hover:-translate-y-0.5'}`}
+                    className={`px-6 py-2.5 rounded-xl text-xs font-bold text-white shadow-md transition-all cursor-pointer ${isScraping || !scrapeUrl.trim() ? 'bg-slate-300 cursor-not-allowed' : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-purple-500/20'}`}
                   >
                     {isScraping ? 'Scraping...' : 'Scrape Store'}
                   </button>
@@ -1914,25 +2138,25 @@ export default function DashboardPage() {
                 <button 
                   onClick={saveConfig}
                   disabled={savingConfig}
-                  className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold h-14 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2"
+                  className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold h-13 rounded-xl shadow-md shadow-purple-500/20 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
                 >
-                  {savingConfig ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
+                  {savingConfig ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   Save Settings & Knowledge Base
                 </button>
               </div>
 
-              <div className="pt-8">
+              <div className="pt-4">
                 <div className="flex items-center justify-between mb-6">
                   <div>
-                    <h3 className="text-lg font-bold text-slate-900">Keyword Auto-Replies</h3>
-                    <p className="text-sm text-slate-500 font-medium mt-1">Bypass AI to instantly reply to specific exact keywords.</p>
+                    <h3 className="text-sm font-extrabold text-slate-900">Keyword Auto-Replies</h3>
+                    <p className="text-xs text-slate-500 font-medium mt-1">Bypass AI to instantly reply to specific exact keywords.</p>
                   </div>
                   <button 
                     onClick={() => setConfig({
                       ...config, 
                       keywordReplies: [...(config.keywordReplies || []), { keyword: "", reply: "" }]
                     })}
-                    className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-bold rounded-xl shadow-md transition-transform hover:-translate-y-0.5"
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-extrabold rounded-xl shadow-md shadow-purple-500/20 transition-transform hover:-translate-y-0.5 cursor-pointer"
                   >
                     <Plus className="h-4 w-4" /> Add Rule
                   </button>
@@ -1940,12 +2164,12 @@ export default function DashboardPage() {
                 
                 <div className="space-y-4">
                   {(!config.keywordReplies || config.keywordReplies.length === 0) ? (
-                    <div className="text-center p-8 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 font-bold text-sm">
+                    <div className="text-center p-8 bg-slate-50/80 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 font-bold text-xs">
                       No keyword rules added yet.
                     </div>
                   ) : (
                     config.keywordReplies.map((kr: any, idx: number) => (
-                      <div key={idx} className="flex gap-4 items-start bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                      <div key={idx} className="flex gap-4 items-start bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">
                         <div className="w-1/3">
                           <input 
                             type="text" 
@@ -1956,7 +2180,7 @@ export default function DashboardPage() {
                               setConfig({ ...config, keywordReplies: newReplies });
                             }}
                             placeholder="Keyword"
-                            className="w-full p-3 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-slate-700"
+                            className="w-full p-3 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold text-slate-700"
                           />
                         </div>
                         <div className="flex-1 relative flex gap-3">
@@ -1969,7 +2193,7 @@ export default function DashboardPage() {
                               setConfig({ ...config, keywordReplies: newReplies });
                             }}
                             placeholder="Exact match auto-reply..."
-                            className="w-full p-3 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-medium text-slate-700"
+                            className="w-full p-3 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-semibold text-slate-700"
                           />
                           <button 
                             onClick={() => {
@@ -1977,9 +2201,9 @@ export default function DashboardPage() {
                               newReplies.splice(idx, 1);
                               setConfig({ ...config, keywordReplies: newReplies });
                             }}
-                            className="bg-rose-50 text-rose-500 hover:bg-rose-100 p-3 rounded-xl transition-colors flex-shrink-0"
+                            className="bg-rose-50 text-rose-500 hover:bg-rose-100 p-3 rounded-xl transition-colors flex-shrink-0 cursor-pointer"
                           >
-                            <Trash2 className="h-5 w-5" />
+                            <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
                       </div>
@@ -1992,9 +2216,9 @@ export default function DashboardPage() {
                 <button 
                   onClick={saveConfig}
                   disabled={savingConfig}
-                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold h-14 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2"
+                  className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold h-13 rounded-xl shadow-md shadow-purple-500/20 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
                 >
-                  {savingConfig ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
+                  {savingConfig ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   Save Configuration
                 </button>
               </div>
@@ -2004,21 +2228,21 @@ export default function DashboardPage() {
         </div>
       )}
 
-        {/* Promotions Tab */}
+        {/* Promotions Tab - DashMark Theme */}
         {activeTab === 'promotions' && (
-          <div className="flex-1 h-full overflow-y-auto">
-            <div className="p-10 max-w-4xl mx-auto w-full">
-            <h2 className="text-3xl font-extrabold text-slate-900 mb-8 flex items-center gap-3">
-              <MessageSquare className="h-8 w-8 text-emerald-500" /> Promotions & Broadcasts
+          <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
+            <div className="p-10 max-w-4xl mx-auto w-full space-y-8">
+            <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
+              <MessageSquare className="h-7 w-7 text-purple-600" /> Promotions & Broadcasts
             </h2>
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-8">
+            <div className="dash-card p-8 space-y-8">
               
-              <div className="space-y-3">
-                <label className="text-sm font-bold text-slate-900">Audience Segment</label>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Audience Segment</label>
                 <select 
                   value={promoAudience}
                   onChange={(e) => setPromoAudience(e.target.value)}
-                  className="w-full p-4 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-slate-700"
+                  className="w-full p-4 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold text-slate-700"
                 >
                   <option value="all">All Contacts</option>
                   <option value="hot">Warm & Hot Leads (Active Inquiries)</option>
@@ -2027,8 +2251,8 @@ export default function DashboardPage() {
                 <p className="text-xs text-slate-500 font-medium mt-1">Select which group of contacts should receive this broadcast.</p>
               </div>
 
-              <div className="space-y-3">
-                <label className="text-sm font-bold text-slate-900">Media Attachment (Optional)</label>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Media Attachment (Optional)</label>
                 <div className="flex items-center gap-4">
                   <input 
                     type="file" 
@@ -2044,9 +2268,9 @@ export default function DashboardPage() {
                     Attach File
                   </button>
                   {promoMediaName && (
-                    <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-4 py-3 rounded-xl text-sm font-bold">
+                    <div className="flex items-center gap-2 bg-purple-50 text-purple-700 px-4 py-3 rounded-xl text-xs font-extrabold border border-purple-200/60">
                       <span className="truncate max-w-[200px]">{promoMediaName}</span>
-                      <button onClick={removePromoMedia} className="text-emerald-900 hover:text-red-500 transition">
+                      <button onClick={removePromoMedia} className="text-purple-900 hover:text-rose-500 transition cursor-pointer">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
@@ -2054,12 +2278,12 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <label className="text-sm font-bold text-slate-900">Broadcast Message {promoMediaBase64 ? '(Optional Caption)' : ''}</label>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Broadcast Message {promoMediaBase64 ? '(Optional Caption)' : ''}</label>
                 <textarea 
                   value={promoMessage}
                   onChange={(e) => setPromoMessage(e.target.value)}
-                  className="w-full h-32 p-4 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition font-medium"
+                  className="w-full h-32 p-4 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800"
                   placeholder="Enter your promotional message here... (e.g. Flash Sale: 20% off!)"
                 />
               </div>
@@ -2068,9 +2292,9 @@ export default function DashboardPage() {
                 <button 
                   onClick={sendPromotion}
                   disabled={sendingPromo || (!promoMessage.trim() && !promoMediaBase64)}
-                  className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:hover:bg-emerald-500 text-white font-bold h-14 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2"
+                  className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white font-extrabold h-13 rounded-xl shadow-md shadow-purple-500/20 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
                 >
-                  {sendingPromo ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                  {sendingPromo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   {sendingPromo ? "Sending Broadcast..." : "Send Now"}
                 </button>
               </div>
@@ -2079,13 +2303,13 @@ export default function DashboardPage() {
               <div className="pt-4 border-b border-slate-100 pb-8">
                 <div className="mb-6 flex justify-between items-end">
                   <div>
-                    <h3 className="text-lg font-bold text-slate-900">Abandoned Booking Recovery</h3>
-                    <p className="text-sm text-slate-500 font-medium mt-1">Automatically send sequence messages to clients who stop responding during a booking or conversation.</p>
+                    <h3 className="text-sm font-extrabold text-slate-900">Abandoned Booking Recovery</h3>
+                    <p className="text-xs text-slate-500 font-medium mt-1">Automatically send sequence messages to clients who stop responding during a booking or conversation.</p>
                   </div>
                   <button 
                     onClick={saveConfig}
                     disabled={savingConfig}
-                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 px-6 rounded-xl transition-all shadow-sm flex items-center gap-2 text-sm"
+                    className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold py-2 px-6 rounded-xl transition-all shadow-md shadow-purple-500/20 flex items-center gap-2 text-xs cursor-pointer"
                   >
                     {savingConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     Save Settings
@@ -2103,10 +2327,10 @@ export default function DashboardPage() {
                     const fullFUs = defaultFUs.map((df, i) => currentFUs[i] || df);
 
                     return fullFUs.map((fu: any, idx: number) => (
-                      <div key={idx} className={`p-5 rounded-2xl border transition-all ${fu.enabled ? 'bg-white border-emerald-200 shadow-sm' : 'bg-slate-50 border-slate-200'}`}>
+                      <div key={idx} className={`p-5 rounded-2xl border transition-all ${fu.enabled ? 'bg-white border-purple-200 shadow-sm' : 'bg-slate-50/80 border-slate-200/80'}`}>
                         <div className="flex items-center justify-between mb-4">
-                          <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                            <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs text-white ${fu.enabled ? 'bg-emerald-500' : 'bg-slate-300'}`}>{idx + 1}</span>
+                          <h4 className="font-bold text-slate-800 flex items-center gap-2 text-xs">
+                            <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs text-white ${fu.enabled ? 'bg-purple-600' : 'bg-slate-300'}`}>{idx + 1}</span>
                             Follow-up {idx + 1}
                           </h4>
                           
@@ -2121,7 +2345,7 @@ export default function DashboardPage() {
                                   newFUs[idx] = { ...newFUs[idx], delayMinutes: parseInt(e.target.value) || 0 };
                                   setConfig({ ...config, followUps: newFUs });
                                 }}
-                                className="w-20 px-3 py-1.5 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                                className="w-20 px-3 py-1.5 text-xs bg-white border border-slate-200/80 rounded-lg focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold"
                               />
                             </div>
                             <div 
@@ -2130,7 +2354,7 @@ export default function DashboardPage() {
                                 newFUs[idx] = { ...newFUs[idx], enabled: !fu.enabled };
                                 setConfig({ ...config, followUps: newFUs });
                               }}
-                              className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${fu.enabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                              className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${fu.enabled ? 'bg-purple-600' : 'bg-slate-300'}`}
                             >
                               <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${fu.enabled ? 'translate-x-6' : 'translate-x-0'}`} />
                             </div>
@@ -2149,7 +2373,7 @@ export default function DashboardPage() {
                               }}
                               rows={3}
                               placeholder="Enter the follow-up message template. E.g. 'Hi! Just checking in to see if you have any questions...'"
-                              className="w-full p-3 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/30 outline-none font-medium text-slate-700 focus:border-emerald-500"
+                              className="w-full p-3 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-semibold text-slate-700"
                             />
                           </div>
                         )}
@@ -2165,22 +2389,22 @@ export default function DashboardPage() {
         </div>
       )}
 
-        {/* Leads Revival Tab */}
+        {/* Leads Revival Tab - DashMark Theme */}
         {activeTab === 'leads-revival' && (
-          <div className="flex-1 h-full overflow-y-auto">
-            <div className="p-10 max-w-4xl mx-auto w-full">
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-3xl font-extrabold text-slate-900 flex items-center gap-3">
-                <RefreshCw className={`h-8 w-8 text-emerald-500 ${activeRevivalCampaign?.status === 'active' ? 'animate-spin' : ''}`} style={{ animationDuration: '4s' }} /> Leads Revival
+          <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
+            <div className="p-10 max-w-4xl mx-auto w-full space-y-8">
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
+                <RefreshCw className={`h-7 w-7 text-purple-600 ${activeRevivalCampaign?.status === 'active' ? 'animate-spin' : ''}`} style={{ animationDuration: '4s' }} /> Leads Revival
               </h2>
               {activeRevivalCampaign && (
-                <div className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
-                  activeRevivalCampaign.status === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse' :
+                <div className={`px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5 ${
+                  activeRevivalCampaign.status === 'active' ? 'bg-purple-50 text-purple-700 border border-purple-200 animate-pulse' :
                   activeRevivalCampaign.status === 'paused' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
                   'bg-slate-100 text-slate-500'
                 }`}>
                   <span className={`h-2 w-2 rounded-full ${
-                    activeRevivalCampaign.status === 'active' ? 'bg-emerald-500' :
+                    activeRevivalCampaign.status === 'active' ? 'bg-purple-600' :
                     activeRevivalCampaign.status === 'paused' ? 'bg-amber-500' :
                     'bg-slate-400'
                   }`} />
@@ -2192,58 +2416,58 @@ export default function DashboardPage() {
             {activeRevivalCampaign ? (
               /* Active Campaign Status Dashboard */
               <div className="space-y-8">
-                <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6">
-                  <div className="flex justify-between items-start border-b border-slate-50 pb-6">
+                <div className="dash-card p-8 space-y-6">
+                  <div className="flex justify-between items-start border-b border-slate-100 pb-6">
                     <div>
-                      <h3 className="text-lg font-bold text-slate-900">Campaign Details: {activeRevivalCampaign.id}</h3>
+                      <h3 className="text-sm font-extrabold text-slate-900">Campaign Details: {activeRevivalCampaign.id}</h3>
                       <p className="text-xs text-slate-400 font-bold mt-1">Created on {new Date(activeRevivalCampaign.createdAt).toLocaleString()}</p>
                     </div>
                     <div className="flex gap-3">
                       {activeRevivalCampaign.status === "active" ? (
                         <button
                           onClick={() => controlRevivalCampaign("pause")}
-                          className="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-5 rounded-xl transition text-sm flex items-center gap-2"
+                          className="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-5 rounded-xl transition text-xs flex items-center gap-2 cursor-pointer shadow-sm"
                         >
                           <Pause className="w-4 h-4" /> Pause Campaign
                         </button>
                       ) : activeRevivalCampaign.status === "paused" ? (
                         <button
                           onClick={() => controlRevivalCampaign("resume")}
-                          className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-5 rounded-xl transition text-sm flex items-center gap-2"
+                          className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold py-2 px-5 rounded-xl transition text-xs flex items-center gap-2 cursor-pointer shadow-md shadow-purple-500/20"
                         >
                           <Play className="w-4 h-4" /> Resume Campaign
                         </button>
                       ) : null}
                       <button
                         onClick={() => controlRevivalCampaign("cancel")}
-                        className="bg-rose-500 hover:bg-rose-600 text-white font-bold py-2 px-5 rounded-xl transition text-sm flex items-center gap-2"
+                        className="bg-rose-500 hover:bg-rose-600 text-white font-bold py-2 px-5 rounded-xl transition text-xs flex items-center gap-2 cursor-pointer shadow-sm"
                       >
                         <StopCircle className="w-4 h-4" /> Cancel Campaign
                       </button>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Target Audience</div>
-                      <div className="text-lg font-bold text-slate-700 capitalize">{activeRevivalCampaign.audience} Leads</div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+                    <div className="bg-slate-50/80 p-5 rounded-2xl border border-slate-200/60">
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Target Audience</div>
+                      <div className="text-sm font-extrabold text-slate-800 capitalize">{activeRevivalCampaign.audience} Leads</div>
                     </div>
-                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Sent Today</div>
-                      <div className="text-lg font-bold text-slate-700">{activeRevivalCampaign.sentToday} / {activeRevivalCampaign.dailyCap}</div>
+                    <div className="bg-slate-50/80 p-5 rounded-2xl border border-slate-200/60">
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Sent Today</div>
+                      <div className="text-sm font-extrabold text-slate-800">{activeRevivalCampaign.sentToday} / {activeRevivalCampaign.dailyCap}</div>
                     </div>
-                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Failed</div>
-                      <div className="text-lg font-bold text-red-600">{activeRevivalCampaign.failedPhones.length}</div>
+                    <div className="bg-slate-50/80 p-5 rounded-2xl border border-slate-200/60">
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Failed</div>
+                      <div className="text-sm font-extrabold text-rose-600">{activeRevivalCampaign.failedPhones.length}</div>
                     </div>
-                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                      <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Schedule Slot</div>
-                      <div className="text-lg font-bold text-slate-700">{activeRevivalCampaign.timeSlotStart} - {activeRevivalCampaign.timeSlotEnd}</div>
+                    <div className="bg-slate-50/80 p-5 rounded-2xl border border-slate-200/60">
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Schedule Slot</div>
+                      <div className="text-sm font-extrabold text-slate-800">{activeRevivalCampaign.timeSlotStart} - {activeRevivalCampaign.timeSlotEnd}</div>
                     </div>
                   </div>
 
                   <div className="space-y-3 pt-4">
-                    <div className="flex justify-between items-center text-sm font-bold text-slate-700">
+                    <div className="flex justify-between items-center text-xs font-bold text-slate-700">
                       <span>Campaign Progress</span>
                       <span>
                         {activeRevivalCampaign.sentPhones.length + activeRevivalCampaign.failedPhones.length} / {activeRevivalCampaign.targetPhones.length} Leads
@@ -2251,11 +2475,11 @@ export default function DashboardPage() {
                     </div>
                     <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
                       <div 
-                        className="bg-emerald-500 h-full transition-all duration-500" 
+                        className="bg-gradient-to-r from-purple-600 to-indigo-600 h-full transition-all duration-500" 
                         style={{ width: `${Math.round(((activeRevivalCampaign.sentPhones.length + activeRevivalCampaign.failedPhones.length) / activeRevivalCampaign.targetPhones.length) * 100)}%` }}
                       />
                     </div>
-                    <div className="flex justify-between items-center text-xs text-slate-400 font-semibold">
+                    <div className="flex justify-between items-center text-[11px] text-slate-400 font-semibold">
                       <span>{Math.round(((activeRevivalCampaign.sentPhones.length + activeRevivalCampaign.failedPhones.length) / activeRevivalCampaign.targetPhones.length) * 100)}% Complete</span>
                       {activeRevivalCampaign.lastBatchSentAt && (
                         <span>Last batch sent: {new Date(activeRevivalCampaign.lastBatchSentAt).toLocaleTimeString()}</span>
@@ -2263,11 +2487,11 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-2">
-                    <h4 className="text-sm font-bold text-slate-900">Revival Message Content</h4>
-                    <p className="text-sm text-slate-700 font-medium whitespace-pre-wrap">{activeRevivalCampaign.message}</p>
+                  <div className="bg-slate-50/80 p-6 rounded-2xl border border-slate-200/60 space-y-2">
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Revival Message Content</h4>
+                    <p className="text-xs text-slate-700 font-medium whitespace-pre-wrap">{activeRevivalCampaign.message}</p>
                     {activeRevivalCampaign.fileName && (
-                      <div className="flex items-center gap-2 mt-3 bg-emerald-50 border border-emerald-100 text-emerald-800 px-3 py-2 rounded-xl text-xs font-bold w-fit">
+                      <div className="flex items-center gap-2 mt-3 bg-purple-50 border border-purple-100 text-purple-800 px-3 py-2 rounded-xl text-xs font-bold w-fit">
                         <span>Attached file: {activeRevivalCampaign.fileName}</span>
                       </div>
                     )}
@@ -2310,13 +2534,13 @@ export default function DashboardPage() {
             ) : (
               /* Campaign Creator Form */
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6">
-                  <div className="space-y-3">
-                    <label className="text-sm font-bold text-slate-900">Audience Segment</label>
+                <div className="lg:col-span-2 dash-card p-8 space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Audience Segment</label>
                     <select 
                       value={revivalAudience}
                       onChange={(e) => setRevivalAudience(e.target.value)}
-                      className="w-full p-4 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-slate-700"
+                      className="w-full p-4 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold text-slate-700"
                     >
                       <option value="all">All Contacts (Count: {getSelectedLeadsCount("all")})</option>
                       <option value="cold">Cold Leads (Inactive / Abandoned) (Count: {getSelectedLeadsCount("cold")})</option>
@@ -2327,20 +2551,20 @@ export default function DashboardPage() {
                     <p className="text-xs text-slate-500 font-medium mt-1">Select the target segment to trigger the revival sequence.</p>
                     
                     {revivalAudience === "custom" && (
-                      <div className="space-y-3 mt-4 border border-slate-100 p-5 rounded-2xl bg-slate-50">
-                        <label className="text-sm font-bold text-slate-700 block">Custom Phone Numbers (One per line or comma-separated)</label>
+                      <div className="space-y-3 mt-4 border border-purple-100 p-5 rounded-2xl bg-purple-50/40">
+                        <label className="text-xs font-bold text-slate-700 block uppercase tracking-wider">Custom Phone Numbers (One per line or comma-separated)</label>
                         <textarea
                           value={customPhonesInput}
                           onChange={(e) => handleCustomPhonesChange(e.target.value)}
                           placeholder="e.g.&#10;+923228487873&#10;03011660641&#10;+92 300 1234567"
-                          className="w-full h-32 p-4 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition font-medium"
+                          className="w-full h-32 p-4 text-xs bg-white border border-purple-100 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800"
                         />
                         <div className="flex items-center justify-between text-xs text-slate-500 font-semibold">
-                          <span>Parsed valid numbers: <strong className="text-emerald-600">{customPhones.length}</strong></span>
+                          <span>Parsed valid numbers: <strong className="text-purple-600 font-bold">{customPhones.length}</strong></span>
                           <button 
                             type="button" 
                             onClick={() => customPhonesFileInputRef.current?.click()} 
-                            className="text-emerald-600 hover:text-emerald-700 underline cursor-pointer focus:outline-none"
+                            className="text-purple-600 hover:text-purple-700 underline font-bold cursor-pointer focus:outline-none"
                           >
                             📎 Upload .txt / .csv / .pdf file
                           </button>
@@ -2356,8 +2580,8 @@ export default function DashboardPage() {
                     )}
                   </div>
 
-                  <div className="space-y-3">
-                    <label className="text-sm font-bold text-slate-900">Media Attachment (Optional)</label>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Media Attachment (Optional)</label>
                     <div className="flex items-center gap-4">
                       <input 
                         type="file" 
@@ -2367,15 +2591,15 @@ export default function DashboardPage() {
                       />
                       <button 
                         onClick={() => revivalFileInputRef.current?.click()}
-                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl font-bold flex items-center gap-2 transition"
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer"
                       >
-                        <Paperclip className="w-5 h-5" />
+                        <Paperclip className="w-4 h-4" />
                         Attach File
                       </button>
                       {revivalMediaName && (
-                        <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-4 py-3 rounded-xl text-sm font-bold">
+                        <div className="flex items-center gap-2 bg-purple-50 text-purple-700 px-4 py-3 rounded-xl text-xs font-extrabold border border-purple-200/60">
                           <span className="truncate max-w-[200px]">{revivalMediaName}</span>
-                          <button onClick={removeRevivalMedia} className="text-emerald-900 hover:text-red-500 transition">
+                          <button onClick={removeRevivalMedia} className="text-purple-900 hover:text-rose-500 transition cursor-pointer">
                             <X className="w-4 h-4" />
                           </button>
                         </div>
@@ -2383,19 +2607,19 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-3">
-                    <label className="text-sm font-bold text-slate-900">Campaign Message {revivalMediaBase64 ? '(Optional Caption)' : ''}</label>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Campaign Message {revivalMediaBase64 ? '(Optional Caption)' : ''}</label>
                     <textarea 
                       value={revivalMessage}
                       onChange={(e) => setRevivalMessage(e.target.value)}
-                      className="w-full h-32 p-4 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition font-medium"
+                      className="w-full h-32 p-4 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800"
                       placeholder="Draft your revival message here... (e.g. 'Hey! Just checking if you were still interested in Mehrunisa? We are running low on stock.')"
                     />
                   </div>
 
-                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-150 space-y-6">
-                    <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                      <ShieldCheck className="w-4 h-4 text-emerald-500" /> Safety Settings (Anti-Ban Limits)
+                  <div className="bg-slate-50/80 p-6 rounded-2xl border border-slate-200/60 space-y-6">
+                    <h3 className="text-xs font-extrabold text-slate-900 flex items-center gap-2 uppercase tracking-wider">
+                      <ShieldCheck className="w-4 h-4 text-purple-600" /> Safety Settings (Anti-Ban Limits)
                     </h3>
                     
                     <div className="grid grid-cols-2 gap-4">
@@ -2405,7 +2629,7 @@ export default function DashboardPage() {
                           type="time" 
                           value={revivalTimeStart}
                           onChange={(e) => handleTimeStartChange(e.target.value)}
-                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                          className="w-full px-3 py-2 text-xs bg-white border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold"
                         />
                       </div>
                       <div>
@@ -2414,7 +2638,7 @@ export default function DashboardPage() {
                           type="time" 
                           value={revivalTimeEnd}
                           onChange={(e) => handleTimeEndChange(e.target.value)}
-                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                          className="w-full px-3 py-2 text-xs bg-white border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold"
                         />
                       </div>
                     </div>
@@ -2429,7 +2653,7 @@ export default function DashboardPage() {
                           step={0.1}
                           value={revivalDelayMinutes}
                           onChange={(e) => handleDelayChange(Math.max(0.1, parseFloat(e.target.value) || 0.1))}
-                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                          className="w-full px-3 py-2 text-xs bg-white border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold"
                         />
                       </div>
                       <div>
@@ -2440,7 +2664,7 @@ export default function DashboardPage() {
                           max={1000}
                           value={revivalDailyCap}
                           onChange={(e) => setRevivalDailyCap(Math.max(1, Math.min(1000, parseInt(e.target.value) || 1)))}
-                          className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                          className="w-full px-3 py-2 text-xs bg-white border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold"
                         />
                       </div>
                     </div>
@@ -2455,7 +2679,7 @@ export default function DashboardPage() {
                             step={0.1}
                             value={targetDuration}
                             onChange={(e) => handleTargetDurationChange(Math.max(0.1, parseFloat(e.target.value) || 0.1))}
-                            className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold"
+                            className="w-full px-3 py-2 text-xs bg-white border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold"
                           />
                         </div>
                         <div>
@@ -2463,7 +2687,7 @@ export default function DashboardPage() {
                           <select 
                             value={targetDurationUnit}
                             onChange={(e) => handleTargetDurationUnitChange(e.target.value as "Days" | "Hours")}
-                            className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-slate-700"
+                            className="w-full px-3 py-2 text-xs bg-white border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold text-slate-700"
                           >
                             <option value="Days">Days</option>
                             <option value="Hours">Hours</option>
@@ -2476,9 +2700,9 @@ export default function DashboardPage() {
                   <button 
                     onClick={launchRevivalCampaign}
                     disabled={creatingCampaign || (!revivalMessage.trim() && !revivalMediaBase64) || getSelectedLeadsCount() === 0}
-                    className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-bold h-14 rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2"
+                    className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white font-extrabold h-13 rounded-xl shadow-md shadow-purple-500/20 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
                   >
-                    {creatingCampaign ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                    {creatingCampaign ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     {creatingCampaign ? "Launching Campaign..." : "Launch Campaign"}
                   </button>
                 </div>
@@ -2498,29 +2722,29 @@ export default function DashboardPage() {
                     const daysEst = actualDailySend > 0 ? Math.ceil(targetLeads / actualDailySend) : 0;
 
                     return (
-                      <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-lg space-y-6">
-                        <h3 className="text-lg font-bold flex items-center gap-2 border-b border-slate-800 pb-4">
-                          <Eye className="w-5 h-5 text-emerald-400" /> AI Campaign Estimator
+                      <div className="bg-gradient-to-br from-purple-900 via-indigo-900 to-slate-900 text-white p-8 rounded-3xl shadow-xl space-y-6 border border-purple-500/20">
+                        <h3 className="text-sm font-extrabold flex items-center gap-2 border-b border-white/10 pb-4 tracking-tight">
+                          <Eye className="w-4 h-4 text-purple-400" /> AI Campaign Estimator
                         </h3>
                         
                         <div className="space-y-4">
                           <div>
-                            <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">Target Leads Selected</div>
-                            <div className="text-3xl font-extrabold text-emerald-400">{targetLeads}</div>
+                            <div className="text-[11px] text-purple-200 font-bold uppercase tracking-wider">Target Leads Selected</div>
+                            <div className="text-3xl font-extrabold text-white">{targetLeads}</div>
                           </div>
                           
                           <div>
-                            <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">Daily Send Speed (Estimated)</div>
-                            <div className="text-lg font-bold text-white">{actualDailySend} leads / day</div>
-                            <div className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                            <div className="text-[11px] text-purple-200 font-bold uppercase tracking-wider">Daily Send Speed (Estimated)</div>
+                            <div className="text-base font-bold text-white">{actualDailySend} leads / day</div>
+                            <div className="text-[10px] text-purple-300 font-semibold mt-0.5">
                               Limits: {revivalDailyCap} cap, {activeHours} hrs/day slot
                             </div>
                           </div>
 
-                          <div className="pt-2 border-t border-slate-800">
-                            <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">Estimated Completion</div>
-                            <div className="text-2xl font-extrabold text-white flex items-center gap-2 mt-1">
-                              <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
+                          <div className="pt-2 border-t border-white/10">
+                            <div className="text-[11px] text-purple-200 font-bold uppercase tracking-wider">Estimated Completion</div>
+                            <div className="text-xl font-extrabold text-white flex items-center gap-2 mt-1">
+                              <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
                               {targetLeads === 0 ? "No leads selected" : daysEst <= 1 ? `${Math.round(totalHoursEst * 10) / 10} Hours` : `${daysEst} Days`}
                             </div>
                           </div>
@@ -2586,22 +2810,22 @@ export default function DashboardPage() {
         </div>
       )}
 
-        {/* Orders Tab */}
+        {/* Orders Tab - DashMark Theme */}
         {activeTab === 'orders' && (
-          <div className="flex-1 h-full overflow-y-auto">
-            <div className="p-10 max-w-4xl mx-auto w-full">
-            <h2 className="text-3xl font-extrabold text-slate-900 mb-8 flex items-center gap-3">
-              <ShoppingCart className="h-8 w-8 text-emerald-500" /> Incoming Orders
+          <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
+            <div className="p-10 max-w-4xl mx-auto w-full space-y-8">
+            <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
+              <ShoppingCart className="h-7 w-7 text-purple-600" /> Incoming Orders & Projects
             </h2>
-            <div className="flex gap-4 mb-6">
+            <div className="flex gap-2 mb-2">
               {['all', 'pending', 'confirmed', 'cancelled'].map(filter => (
                 <button
                   key={filter}
                   onClick={() => setOrderFilter(filter as any)}
-                  className={`px-4 py-2 rounded-xl text-sm font-bold capitalize transition-colors ${
+                  className={`px-4 py-2 rounded-xl text-xs font-extrabold capitalize transition-all cursor-pointer ${
                     orderFilter === filter 
-                      ? 'bg-slate-900 text-white' 
-                      : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+                      ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20' 
+                      : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200/80'
                   }`}
                 >
                   {filter}
@@ -2609,62 +2833,62 @@ export default function DashboardPage() {
               ))}
             </div>
 
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 min-h-[500px]">
+            <div className="dash-card p-8 min-h-[500px]">
               {orders.filter(o => orderFilter === 'all' || o.status === orderFilter).length === 0 ? (
-                <div className="text-center p-12 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 font-bold">
+                <div className="text-center p-12 bg-slate-50/80 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 font-bold text-xs">
                   No orders found.
                 </div>
               ) : (
-                <div className="grid gap-6">
+                <div className="grid gap-4">
                   {orders.filter(o => orderFilter === 'all' || o.status === orderFilter).reverse().map((order) => (
-                    <div key={order.id} className="bg-slate-50 p-6 rounded-2xl border border-slate-200 flex flex-col sm:flex-row gap-6 items-start sm:items-center">
+                    <div key={order.id} className="bg-slate-50/80 p-6 rounded-2xl border border-slate-200/60 flex flex-col sm:flex-row gap-6 items-start sm:items-center">
                       
                       {/* Product Image */}
-                      <div className="w-24 h-24 rounded-xl bg-slate-200 shrink-0 overflow-hidden border border-slate-200 flex items-center justify-center text-slate-400">
+                      <div className="w-20 h-20 rounded-xl bg-slate-200 shrink-0 overflow-hidden border border-slate-200 flex items-center justify-center text-slate-400">
                         {order.productImageUrl ? (
                           <img src={order.productImageUrl} alt={order.productName} className="w-full h-full object-cover" />
                         ) : (
-                          <ShoppingCart className="h-8 w-8 opacity-50" />
+                          <ShoppingCart className="h-7 w-7 opacity-40 text-purple-600" />
                         )}
                       </div>
                       
                       {/* Order Details */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-2">
-                          <span className="text-sm font-extrabold text-slate-900">{order.id}</span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                            order.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                            order.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' :
-                            order.status === 'cancelled' ? 'bg-red-100 text-red-700' :
+                          <span className="text-xs font-extrabold text-slate-900">{order.id}</span>
+                          <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                            order.status === 'pending' ? 'bg-amber-100 text-amber-800' :
+                            order.status === 'confirmed' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                            order.status === 'cancelled' ? 'bg-rose-100 text-rose-800' :
                             'bg-slate-200 text-slate-700'
                           }`}>
                             {order.status}
                           </span>
-                          <span className="text-xs text-slate-500 ml-auto">{new Date(order.timestamp).toLocaleString()}</span>
+                          <span className="text-xs text-slate-400 ml-auto font-semibold">{new Date(order.timestamp).toLocaleString()}</span>
                         </div>
                         
-                        <h3 className="text-lg font-bold text-slate-800 mb-1 truncate">{order.productName}</h3>
+                        <h3 className="text-sm font-extrabold text-slate-800 mb-1 truncate">{order.productName}</h3>
                         
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-1 gap-x-4 text-sm text-slate-600 mt-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-1 gap-x-4 text-xs text-slate-600 mt-2 font-medium">
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold w-16 text-slate-500">Phone:</span>
-                            <span className="font-medium text-slate-800">{order.phone}</span>
+                            <span className="font-bold w-16 text-slate-400">Phone:</span>
+                            <span className="font-semibold text-slate-800">{order.phone}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold w-16 text-slate-500">Price:</span>
-                            <span className="font-medium text-slate-800">{order.price || 'N/A'}</span>
+                            <span className="font-bold w-16 text-slate-400">Price:</span>
+                            <span className="font-semibold text-purple-700">{order.price || 'N/A'}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold w-16 text-slate-500">Size:</span>
-                            <span className="font-medium text-slate-800">{order.size || 'N/A'}</span>
+                            <span className="font-bold w-16 text-slate-400">Size:</span>
+                            <span className="font-semibold text-slate-800">{order.size || 'N/A'}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold w-16 text-slate-500">Color:</span>
-                            <span className="font-medium text-slate-800">{order.color || 'N/A'}</span>
+                            <span className="font-bold w-16 text-slate-400">Color:</span>
+                            <span className="font-semibold text-slate-800">{order.color || 'N/A'}</span>
                           </div>
                           <div className="flex items-center gap-2 col-span-1 sm:col-span-2">
-                            <span className="font-semibold w-16 text-slate-500 shrink-0">Address:</span>
-                            <span className="font-medium text-slate-800 truncate">{order.deliveryAddress || 'Pending'}</span>
+                            <span className="font-bold w-16 text-slate-400 shrink-0">Address:</span>
+                            <span className="font-semibold text-slate-800 truncate">{order.deliveryAddress || 'Pending'}</span>
                           </div>
                         </div>
                       </div>
@@ -2681,7 +2905,7 @@ export default function DashboardPage() {
                               });
                               fetchOrders();
                             }}
-                            className="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-colors shadow-sm"
+                            className="flex-1 sm:flex-none px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-extrabold rounded-xl transition-all shadow-md shadow-purple-500/20 cursor-pointer"
                           >
                             Confirm Order
                           </button>
@@ -2694,7 +2918,7 @@ export default function DashboardPage() {
                               });
                               fetchOrders();
                             }}
-                            className="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-red-200 hover:bg-red-50 text-red-600 text-sm font-bold rounded-xl transition-colors shadow-sm"
+                            className="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs font-extrabold rounded-xl transition-colors cursor-pointer"
                           >
                             Cancel Order
                           </button>
@@ -2708,30 +2932,30 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-      {/* Contacts / Leads Tab */}
+      {/* Contacts / Leads Tab - DashMark Theme */}
       {activeTab === 'contacts' && (
-        <div className="flex-1 h-full overflow-y-auto">
-          <div className="p-8 max-w-[1400px] mx-auto w-full">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+        <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
+          <div className="p-8 max-w-[1400px] mx-auto w-full space-y-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-2">
             <div>
-              <h2 className="text-[22px] font-bold text-slate-900 flex items-center gap-2">
-                <Users className="h-6 w-6 text-emerald-500" /> Pipeline & Lead Management
+              <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
+                <Users className="h-7 w-7 text-purple-600" /> Pipeline & Lead Management
               </h2>
-              <p className="text-sm text-slate-500 mt-1 font-medium">Nurture and manage your WhatsApp leads through the sales pipeline.</p>
+              <p className="text-xs text-slate-500 mt-1 font-medium">Nurture and manage your WhatsApp leads through the sales pipeline.</p>
             </div>
             
             {/* View Mode & Search */}
             <div className="flex items-center gap-3 w-full md:w-auto">
-              <div className="bg-slate-100/70 p-1 rounded-xl flex items-center text-sm font-semibold border border-slate-200/50">
+              <div className="bg-slate-100/70 p-1 rounded-xl flex items-center text-xs font-bold border border-slate-200/50">
                 <button 
                   onClick={() => setContactsViewMode("board")}
-                  className={`px-4 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${contactsViewMode === 'board' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  className={`px-4 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${contactsViewMode === 'board' ? 'bg-white text-purple-700 shadow-sm font-extrabold' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                   <Activity className="w-4 h-4" /> Board View
                 </button>
                 <button 
                   onClick={() => setContactsViewMode("list")}
-                  className={`px-4 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${contactsViewMode === 'list' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  className={`px-4 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${contactsViewMode === 'list' ? 'bg-white text-purple-700 shadow-sm font-extrabold' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                   <Users className="w-4 h-4" /> List View
                 </button>
@@ -2740,15 +2964,15 @@ export default function DashboardPage() {
           </div>
 
           {/* Search bar and counts */}
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6 bg-white p-4 rounded-2xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.01)]">
-            <div className="bg-[#f5f6f8] border border-slate-200/60 rounded-xl flex items-center px-4 py-2 gap-3 w-full md:max-w-md focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500 transition-all">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6 dash-card p-4">
+            <div className="bg-slate-100/70 border border-slate-200/60 rounded-xl flex items-center px-4 py-2 gap-3 w-full md:max-w-md focus-within:ring-2 focus-within:ring-purple-500/20 focus-within:border-purple-500 transition-all">
               <Search className="h-4 w-4 text-slate-400" />
               <input 
                 type="text" 
                 placeholder="Search leads by name or phone..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-transparent border-none outline-none text-sm w-full placeholder:text-slate-400 text-slate-700 font-medium" 
+                className="bg-transparent border-none outline-none text-xs w-full placeholder:text-slate-400 text-slate-700 font-semibold" 
               />
               {searchQuery && (
                 <button onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600">
@@ -2756,7 +2980,7 @@ export default function DashboardPage() {
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 self-end md:self-center">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 self-end md:self-center">
               Total: {Object.keys(customers).length} Contacts
             </div>
           </div>
@@ -2766,11 +2990,11 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-start min-h-[600px] pb-10">
               {(() => {
                 const stages: { id: "new" | "qualified" | "warm" | "cold" | "completed"; title: string; color: string; bg: string; dot: string }[] = [
-                  { id: 'new', title: 'New Leads', color: 'border-blue-500', bg: 'bg-blue-50/40', dot: 'bg-blue-500' },
+                  { id: 'new', title: 'New Leads', color: 'border-indigo-500', bg: 'bg-indigo-50/30', dot: 'bg-indigo-500' },
                   { id: 'qualified', title: 'Qualified', color: 'border-amber-400', bg: 'bg-amber-50/30', dot: 'bg-amber-400' },
-                  { id: 'warm', title: 'Warm Leads', color: 'border-purple-500', bg: 'bg-purple-50/30', dot: 'bg-purple-500' },
+                  { id: 'warm', title: 'Warm Leads', color: 'border-purple-500', bg: 'bg-purple-50/40', dot: 'bg-purple-600' },
                   { id: 'cold', title: 'Cold Leads', color: 'border-slate-400', bg: 'bg-slate-50/70', dot: 'bg-slate-400' },
-                  { id: 'completed', title: 'Sales Completed', color: 'border-emerald-500', bg: 'bg-emerald-50/30', dot: 'bg-emerald-500' }
+                  { id: 'completed', title: 'Completed', color: 'border-emerald-500', bg: 'bg-emerald-50/30', dot: 'bg-emerald-500' }
                 ];
 
                 const getCustomerStage = (c: any): "new" | "qualified" | "warm" | "cold" | "completed" => {
@@ -2795,14 +3019,14 @@ export default function DashboardPage() {
                 return stages.map(stage => {
                   const stageLeads = filteredCustomers.filter(c => getCustomerStage(c) === stage.id);
                   return (
-                    <div key={stage.id} className={`flex flex-col rounded-2xl border border-slate-100 ${stage.bg} p-4 min-h-[500px] max-h-[750px]`}>
+                    <div key={stage.id} className={`flex flex-col rounded-2xl border border-slate-200/80 ${stage.bg} p-4 min-h-[500px] max-h-[750px]`}>
                       {/* Column Header */}
                       <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-200/50 text-slate-800">
                         <div className="flex items-center gap-2">
                           <span className={`w-2 h-2 rounded-full ${stage.dot}`}></span>
-                          <h3 className="font-bold text-sm">{stage.title}</h3>
+                          <h3 className="font-extrabold text-xs">{stage.title}</h3>
                         </div>
-                        <span className="bg-white border border-slate-200/60 text-slate-600 text-xs px-2 py-0.5 rounded-full font-bold shadow-sm">
+                        <span className="bg-white border border-slate-200/60 text-slate-600 text-xs px-2 py-0.5 rounded-full font-extrabold shadow-sm">
                           {stageLeads.length}
                         </span>
                       </div>
@@ -2817,14 +3041,14 @@ export default function DashboardPage() {
                             const hasAi = lead.aiEnabled !== false;
                             
                             return (
-                              <div key={lead.phone} className="bg-white rounded-xl border border-slate-200/80 shadow-[0_2px_8px_rgba(0,0,0,0.02)] p-4 flex flex-col gap-3 hover:shadow-md transition-all">
+                              <div key={lead.phone} className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 flex flex-col gap-3 hover:shadow-md transition-all">
                                 {/* Header */}
                                 <div className="flex items-start justify-between min-w-0">
                                   <div className="min-w-0">
-                                    <h4 className="font-bold text-sm text-slate-800 truncate" title={leadName}>{leadName}</h4>
-                                    <p className="text-[11px] text-slate-400 font-semibold mt-0.5">+{lead.phone}</p>
+                                    <h4 className="font-extrabold text-xs text-slate-800 truncate" title={leadName}>{leadName}</h4>
+                                    <p className="text-[10px] text-slate-400 font-semibold mt-0.5">+{lead.phone}</p>
                                   </div>
-                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${hasAi ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-500'}`}>
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${hasAi ? 'bg-purple-50 text-purple-700 border border-purple-100' : 'bg-slate-100 text-slate-500'}`}>
                                     {hasAi ? 'Autopilot' : 'Copilot'}
                                   </span>
                                 </div>
@@ -2839,7 +3063,7 @@ export default function DashboardPage() {
                                           const nextTags = lead.tags.filter((x: string) => x !== t);
                                           updateCustomerField(lead.phone, { tags: nextTags });
                                         }}
-                                        className="text-slate-400 hover:text-red-500 text-[9px] ml-1"
+                                        className="text-slate-400 hover:text-rose-500 text-[9px] ml-1 cursor-pointer"
                                       >
                                         ×
                                       </button>
@@ -2861,7 +3085,7 @@ export default function DashboardPage() {
                                             setEditingTagsPhone(null);
                                           }
                                         }}
-                                        className="text-[11px] border border-slate-300 rounded px-1.5 py-0.5 w-20 focus:outline-none focus:border-emerald-500 font-medium"
+                                        className="text-[11px] border border-slate-300 rounded px-1.5 py-0.5 w-20 focus:outline-none focus:border-purple-500 font-semibold"
                                         autoFocus
                                       />
                                       <button 
@@ -2873,7 +3097,7 @@ export default function DashboardPage() {
                                           }
                                           setEditingTagsPhone(null);
                                         }}
-                                        className="text-[10px] font-bold text-emerald-600"
+                                        className="text-[10px] font-bold text-purple-600"
                                       >
                                         Add
                                       </button>
@@ -2885,7 +3109,7 @@ export default function DashboardPage() {
                                         setEditingTagsPhone(lead.phone);
                                         setNewTagInput("");
                                       }}
-                                      className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50/50 hover:bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100"
+                                      className="inline-flex items-center gap-0.5 text-[9px] font-bold text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-full border border-purple-100 cursor-pointer"
                                     >
                                       + Tag
                                     </button>
@@ -2897,7 +3121,7 @@ export default function DashboardPage() {
                                   <select 
                                     value={stage.id} 
                                     onChange={(e) => updateCustomerField(lead.phone, { pipelineStage: e.target.value })}
-                                    className="text-[11px] bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-slate-600 font-bold w-[100px] outline-none focus:border-emerald-500"
+                                    className="text-[11px] bg-slate-50 border border-slate-200/80 rounded-lg p-1.5 text-slate-700 font-bold w-[100px] outline-none focus:border-purple-500"
                                   >
                                     <option value="new">New Lead</option>
                                     <option value="qualified">Qualified</option>
@@ -2911,7 +3135,7 @@ export default function DashboardPage() {
                                       setSelectedChat(lead.phone);
                                       setActiveTab('inbox');
                                     }}
-                                    className="text-[11px] font-extrabold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                                    className="text-[11px] font-extrabold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200/60 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
                                   >
                                     <Inbox className="w-3 h-3" /> Chat
                                   </button>
@@ -2928,15 +3152,15 @@ export default function DashboardPage() {
             </div>
           ) : (
             /* ORIGINAL LIST TABLE VIEW */
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden min-h-[500px]">
+            <div className="dash-card overflow-hidden min-h-[500px]">
               {Object.keys(customers).length === 0 ? (
-                <div className="text-center p-12 text-slate-400 font-bold">
+                <div className="text-center p-12 text-slate-400 font-bold text-xs">
                   No contacts found.
                 </div>
               ) : (
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100">
+                    <tr className="bg-slate-50/80 border-b border-slate-100">
                       <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Name / Phone</th>
                       <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Tags</th>
                       <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Pipeline Stage</th>
@@ -2966,29 +3190,29 @@ export default function DashboardPage() {
                         const stage = getCustomerStage(customer);
                         
                         return (
-                          <tr key={customer.phone} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                          <tr key={customer.phone} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
                             <td className="py-4 px-6">
                               <div className="flex items-center gap-4">
-                                <div className="h-10 w-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center font-bold">
-                                  {customer.name ? customer.name.charAt(0).toUpperCase() : <User className="w-5 h-5" />}
+                                <div className="h-9 w-9 bg-purple-50 text-purple-700 border border-purple-200 rounded-full flex items-center justify-center font-bold text-xs shadow-sm">
+                                  {customer.name ? customer.name.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
                                 </div>
                                 <div>
-                                  <div className="font-bold text-slate-900">{customer.name || 'Unknown User'}</div>
-                                  <div className="text-sm text-slate-500 font-medium">+{customer.phone}</div>
+                                  <div className="font-extrabold text-xs text-slate-900">{customer.name || 'Unknown User'}</div>
+                                  <div className="text-[11px] text-slate-400 font-semibold">+{customer.phone}</div>
                                 </div>
                               </div>
                             </td>
                             <td className="py-4 px-6">
                               <div className="flex flex-wrap gap-1 items-center max-w-xs">
                                 {customer.tags && customer.tags.map((t: string) => (
-                                  <span key={t} className="inline-flex items-center gap-0.5 text-[10px] font-bold bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-full text-slate-600">
+                                  <span key={t} className="inline-flex items-center gap-0.5 text-[10px] font-bold bg-slate-50 border border-slate-200/80 px-2 py-0.5 rounded-full text-slate-600">
                                     {t}
                                     <button 
                                       onClick={() => {
                                         const nextTags = customer.tags.filter((x: string) => x !== t);
                                         updateCustomerField(customer.phone, { tags: nextTags });
                                       }}
-                                      className="text-slate-400 hover:text-red-500 text-[9px] ml-1"
+                                      className="text-slate-400 hover:text-rose-500 text-[9px] ml-1 cursor-pointer"
                                     >
                                       ×
                                     </button>
@@ -3009,7 +3233,7 @@ export default function DashboardPage() {
                                           setEditingTagsPhone(null);
                                         }
                                       }}
-                                      className="text-[11px] border border-slate-300 rounded px-1.5 py-0.5 w-16 focus:outline-none"
+                                      className="text-[11px] border border-slate-300 rounded px-1.5 py-0.5 w-16 focus:outline-none focus:border-purple-500"
                                       autoFocus
                                     />
                                     <button 
@@ -3021,7 +3245,7 @@ export default function DashboardPage() {
                                         }
                                         setEditingTagsPhone(null);
                                       }}
-                                      className="text-[10px] font-bold text-emerald-600"
+                                      className="text-[10px] font-bold text-purple-600"
                                     >
                                       Add
                                     </button>
@@ -3032,7 +3256,7 @@ export default function DashboardPage() {
                                       setEditingTagsPhone(customer.phone);
                                       setNewTagInput("");
                                     }}
-                                    className="text-[9px] font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-100"
+                                    className="text-[9px] font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-full border border-purple-100 cursor-pointer"
                                   >
                                     + Add
                                   </button>
@@ -3043,7 +3267,7 @@ export default function DashboardPage() {
                               <select 
                                 value={stage} 
                                 onChange={(e) => updateCustomerField(customer.phone, { pipelineStage: e.target.value })}
-                                className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-slate-600 font-bold w-[120px] outline-none"
+                                className="text-xs bg-slate-50 border border-slate-200/80 rounded-lg p-1.5 text-slate-700 font-bold w-[120px] outline-none focus:border-purple-500"
                               >
                                 <option value="new">New Lead</option>
                                 <option value="qualified">Qualified</option>
@@ -3058,7 +3282,7 @@ export default function DashboardPage() {
                                   setSelectedChat(customer.phone);
                                   setActiveTab('inbox');
                                 }}
-                                className="text-sm font-bold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors"
+                                className="text-xs font-extrabold text-purple-700 hover:bg-purple-50 px-3 py-1.5 rounded-lg transition-colors border border-purple-200/60 cursor-pointer"
                               >
                                 Message
                               </button>
