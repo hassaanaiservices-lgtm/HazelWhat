@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
+import { PDFParse } from "pdf-parse";
 
-const phoneRegex = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4,6}/g;
+// Broad regex: matches 10-15 digit sequences that may include country code, dashes, spaces, dots, parens
+// Catches: +923001234567, 03001234567, 0300-1234567, +92 300 123 4567, (0300) 1234567, etc.
+const phoneRegex = /(?:\+?\d{1,4}[\s.-]?)?(?:\(?\d{2,5}\)?[\s.-]?)?\d{3,4}[\s.-]?\d{3,7}/g;
 
 function parsePhones(text: string): string[] {
   const rawMatches = text.match(phoneRegex) || [];
   const cleaned = rawMatches.map(num => {
     const digits = num.replace(/[^\d]/g, "");
+    // Pakistani local format: 03xx-xxxxxxx (11 digits starting with 0)
     if (digits.startsWith("0") && digits.length === 11) {
       return "92" + digits.substring(1);
     }
+    // Already has country code like 923001234567
     return digits;
   }).filter(digits => digits.length >= 10 && digits.length <= 15);
   return Array.from(new Set(cleaned));
@@ -28,9 +33,12 @@ export async function POST(req: Request) {
 
     if (mimetype === "application/pdf" || fileName?.endsWith(".pdf")) {
       try {
-        const pdfParser = require("pdf-parse");
-        const data = await pdfParser(buffer);
-        text = data.text || "";
+        const parser = new PDFParse({ data: new Uint8Array(buffer) });
+        // getText() with no args extracts text from all pages automatically
+        const result = await parser.getText();
+        text = (result as any)?.toString() || String(result) || "";
+        console.log(`[parse-leads] PDF "${fileName}" extracted ${text.length} chars. First 500:`, text.substring(0, 500));
+        await parser.destroy();
       } catch (e: any) {
         console.error("Failed to parse PDF:", e);
         return NextResponse.json({ success: false, error: `Failed to parse PDF file: ${e.message}` }, { status: 500 });
@@ -41,6 +49,7 @@ export async function POST(req: Request) {
     }
 
     const phones = parsePhones(text);
+    console.log(`[parse-leads] "${fileName}" => found ${phones.length} phone numbers. Sample:`, phones.slice(0, 10));
 
     return NextResponse.json({ success: true, phones, count: phones.length });
   } catch (error: any) {
@@ -48,3 +57,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
