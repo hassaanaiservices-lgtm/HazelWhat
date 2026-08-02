@@ -1,22 +1,51 @@
 import { NextResponse } from "next/server";
 import { PDFParse } from "pdf-parse";
 
-// Broad regex: matches 10-15 digit sequences that may include country code, dashes, spaces, dots, parens
-// Catches: +923001234567, 03001234567, 0300-1234567, +92 300 123 4567, (0300) 1234567, etc.
-const phoneRegex = /(?:\+?\d{1,4}[\s.-]?)?(?:\(?\d{2,5}\)?[\s.-]?)?\d{3,4}[\s.-]?\d{3,7}/g;
+function cleanText(text: string): string {
+  return text
+    .replace(/[\u2013\u2014\u2212]/g, "-") // Normalize en-dash, em-dash, minus sign to hyphen
+    .replace(/[\u00A0\u200B\u200C\u200D]/g, " ") // Normalize non-breaking and zero-width spaces
+    .replace(/[\/\\]/g, " "); // Replace slashes with space
+}
 
-function parsePhones(text: string): string[] {
-  const rawMatches = text.match(phoneRegex) || [];
-  const cleaned = rawMatches.map(num => {
-    const digits = num.replace(/[^\d]/g, "");
-    // Pakistani local format: 03xx-xxxxxxx (11 digits starting with 0)
-    if (digits.startsWith("0") && digits.length === 11) {
-      return "92" + digits.substring(1);
+const phoneRegex = /(?:\+?\d{1,4}[\s.-]?)?(?:\(?\d{2,5}\)?[\s.-]?)?\d{2,5}[\s.-]?\d{2,5}(?:[\s.-]?\d{2,7})?/g;
+
+export function extractPhonesFromText(rawText: string): string[] {
+  if (!rawText) return [];
+  const text = cleanText(rawText);
+  const found = new Set<string>();
+
+  function normalizeAndAdd(candidate: string) {
+    let digits = candidate.replace(/[^\d]/g, "");
+    if (digits.startsWith("00")) {
+      digits = digits.substring(2);
     }
-    // Already has country code like 923001234567
-    return digits;
-  }).filter(digits => digits.length >= 10 && digits.length <= 15);
-  return Array.from(new Set(cleaned));
+    // Pakistani local format: 03xx-xxxxxxx or 042-xxxxxxx (11 digits starting with 0)
+    if (digits.startsWith("0") && digits.length === 11) {
+      digits = "92" + digits.substring(1);
+    }
+    if (digits.length >= 10 && digits.length <= 15) {
+      found.add(digits);
+    }
+  }
+
+  // 1. Pattern matching
+  const matches = text.match(phoneRegex) || [];
+  for (const m of matches) {
+    normalizeAndAdd(m);
+  }
+
+  // 2. Line / token based extraction (CSV, TSV, VCF, pasted lines)
+  const tokens = text.split(/[\r\n,;\t|]+/);
+  for (const token of tokens) {
+    normalizeAndAdd(token);
+  }
+
+  // Filter out sub-string matches
+  const result = Array.from(found);
+  return result.filter(
+    num => !result.some(other => other !== num && other.includes(num) && other.length > num.length)
+  );
 }
 
 export async function POST(req: Request) {
@@ -26,35 +55,40 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "No file content provided." }, { status: 400 });
     }
 
-    const base64Data = mediaBase64.replace(/^data:[a-zA-Z0-9/+-]+;base64,/, "");
+    const base64Data = mediaBase64.replace(/^data:[^;]+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
-    
+
     let text = "";
 
-    if (mimetype === "application/pdf" || fileName?.endsWith(".pdf")) {
+    const isPDF = mimetype === "application/pdf" || fileName?.toLowerCase().endsWith(".pdf");
+
+    if (isPDF) {
       try {
         const parser = new PDFParse({ data: new Uint8Array(buffer) });
-        // getText() returns an object with .text property containing all pages' text
         const result = await parser.getText();
         text = (result as any)?.text || "";
-        console.log(`[parse-leads] PDF "${fileName}" extracted ${text.length} chars. First 500:`, text.substring(0, 500));
+        if (!text && Array.isArray((result as any)?.pages)) {
+          text = (result as any).pages.map((p: any) => p.text || "").join("\n");
+        }
+        console.log(`[parse-leads] PDF "${fileName}" extracted ${text.length} chars. First 300:`, text.substring(0, 300));
         await parser.destroy();
       } catch (e: any) {
         console.error("Failed to parse PDF:", e);
         return NextResponse.json({ success: false, error: `Failed to parse PDF file: ${e.message}` }, { status: 500 });
       }
     } else {
-      // Treat as plain text / CSV
+      // Treat as plain text / CSV / TSV
       text = buffer.toString("utf-8");
     }
 
-    const phones = parsePhones(text);
+    const phones = extractPhonesFromText(text);
     console.log(`[parse-leads] "${fileName}" => found ${phones.length} phone numbers. Sample:`, phones.slice(0, 10));
 
-    return NextResponse.json({ success: true, phones, count: phones.length });
+    return NextResponse.json({ success: true, phones, count: phones.length, rawTextLength: text.length });
   } catch (error: any) {
     console.error("Error in parse-leads API:", error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
 

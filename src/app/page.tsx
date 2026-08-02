@@ -93,16 +93,42 @@ export default function DashboardPage() {
   const [customPhones, setCustomPhones] = useState<string[]>([]);
   const customPhonesFileInputRef = useRef<HTMLInputElement>(null);
 
-  const parsePhones = (text: string) => {
-    const rawMatches = text.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4,6}/g) || [];
-    const cleaned = rawMatches.map(num => {
-      const digits = num.replace(/[^\d]/g, "");
-      if (digits.startsWith("0") && digits.length === 11) {
-        return "92" + digits.substring(1);
+  const parsePhones = (rawText: string) => {
+    if (!rawText) return [];
+    const text = rawText
+      .replace(/[\u2013\u2014\u2212]/g, "-")
+      .replace(/[\u00A0\u200B\u200C\u200D]/g, " ")
+      .replace(/[\/\\]/g, " ");
+
+    const found = new Set<string>();
+
+    const normalizeAndAdd = (candidate: string) => {
+      let digits = candidate.replace(/[^\d]/g, "");
+      if (digits.startsWith("00")) {
+        digits = digits.substring(2);
       }
-      return digits;
-    }).filter(digits => digits.length >= 10 && digits.length <= 15);
-    return Array.from(new Set(cleaned));
+      if (digits.startsWith("0") && digits.length === 11) {
+        digits = "92" + digits.substring(1);
+      }
+      if (digits.length >= 10 && digits.length <= 15) {
+        found.add(digits);
+      }
+    };
+
+    const matches = text.match(/(?:\+?\d{1,4}[\s.-]?)?(?:\(?\d{2,5}\)?[\s.-]?)?\d{2,5}[\s.-]?\d{2,5}(?:[\s.-]?\d{2,7})?/g) || [];
+    for (const m of matches) {
+      normalizeAndAdd(m);
+    }
+
+    const tokens = text.split(/[\r\n,;\t|]+/);
+    for (const token of tokens) {
+      normalizeAndAdd(token);
+    }
+
+    const result = Array.from(found);
+    return result.filter(
+      num => !result.some(other => other !== num && other.includes(num) && other.length > num.length)
+    );
   };
 
   const getActiveHours = (start = revivalTimeStart, end = revivalTimeEnd) => {
@@ -210,10 +236,9 @@ export default function DashboardPage() {
       }
     };
 
-    const isPDF = file.type === "application/pdf" || file.name.endsWith(".pdf");
+    const isPDF = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 
     if (isPDF) {
-      // Use backend PDF parser
       const reader = new FileReader();
       reader.onload = async (event) => {
         const base64 = event.target?.result as string;
@@ -221,27 +246,34 @@ export default function DashboardPage() {
           const res = await fetch("/api/whatsapp/parse-leads", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mediaBase64: base64, mimetype: file.type, fileName: file.name })
+            body: JSON.stringify({ mediaBase64: base64, mimetype: file.type || "application/pdf", fileName: file.name })
           });
           const data = await res.json();
           if (data.success && data.count >= 1) {
             setPhones(data.phones);
             alert(`✅ Loaded ${data.count} phone numbers from "${file.name}"`);
+          } else if (data.error) {
+            alert(`❌ Failed to parse PDF file: ${data.error}`);
           } else {
-            alert(`No valid phone numbers found in "${file.name}".`);
+            alert(`No valid phone numbers found in "${file.name}". Please ensure the file contains valid 10 to 15 digit phone numbers.`);
           }
         } catch (err: any) {
-          alert(`Failed to parse PDF: ${err.message}`);
+          alert(`Failed to upload/parse PDF: ${err.message}`);
         }
       };
       reader.readAsDataURL(file);
     } else {
-      // Plain text / CSV parsing
+      // Plain text / CSV / TSV parsing
       const reader = new FileReader();
       reader.onload = (event) => {
         const text = event.target?.result as string;
         const phones = parsePhones(text);
-        setPhones(phones);
+        if (phones.length >= 1) {
+          setPhones(phones);
+          alert(`✅ Loaded ${phones.length} phone numbers from "${file.name}"`);
+        } else {
+          alert(`No valid phone numbers found in "${file.name}".`);
+        }
       };
       reader.readAsText(file);
     }
