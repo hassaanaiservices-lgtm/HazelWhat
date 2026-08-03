@@ -37,7 +37,7 @@ export default function LoginPage() {
               if (data.user.role === 'admin') {
                 router.push('/admin');
               } else {
-                router.push('/client');
+                router.push('/');
               }
             }, 800);
             return;
@@ -78,9 +78,9 @@ export default function LoginPage() {
         return;
       }
 
-      setSuccess(`Sign in successful! Redirecting to ${data.user.businessName || 'Dashboard'}...`);
+      setSuccess(`Sign in successful! Redirecting to ${data.user.businessName || 'Workspace'}...`);
       setTimeout(() => {
-        router.push(data.redirectTo || '/client');
+        router.push(data.redirectTo || '/');
       }, 600);
 
     } catch (err: any) {

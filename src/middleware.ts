@@ -25,22 +25,27 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 2. If user IS logged in and tries to access /login or root /:
-  if (pathname === '/login' || pathname === '/') {
-    try {
-      const session = JSON.parse(sessionCookie.value);
-      if (session.role === 'admin') {
+  // 2. If user IS logged in:
+  try {
+    const session = JSON.parse(sessionCookie.value);
+
+    // If super admin visits /login or /, send to /admin
+    if (session.role === 'admin') {
+      if (pathname === '/login' || pathname === '/') {
         return NextResponse.redirect(new URL('/admin', request.url));
-      } else {
-        return NextResponse.redirect(new URL('/client', request.url));
       }
-    } catch (e) {
-      // Invalid cookie fallback -> redirect to /login
-      const loginUrl = new URL('/login', request.url);
-      const res = NextResponse.redirect(loginUrl);
-      res.cookies.delete('hazel_session');
-      return res;
+    } else {
+      // If client visits /login or /client, send to / (Full Client Messaging Panel Workspace)
+      if (pathname === '/login' || pathname === '/client') {
+        return NextResponse.redirect(new URL('/', request.url));
+      }
     }
+  } catch (e) {
+    // Invalid cookie fallback -> redirect to /login
+    const loginUrl = new URL('/login', request.url);
+    const res = NextResponse.redirect(loginUrl);
+    res.cookies.delete('hazel_session');
+    return res;
   }
 
   return NextResponse.next();

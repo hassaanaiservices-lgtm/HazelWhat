@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       user: sessionData,
-      redirectTo: "/client"
+      redirectTo: "/"
     });
 
   } catch (err: any) {
