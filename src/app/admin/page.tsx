@@ -151,15 +151,17 @@ export default function VoiceSaaSApp() {
   const [showClientCredentials, setShowClientCredentials] = useState(false);
   const [copiedCredsNotice, setCopiedCredsNotice] = useState<string | null>(null);
 
-  const copyClientCredentials = (type: 'username' | 'password' | 'all') => {
+  const copyClientCredentials = (type: 'username' | 'password' | 'all' | 'link') => {
     let textToCopy = '';
+    const loginUrl = typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://hazelwhat.com/login';
     if (type === 'username') textToCopy = selectedTenant.clientUsername || '';
     else if (type === 'password') textToCopy = selectedTenant.clientPassword || '';
+    else if (type === 'link') textToCopy = loginUrl;
     else {
-      textToCopy = `🔐 Client Portal Login Credentials\nUsername: ${selectedTenant.clientUsername || ''}\nPassword: ${selectedTenant.clientPassword || ''}`;
+      textToCopy = `🔐 Client Portal Login Details\nPortal Link: ${loginUrl}\nUsername: ${selectedTenant.clientUsername || ''}\nPassword: ${selectedTenant.clientPassword || ''}`;
     }
     navigator.clipboard.writeText(textToCopy);
-    setCopiedCredsNotice(type === 'username' ? 'Username copied!' : type === 'password' ? 'Password copied!' : 'Both Username & Password copied!');
+    setCopiedCredsNotice(type === 'username' ? 'Username copied!' : type === 'password' ? 'Password copied!' : type === 'link' ? 'Login Link copied!' : 'All Login Credentials & Link Copied!');
     setTimeout(() => setCopiedCredsNotice(null), 2500);
   };
 

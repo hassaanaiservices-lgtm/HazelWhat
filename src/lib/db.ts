@@ -550,10 +550,29 @@ export class DB {
     return initDb().tenants || [];
   }
 
+  static getTenantByUsername(username: string): Tenant | null {
+    const tenants = DB.getTenants();
+    const cleanUsername = username.trim().toLowerCase();
+    return tenants.find(t => 
+      t.clientUsername?.toLowerCase() === cleanUsername || 
+      t.email?.toLowerCase() === cleanUsername ||
+      t.clientNumber === username
+    ) || null;
+  }
+
   static saveTenants(tenants: Tenant[]) {
     const db = initDb();
     db.tenants = tenants;
     saveDb(db);
+
+    // Async sync to Supabase if configured
+    try {
+      import('./supabase').then(({ upsertTenantToSupabase }) => {
+        tenants.forEach(t => upsertTenantToSupabase(t));
+      }).catch(err => console.error('[DB] Supabase async sync error:', err));
+    } catch (e) {
+      // Ignore sync error in sync context
+    }
   }
 
   static getPartners(): Partner[] {
