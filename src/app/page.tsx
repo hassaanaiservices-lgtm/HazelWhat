@@ -482,11 +482,11 @@ export default function DashboardPage() {
     setSoundEnabled(nextState);
     localStorage.setItem("hazel_order_sound_enabled", String(nextState));
     if (nextState) {
-      playSweetOrderSound(0.5);
+      playSweetOrderSound(0.95);
     }
   };
 
-  const playSweetOrderSound = (vol = 0.5) => {
+  const playSweetOrderSound = (vol = 0.95) => {
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
@@ -495,29 +495,40 @@ export default function DashboardPage() {
         ctx.resume();
       }
       const now = ctx.currentTime;
+
+      // Dynamics Compressor to boost loudness without clipping
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.setValueAtTime(-10, now);
+      compressor.knee.setValueAtTime(40, now);
+      compressor.ratio.setValueAtTime(12, now);
+      compressor.attack.setValueAtTime(0, now);
+      compressor.release.setValueAtTime(0.25, now);
+      compressor.connect(ctx.destination);
+
       const masterGain = ctx.createGain();
       masterGain.gain.setValueAtTime(vol, now);
-      masterGain.connect(ctx.destination);
+      masterGain.connect(compressor);
 
-      // Sweet sparkling notification chime arpeggio: E5 -> G#5 -> B5 -> E6
+      // Loud, bright & sweet notification chime arpeggio: C5 -> E5 -> G5 -> B5 -> E6
       const notes = [
-        { freq: 659.25, start: 0.00, duration: 0.4 },  // E5
-        { freq: 830.61, start: 0.09, duration: 0.4 },  // G#5
-        { freq: 987.77, start: 0.18, duration: 0.5 },  // B5
-        { freq: 1318.51, start: 0.28, duration: 0.8 }, // E6 sparkling finish
+        { freq: 523.25, start: 0.00, duration: 0.45 }, // C5
+        { freq: 659.25, start: 0.08, duration: 0.45 }, // E5
+        { freq: 783.99, start: 0.16, duration: 0.50 }, // G5
+        { freq: 987.77, start: 0.24, duration: 0.60 }, // B5
+        { freq: 1318.51, start: 0.34, duration: 0.90 },// E6 sparkling finish
       ];
 
       notes.forEach(({ freq, start, duration }) => {
         const startTime = now + start;
 
-        // Fundamental sine wave for pure warm chime tone
+        // Core warm sine wave
         const osc1 = ctx.createOscillator();
         const gain1 = ctx.createGain();
         osc1.type = "sine";
         osc1.frequency.setValueAtTime(freq, startTime);
         
         gain1.gain.setValueAtTime(0.0001, startTime);
-        gain1.gain.exponentialRampToValueAtTime(0.35, startTime + 0.015);
+        gain1.gain.exponentialRampToValueAtTime(0.65, startTime + 0.015);
         gain1.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
         
         osc1.connect(gain1);
@@ -525,15 +536,15 @@ export default function DashboardPage() {
         osc1.start(startTime);
         osc1.stop(startTime + duration);
 
-        // Sweet crystal overtone for bell clarity
+        // Bright crystal triangle overtone for projection & loudness
         const osc2 = ctx.createOscillator();
         const gain2 = ctx.createGain();
         osc2.type = "triangle";
         osc2.frequency.setValueAtTime(freq * 2, startTime);
         
         gain2.gain.setValueAtTime(0.0001, startTime);
-        gain2.gain.exponentialRampToValueAtTime(0.08, startTime + 0.01);
-        gain2.gain.exponentialRampToValueAtTime(0.0001, startTime + (duration * 0.6));
+        gain2.gain.exponentialRampToValueAtTime(0.22, startTime + 0.01);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, startTime + (duration * 0.7));
         
         osc2.connect(gain2);
         gain2.connect(masterGain);
@@ -663,7 +674,7 @@ export default function DashboardPage() {
           if (brandNewOrder) {
             // Play sweet sound alert if enabled
             if (soundEnabled) {
-              playSweetOrderSound(0.5);
+              playSweetOrderSound(0.95);
             }
 
             // Trigger floating order alert banner
@@ -1566,29 +1577,6 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-1 px-4 mb-6">
           <button onClick={() => setActiveTab('settings')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'settings' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
             <Settings className={`h-4 w-4 ${activeTab === 'settings' ? 'text-purple-600' : 'text-slate-400'}`} /> Settings
-          </button>
-        </div>
-
-        {/* Sound Alert Quick Toggle */}
-        <div className="px-4 mb-3">
-          <button
-            onClick={toggleSound}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer border ${
-              soundEnabled
-                ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
-                : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
-            }`}
-            title={soundEnabled ? 'Click to Mute Order Alert Sound' : 'Click to Enable Order Alert Sound'}
-          >
-            <div className="flex items-center gap-2">
-              {soundEnabled ? <Volume2 className="h-4 w-4 text-purple-600" /> : <VolumeX className="h-4 w-4 text-slate-400" />}
-              <span>Order Sound Alert</span>
-            </div>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-black ${
-              soundEnabled ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-600'
-            }`}>
-              {soundEnabled ? 'ON' : 'OFF'}
-            </span>
           </button>
         </div>
 
@@ -4020,7 +4008,7 @@ export default function DashboardPage() {
                 </button>
 
                 <button
-                  onClick={() => playSweetOrderSound(0.5)}
+                  onClick={() => playSweetOrderSound(0.95)}
                   className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-700 hover:to-indigo-700 transition-all shadow-md shadow-purple-500/20 active:scale-95 cursor-pointer"
                   title="Play sample sweet order alert sound"
                 >
