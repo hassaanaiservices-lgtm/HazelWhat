@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save, MessageSquare, Settings, Plus, Trash2, Search, MoreVertical, Phone, Video, Paperclip, Smile, Mic, CheckCheck, User, Check, Send, StopCircle, Inbox, Bot, Network, BookOpen, Users, AlertCircle, ShoppingCart, Activity, Eye, EyeOff, RefreshCw, Pause, Play, Smartphone, Square, Package, Edit3, Upload, ExternalLink, Image as ImageIcon, Tag, Globe, Sparkles } from "lucide-react";
+import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save, MessageSquare, Settings, Plus, Trash2, Search, MoreVertical, Phone, Video, Paperclip, Smile, Mic, CheckCheck, User, Check, Send, StopCircle, Inbox, Bot, Network, BookOpen, Users, AlertCircle, ShoppingCart, Activity, Eye, EyeOff, RefreshCw, Pause, Play, Smartphone, Square, Package, Edit3, Upload, ExternalLink, Image as ImageIcon, Tag, Globe, Sparkles, Volume2, VolumeX, BellRing, Bell } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
 
 export default function DashboardPage() {
@@ -441,6 +441,110 @@ export default function DashboardPage() {
   const [leadFilter, setLeadFilter] = useState<'all' | 'hot' | 'cold'>('all');
   const [analytics, setAnalytics] = useState<any>(null);
 
+  // Sound Alert for Received Orders
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const [newOrderBanner, setNewOrderBanner] = useState<{ id: string; customerName: string; productName: string; amount?: string; time: string } | null>(null);
+  const knownOrderIdsRef = useRef<Set<string>>(new Set());
+  const isFirstOrderFetchRef = useRef<boolean>(true);
+
+  useEffect(() => {
+    const storedSound = localStorage.getItem("hazel_order_sound_enabled");
+    if (storedSound !== null) {
+      setSoundEnabled(storedSound === "true");
+    }
+  }, []);
+
+  // Unlock Web Audio API on user interaction to handle browser autoplay policies
+  useEffect(() => {
+    const unlockAudio = () => {
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          if (ctx.state === "suspended") {
+            ctx.resume();
+          }
+        }
+      } catch (e) {}
+      window.removeEventListener("click", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+    };
+    window.addEventListener("click", unlockAudio);
+    window.addEventListener("keydown", unlockAudio);
+    return () => {
+      window.removeEventListener("click", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+    };
+  }, []);
+
+  const toggleSound = () => {
+    const nextState = !soundEnabled;
+    setSoundEnabled(nextState);
+    localStorage.setItem("hazel_order_sound_enabled", String(nextState));
+    if (nextState) {
+      playSweetOrderSound(0.5);
+    }
+  };
+
+  const playSweetOrderSound = (vol = 0.5) => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      if (ctx.state === "suspended") {
+        ctx.resume();
+      }
+      const now = ctx.currentTime;
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(vol, now);
+      masterGain.connect(ctx.destination);
+
+      // Sweet sparkling notification chime arpeggio: E5 -> G#5 -> B5 -> E6
+      const notes = [
+        { freq: 659.25, start: 0.00, duration: 0.4 },  // E5
+        { freq: 830.61, start: 0.09, duration: 0.4 },  // G#5
+        { freq: 987.77, start: 0.18, duration: 0.5 },  // B5
+        { freq: 1318.51, start: 0.28, duration: 0.8 }, // E6 sparkling finish
+      ];
+
+      notes.forEach(({ freq, start, duration }) => {
+        const startTime = now + start;
+
+        // Fundamental sine wave for pure warm chime tone
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = "sine";
+        osc1.frequency.setValueAtTime(freq, startTime);
+        
+        gain1.gain.setValueAtTime(0.0001, startTime);
+        gain1.gain.exponentialRampToValueAtTime(0.35, startTime + 0.015);
+        gain1.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+        
+        osc1.connect(gain1);
+        gain1.connect(masterGain);
+        osc1.start(startTime);
+        osc1.stop(startTime + duration);
+
+        // Sweet crystal overtone for bell clarity
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = "triangle";
+        osc2.frequency.setValueAtTime(freq * 2, startTime);
+        
+        gain2.gain.setValueAtTime(0.0001, startTime);
+        gain2.gain.exponentialRampToValueAtTime(0.08, startTime + 0.01);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, startTime + (duration * 0.6));
+        
+        osc2.connect(gain2);
+        gain2.connect(masterGain);
+        osc2.start(startTime);
+        osc2.stop(startTime + duration);
+      });
+    } catch (e) {
+      console.warn("Could not play sweet order sound:", e);
+    }
+  };
+
   const [contactsViewMode, setContactsViewMode] = useState<"list" | "board">("board");
   const [editingTagsPhone, setEditingTagsPhone] = useState<string | null>(null);
   const [newTagInput, setNewTagInput] = useState<string>("");
@@ -536,6 +640,43 @@ export default function DashboardPage() {
       const data = await res.json();
       if (Array.isArray(data)) {
         setOrders(data);
+
+        if (isFirstOrderFetchRef.current) {
+          // First fetch: store existing order IDs without alerting
+          const initialIds = new Set<string>();
+          data.forEach((o: any) => {
+            if (o.id) initialIds.add(String(o.id));
+          });
+          knownOrderIdsRef.current = initialIds;
+          isFirstOrderFetchRef.current = false;
+        } else {
+          // Subsequent fetch: check for brand new incoming orders
+          let brandNewOrder: any = null;
+          data.forEach((o: any) => {
+            const orderId = String(o.id);
+            if (orderId && !knownOrderIdsRef.current.has(orderId)) {
+              knownOrderIdsRef.current.add(orderId);
+              brandNewOrder = o;
+            }
+          });
+
+          if (brandNewOrder) {
+            // Play sweet sound alert if enabled
+            if (soundEnabled) {
+              playSweetOrderSound(0.5);
+            }
+
+            // Trigger floating order alert banner
+            const customerName = customers[brandNewOrder.phone]?.name || brandNewOrder.phone || "Customer";
+            setNewOrderBanner({
+              id: brandNewOrder.id,
+              customerName,
+              productName: brandNewOrder.productName || "New Order",
+              amount: brandNewOrder.price || brandNewOrder.amount || "",
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+          }
+        }
       }
     } catch (e) {
       console.warn("Could not fetch orders (likely dev server reload):", e);
@@ -669,9 +810,12 @@ export default function DashboardPage() {
     fetchOrders();
     fetchAnalytics();
     fetchRevivalCampaigns();
-    let chatInterval = setInterval(fetchChats, 3000);
-    return () => clearInterval(chatInterval);
-  }, []);
+    let pollInterval = setInterval(() => {
+      fetchChats();
+      fetchOrders();
+    }, 3000);
+    return () => clearInterval(pollInterval);
+  }, [soundEnabled]);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -1329,8 +1473,42 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="h-screen w-full flex bg-[#f5f6f8] font-sans overflow-hidden text-slate-800">
+    <div className="h-screen w-full flex bg-[#f5f6f8] font-sans overflow-hidden text-slate-800 relative">
       
+      {/* Floating Sweet Sound Order Alert Banner */}
+      {newOrderBanner && (
+        <div className="fixed top-5 right-5 z-50 animate-bounce bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 text-white p-4 rounded-2xl shadow-2xl border border-purple-300/40 flex items-center gap-4 max-w-md">
+          <div className="bg-white/20 p-3 rounded-xl flex items-center justify-center animate-pulse">
+            <Volume2 className="h-6 w-6 text-yellow-300" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="bg-yellow-400 text-slate-900 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">🔔 New Order</span>
+              <span className="text-purple-200 text-xs">{newOrderBanner.time}</span>
+            </div>
+            <h4 className="text-sm font-extrabold text-white truncate mt-1">{newOrderBanner.productName}</h4>
+            <p className="text-xs text-purple-100 truncate">Customer: <span className="font-bold text-white">{newOrderBanner.customerName}</span> {newOrderBanner.amount && `• ${newOrderBanner.amount}`}</p>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <button 
+              onClick={() => {
+                setActiveTab('orders');
+                setNewOrderBanner(null);
+              }} 
+              className="px-3.5 py-1.5 bg-yellow-400 hover:bg-yellow-300 text-slate-900 text-xs font-extrabold rounded-lg transition-all shadow-md active:scale-95 cursor-pointer"
+            >
+              View Order
+            </button>
+            <button 
+              onClick={() => setNewOrderBanner(null)} 
+              className="p-1 hover:bg-white/10 rounded text-purple-200 hover:text-white transition-all text-center cursor-pointer"
+            >
+              <X className="h-4 w-4 mx-auto" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 1. Left Sidebar - HazelWhat Brand with DashMark Purple Theme */}
       <div className="w-[260px] flex-shrink-0 bg-white border-r border-slate-200/80 flex flex-col py-6 overflow-y-auto z-20 shadow-[4px_0_24px_rgba(124,58,237,0.03)] custom-scrollbar">
         
@@ -1388,6 +1566,29 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-1 px-4 mb-6">
           <button onClick={() => setActiveTab('settings')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'settings' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
             <Settings className={`h-4 w-4 ${activeTab === 'settings' ? 'text-purple-600' : 'text-slate-400'}`} /> Settings
+          </button>
+        </div>
+
+        {/* Sound Alert Quick Toggle */}
+        <div className="px-4 mb-3">
+          <button
+            onClick={toggleSound}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer border ${
+              soundEnabled
+                ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+                : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+            }`}
+            title={soundEnabled ? 'Click to Mute Order Alert Sound' : 'Click to Enable Order Alert Sound'}
+          >
+            <div className="flex items-center gap-2">
+              {soundEnabled ? <Volume2 className="h-4 w-4 text-purple-600" /> : <VolumeX className="h-4 w-4 text-slate-400" />}
+              <span>Order Sound Alert</span>
+            </div>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-black ${
+              soundEnabled ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-600'
+            }`}>
+              {soundEnabled ? 'ON' : 'OFF'}
+            </span>
           </button>
         </div>
 
@@ -3800,9 +4001,34 @@ export default function DashboardPage() {
         {activeTab === 'orders' && (
           <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
             <div className="p-8 md:p-10 max-w-[1400px] mx-auto w-full space-y-8">
-            <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
-              <ShoppingCart className="h-7 w-7 text-purple-600" /> Incoming Orders & Projects
-            </h2>
+            <div className="flex justify-between items-center flex-wrap gap-4">
+              <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
+                <ShoppingCart className="h-7 w-7 text-purple-600" /> Incoming Orders & Projects
+              </h2>
+              
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={toggleSound}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer border shadow-sm ${
+                    soundEnabled 
+                      ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100' 
+                      : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+                  }`}
+                >
+                  {soundEnabled ? <Volume2 className="h-4 w-4 text-purple-600" /> : <VolumeX className="h-4 w-4 text-slate-400" />}
+                  <span>{soundEnabled ? 'Order Sound Alert: ON' : 'Order Sound Alert: OFF'}</span>
+                </button>
+
+                <button
+                  onClick={() => playSweetOrderSound(0.5)}
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-700 hover:to-indigo-700 transition-all shadow-md shadow-purple-500/20 active:scale-95 cursor-pointer"
+                  title="Play sample sweet order alert sound"
+                >
+                  <BellRing className="h-4 w-4 text-yellow-300 animate-pulse" />
+                  <span>Test Sweet Sound 🔔</span>
+                </button>
+              </div>
+            </div>
             <div className="flex gap-2 mb-2">
               {['all', 'pending', 'confirmed', 'cancelled'].map(filter => (
                 <button
