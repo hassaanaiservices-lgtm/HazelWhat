@@ -146,8 +146,22 @@ export default function VoiceSaaSApp() {
   const [isGeneratingPairingCode, setIsGeneratingPairingCode] = useState(false);
   const [pairingError, setPairingError] = useState<string | null>(null);
 
-  // Show/Hide API keys toggle
+  // Show/Hide API keys & credentials toggles
   const [showApiKeys, setShowApiKeys] = useState(false);
+  const [showClientCredentials, setShowClientCredentials] = useState(false);
+  const [copiedCredsNotice, setCopiedCredsNotice] = useState<string | null>(null);
+
+  const copyClientCredentials = (type: 'username' | 'password' | 'all') => {
+    let textToCopy = '';
+    if (type === 'username') textToCopy = selectedTenant.clientUsername || '';
+    else if (type === 'password') textToCopy = selectedTenant.clientPassword || '';
+    else {
+      textToCopy = `🔐 Client Portal Login Credentials\nUsername: ${selectedTenant.clientUsername || ''}\nPassword: ${selectedTenant.clientPassword || ''}`;
+    }
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedCredsNotice(type === 'username' ? 'Username copied!' : type === 'password' ? 'Password copied!' : 'Both Username & Password copied!');
+    setTimeout(() => setCopiedCredsNotice(null), 2500);
+  };
 
   // Dirty State (Edit Tracker)
   const [isDirty, setIsDirty] = useState(false);
@@ -210,15 +224,12 @@ export default function VoiceSaaSApp() {
   const totalUsedMins = tenants.reduce((acc, t) => acc + t.usedMinutes, 0);
   const totalRawApiCost = (totalUsedMins * 0.011).toFixed(2);
 
-  // Strict Validation: Check if all setup fields, API keys, and fees are completely filled
+  // Strict Validation: Check if required setup fields and fees are completely filled
   const isSetupFormComplete = Boolean(
     selectedTenant.systemPrompt?.trim() &&
     selectedTenant.knowledgeBase?.trim() &&
     selectedTenant.productKnowledgeBase?.trim() &&
     selectedTenant.followupMechanism?.trim() &&
-    selectedTenant.deepgramApiKey?.trim() &&
-    selectedTenant.openaiApiKey?.trim() &&
-    selectedTenant.omnivoiceApiKey?.trim() &&
     selectedTenant.clientUsername?.trim() &&
     selectedTenant.clientPassword?.trim() &&
     selectedTenant.installationFee >= 0 &&
@@ -1250,12 +1261,91 @@ export default function VoiceSaaSApp() {
                     </div>
                   </div>
 
-                  {/* 🔑 API KEYS & INTEGRATIONS EDITABLE CARD */}
+                  {/* 🔐 CLIENT PORTAL LOGIN CREDENTIALS CARD */}
+                  <div className="bg-gradient-to-r from-purple-50/80 via-indigo-50/60 to-purple-50/80 p-6 rounded-3xl border border-purple-200/80 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
+                          <Lock className="w-5 h-5 text-purple-600" />
+                          <span>Client Portal Access Credentials</span>
+                        </h3>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5">
+                          Generated login username and password for client portal dashboard access.
+                        </p>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setShowClientCredentials(!showClientCredentials)}
+                          className="text-xs font-bold text-purple-700 bg-white border border-purple-200 px-3 py-1.5 rounded-xl hover:bg-purple-50 flex items-center space-x-1 cursor-pointer transition shadow-sm"
+                        >
+                          {showClientCredentials ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          <span>{showClientCredentials ? 'Hide Password' : 'Show Password'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => copyClientCredentials('all')}
+                          className="text-xs font-extrabold text-white bg-gradient-to-r from-purple-600 to-indigo-600 px-3.5 py-1.5 rounded-xl hover:from-purple-700 hover:to-indigo-700 flex items-center space-x-1.5 cursor-pointer shadow-md shadow-purple-500/20 active:scale-95 transition"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy Both Credentials</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {copiedCredsNotice && (
+                      <div className="bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-xl text-center shadow-md animate-bounce">
+                        ✅ {copiedCredsNotice}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Username Field */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-bold text-slate-700 uppercase">Client Username</label>
+                          <button 
+                            onClick={() => copyClientCredentials('username')} 
+                            className="text-[11px] font-bold text-purple-600 hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            <Copy className="w-3 h-3" /> Copy
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          value={selectedTenant.clientUsername || ''}
+                          onChange={e => handleUpdateTenantConfig({ clientUsername: e.target.value })}
+                          className="w-full p-3.5 bg-white border border-purple-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm"
+                        />
+                      </div>
+
+                      {/* Password Field */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-bold text-slate-700 uppercase">Client Password</label>
+                          <button 
+                            onClick={() => copyClientCredentials('password')} 
+                            className="text-[11px] font-bold text-purple-600 hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            <Copy className="w-3 h-3" /> Copy
+                          </button>
+                        </div>
+                        <input
+                          type={showClientCredentials ? 'text' : 'password'}
+                          value={selectedTenant.clientPassword || ''}
+                          onChange={e => handleUpdateTenantConfig({ clientPassword: e.target.value })}
+                          className="w-full p-3.5 bg-white border border-purple-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 🔑 API KEYS EDITABLE CARD */}
                   <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
                     <div className="flex items-center justify-between">
                       <h3 className="text-base font-bold text-slate-900 flex items-center space-x-2">
                         <Key className="w-5 h-5 text-purple-600" />
-                        <span>API Keys & Telephony Credentials</span>
+                        <span>API Keys & Voice Engines</span>
                       </h3>
                       <button
                         onClick={() => setShowApiKeys(!showApiKeys)}
@@ -1281,44 +1371,16 @@ export default function VoiceSaaSApp() {
                         />
                       </div>
 
-                      {/* OpenAI API Key */}
+                      {/* Conversational LLM API Key */}
                       <div>
                         <label className="text-xs font-bold text-slate-600 uppercase mb-1 block">
-                          OpenAI API Key (Conversational LLM)
+                          Conversational LLM API Key (DeepSeek / OpenAI / Claude / Gemini)
                         </label>
                         <input
                           type={showApiKeys ? 'text' : 'password'}
                           value={selectedTenant.openaiApiKey}
                           onChange={e => handleUpdateTenantConfig({ openaiApiKey: e.target.value })}
-                          placeholder="sk-proj-..."
-                          className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        />
-                      </div>
-
-                      {/* OmniVoice API Key */}
-                      <div>
-                        <label className="text-xs font-bold text-slate-600 uppercase mb-1 block">
-                          OmniVoice API Key (Telephony Webhook)
-                        </label>
-                        <input
-                          type={showApiKeys ? 'text' : 'password'}
-                          value={selectedTenant.omnivoiceApiKey}
-                          onChange={e => handleUpdateTenantConfig({ omnivoiceApiKey: e.target.value })}
-                          placeholder="ov_live_..."
-                          className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        />
-                      </div>
-
-                      {/* OmniVoice Assigned Phone Number */}
-                      <div>
-                        <label className="text-xs font-bold text-slate-600 uppercase mb-1 block">
-                          OmniVoice Assigned Virtual Phone Number
-                        </label>
-                        <input
-                          type="text"
-                          value={selectedTenant.omnivoiceNumber}
-                          onChange={e => handleUpdateTenantConfig({ omnivoiceNumber: e.target.value })}
-                          placeholder="+1 (555) 000-0000"
+                          placeholder="sk-proj-... or sk-deepseek-..."
                           className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
                         />
                       </div>
