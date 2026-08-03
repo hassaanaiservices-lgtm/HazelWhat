@@ -5,6 +5,25 @@ import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save
 import EmojiPicker from "emoji-picker-react";
 
 export default function DashboardPage() {
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (!res.ok) {
+          window.location.href = '/login';
+          return;
+        }
+        const data = await res.json();
+        if (!data.authenticated) {
+          window.location.href = '/login';
+        }
+      } catch (err) {
+        window.location.href = '/login';
+      }
+    }
+    checkAuth();
+  }, []);
+
   const [sessionData, setSessionData] = useState<any>(null);
   const [status, setStatus] = useState<"idle" | "creating" | "waiting_qr" | "scanning" | "connected" | "error">("idle");
   const [qrCode, setQrCode] = useState<string | null>(null);
