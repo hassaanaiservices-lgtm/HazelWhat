@@ -552,12 +552,22 @@ export class DB {
 
   static getTenantByUsername(username: string): Tenant | null {
     const tenants = DB.getTenants();
+    if (!username) return null;
     const cleanUsername = username.trim().toLowerCase();
-    return tenants.find(t => 
-      t.clientUsername?.toLowerCase() === cleanUsername || 
-      t.email?.toLowerCase() === cleanUsername ||
-      t.clientNumber === username
-    ) || null;
+    const normalizedUsername = cleanUsername.replace(/[\s\-_]/g, '');
+
+    return tenants.find(t => {
+      const u1 = t.clientUsername?.trim().toLowerCase() || '';
+      const u2 = t.email?.trim().toLowerCase() || '';
+      const u3 = t.clientNumber?.toString().trim() || '';
+      const u4 = t.name?.trim().toLowerCase() || '';
+      const u5 = t.businessName?.trim().toLowerCase() || '';
+
+      if (u1 === cleanUsername || u2 === cleanUsername || u3 === cleanUsername) return true;
+      if (u1.replace(/[\s\-_]/g, '') === normalizedUsername) return true;
+      if (u5 && u5.replace(/[\s\-_]/g, '') === normalizedUsername) return true;
+      return false;
+    }) || null;
   }
 
   static saveTenants(tenants: Tenant[]) {

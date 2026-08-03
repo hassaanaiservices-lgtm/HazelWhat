@@ -220,6 +220,12 @@ export default function VoiceSaaSApp() {
           if (Array.isArray(parsed) && parsed.length > 0) {
             setTenants(parsed);
             setSelectedTenantId(parsed[0].id);
+            // Sync local state to server DB
+            await fetch('/api/admin/tenants', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tenants: parsed })
+            });
           }
         }
         const storedPartners = localStorage.getItem('hazel_admin_partners');
@@ -236,6 +242,11 @@ export default function VoiceSaaSApp() {
         if (Array.isArray(parsed) && parsed.length > 0) {
           setTenants(parsed);
           setSelectedTenantId(parsed[0].id);
+          fetch('/api/admin/tenants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tenants: parsed })
+          }).catch(console.error);
         }
       }
     }
