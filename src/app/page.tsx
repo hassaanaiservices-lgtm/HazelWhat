@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save, MessageSquare, Settings, Plus, Trash2, Search, MoreVertical, Phone, Video, Paperclip, Smile, Mic, CheckCheck, User, Check, Send, StopCircle, Inbox, Bot, Network, BookOpen, Users, AlertCircle, ShoppingCart, Activity, Eye, EyeOff, RefreshCw, Pause, Play, Smartphone, Square, Package, Edit3, Upload, ExternalLink, Image as ImageIcon, Tag, Globe, Sparkles, Volume2, VolumeX, BellRing, Bell } from "lucide-react";
+import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save, MessageSquare, Settings, Plus, Trash2, Search, MoreVertical, Phone, Video, Paperclip, Smile, Mic, CheckCheck, User, Check, Send, StopCircle, Inbox, Bot, Network, BookOpen, Users, AlertCircle, ShoppingCart, Activity, Eye, EyeOff, RefreshCw, Pause, Play, Smartphone, Square, Package, Edit3, Upload, ExternalLink, Image as ImageIcon, Tag, Globe, Sparkles, Volume2, VolumeX, BellRing, Bell, LogOut } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
 
 export default function DashboardPage() {
@@ -14,8 +14,18 @@ export default function DashboardPage() {
           return;
         }
         const data = await res.json();
-        if (!data.authenticated) {
+        if (!data.authenticated || !data.user) {
           window.location.href = '/login';
+          return;
+        }
+        setSessionData(data.user);
+        if (data.tenant) {
+          setConfig((prev: any) => ({
+            ...prev,
+            systemPrompt: data.tenant.systemPrompt || prev.systemPrompt,
+            productInfo: data.tenant.knowledgeBase || prev.productInfo,
+            products: data.tenant.products || prev.products || []
+          }));
         }
       } catch (err) {
         window.location.href = '/login';
@@ -1757,6 +1767,20 @@ export default function DashboardPage() {
                 >
                   <RefreshCw className="h-4 w-4 text-purple-600" />
                   <span>Manage Lead Revival</span>
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      await fetch('/api/auth/logout', { method: 'POST' });
+                      window.location.href = '/login';
+                    } catch (e) {
+                      window.location.href = '/login';
+                    }
+                  }}
+                  className="bg-purple-950/40 hover:bg-purple-900/60 text-white font-extrabold px-4 py-3 rounded-2xl text-xs transition shadow-md flex items-center gap-2 cursor-pointer border border-purple-400/30"
+                >
+                  <LogOut className="h-4 w-4 text-rose-400" />
+                  <span>Sign Out</span>
                 </button>
               </div>
             </div>
