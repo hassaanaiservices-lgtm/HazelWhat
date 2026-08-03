@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { WhatsAppManager } from "./whatsapp";
-import { DB, DB_DIR } from "./db";
+import { DB, DB_DIR, formatProductsToCatalog } from "./db";
 import dns from "dns";
 import fs from "fs";
 import path from "path";
@@ -554,7 +554,9 @@ export async function handleWhatsAppMessage(msg: any) {
     }
 
     let aiReply = "I'm sorry, I didn't quite catch that. Could you rephrase?";
-    let fullSystemPrompt = `${config.systemPrompt}\n\nToday's Date: ${new Date().toISOString().split('T')[0]}\n\nProduct Information:\n${config.productInfo}`;
+    const structuredCatalog = config.products && config.products.length > 0 ? formatProductsToCatalog(config.products, config.storeCurrency || "$") : "";
+    const activeProductCatalog = structuredCatalog || config.productInfo || "";
+    let fullSystemPrompt = `${config.systemPrompt}\n\nToday's Date: ${new Date().toISOString().split('T')[0]}\n\nProduct Information & Catalog:\n${activeProductCatalog}`;
 
     const customerTags = existingCustomer?.tags || [];
     const hasRevivalTag = customerTags.includes("revival-sent") || customerTags.includes("revival-replied");

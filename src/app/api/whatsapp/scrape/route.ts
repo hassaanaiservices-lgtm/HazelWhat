@@ -9,8 +9,8 @@ export async function POST(req: Request) {
     }
 
     try {
-      const { catalog, productCount } = await scrapeStore(url, currency);
-      return NextResponse.json({ success: true, catalog, productCount });
+      const { catalog, productCount, items } = await scrapeStore(url, currency);
+      return NextResponse.json({ success: true, catalog, productCount, items });
     } catch (e: any) {
       return NextResponse.json({ success: false, error: e.message || "Failed to scrape URL" }, { status: 500 });
     }

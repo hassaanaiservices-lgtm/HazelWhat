@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save, MessageSquare, Settings, Plus, Trash2, Search, MoreVertical, Phone, Video, Paperclip, Smile, Mic, CheckCheck, User, Check, Send, StopCircle, Inbox, Bot, Network, BookOpen, Users, AlertCircle, ShoppingCart, Activity, Eye, EyeOff, RefreshCw, Pause, Play, Smartphone, Square } from "lucide-react";
+import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save, MessageSquare, Settings, Plus, Trash2, Search, MoreVertical, Phone, Video, Paperclip, Smile, Mic, CheckCheck, User, Check, Send, StopCircle, Inbox, Bot, Network, BookOpen, Users, AlertCircle, ShoppingCart, Activity, Eye, EyeOff, RefreshCw, Pause, Play, Smartphone, Square, Package, Edit3, Upload, ExternalLink, Image as ImageIcon, Tag, Globe, Sparkles } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
 
 export default function DashboardPage() {
@@ -31,6 +31,150 @@ export default function DashboardPage() {
   const [scrapeUrl, setScrapeUrl] = useState("");
   const [scrapeCurrency, setScrapeCurrency] = useState("Rs.");
   const [isScraping, setIsScraping] = useState(false);
+
+  // Product Catalog Management State
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
+  const [prodTitle, setProdTitle] = useState("");
+  const [prodPrice, setProdPrice] = useState("");
+  const [prodImage, setProdImage] = useState("");
+  const [prodLink, setProdLink] = useState("");
+  const [prodCategory, setProdCategory] = useState("");
+  const [prodDesc, setProdDesc] = useState("");
+  const [prodVariations, setProdVariations] = useState("");
+  const [productSearch, setProductSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [showRawCatalogText, setShowRawCatalogText] = useState(false);
+  const prodFileInputRef = useRef<HTMLInputElement>(null);
+
+  const resetProductForm = () => {
+    setProdTitle("");
+    setProdPrice("");
+    setProdImage("");
+    setProdLink("");
+    setProdCategory("");
+    setProdDesc("");
+    setProdVariations("");
+    setEditingProduct(null);
+  };
+
+  const openAddProductModal = () => {
+    resetProductForm();
+    setShowProductModal(true);
+  };
+
+  const openEditProductModal = (prod: any) => {
+    setEditingProduct(prod);
+    setProdTitle(prod.title || "");
+    setProdPrice(prod.price || "");
+    setProdImage(prod.image || "");
+    setProdLink(prod.link || "");
+    setProdCategory(prod.category || "");
+    setProdDesc(prod.description || "");
+    setProdVariations(
+      prod.variations && Array.isArray(prod.variations)
+        ? prod.variations.map((v: any) => `${v.title}: ${v.price}`).join(", ")
+        : ""
+    );
+    setShowProductModal(true);
+  };
+
+  const formatProductsText = (products: any[], currency: string = "$") => {
+    if (!products || products.length === 0) return "";
+    let text = "--- E-COMMERCE CATALOG ---\n\n";
+    const grouped: Record<string, any[]> = {};
+    products.forEach((p) => {
+      const cat = p.category || "General Products";
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push(p);
+    });
+
+    for (const [cat, items] of Object.entries(grouped)) {
+      text += `\n### CATEGORY: ${cat.toUpperCase()} ###\n`;
+      items.forEach((p) => {
+        let variationsText = "";
+        if (p.variations && p.variations.length > 0) {
+          variationsText = "\n  Variations:";
+          p.variations.forEach((v: any) => {
+            variationsText += `\n    - ${v.title}: ${v.price}`;
+          });
+        }
+        text += `- ${p.title} (Base Price/Range: ${p.price})\n  Image: ${p.image || "N/A"}\n  Link: ${p.link || "N/A"}${p.description ? `\n  Description: ${p.description}` : ""}${variationsText}\n\n`;
+      });
+    }
+    return text;
+  };
+
+  const saveProductsAndConfig = (updatedProducts: any[]) => {
+    const formattedCatalog = formatProductsText(updatedProducts, scrapeCurrency || "$");
+    const updatedConfig = {
+      ...config,
+      products: updatedProducts,
+      productInfo: formattedCatalog || config.productInfo
+    };
+    setConfig(updatedConfig);
+    fetch("/api/whatsapp/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updatedConfig)
+    }).catch(console.error);
+  };
+
+  const handleSaveProductModal = () => {
+    if (!prodTitle.trim()) {
+      alert("Product Title is required");
+      return;
+    }
+    const currentList = config.products || [];
+    let updated: any[];
+
+    const parsedVariations = prodVariations.trim()
+      ? prodVariations.split(",").map((v) => {
+          const parts = v.split(":");
+          return { title: parts[0]?.trim() || "Option", price: parts[1]?.trim() || prodPrice };
+        })
+      : undefined;
+
+    const newProdItem = {
+      id: editingProduct ? editingProduct.id : `custom-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      title: prodTitle.trim(),
+      price: prodPrice.trim() || `${scrapeCurrency}0.00`,
+      image: prodImage.trim(),
+      link: prodLink.trim(),
+      category: prodCategory.trim() || "General Products",
+      description: prodDesc.trim(),
+      variations: parsedVariations
+    };
+
+    if (editingProduct) {
+      updated = currentList.map((p: any) => (p.id === editingProduct.id ? newProdItem : p));
+    } else {
+      updated = [...currentList, newProdItem];
+    }
+
+    saveProductsAndConfig(updated);
+    setShowProductModal(false);
+    resetProductForm();
+  };
+
+  const handleDeleteProduct = (productId: string) => {
+    if (!confirm("Are you sure you want to delete this product?")) return;
+    const updated = (config.products || []).filter((p: any) => p.id !== productId);
+    saveProductsAndConfig(updated);
+  };
+
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setProdImage(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const [activeTab, setActiveTab] = useState<"dashboard" | "inbox" | "agents" | "channels" | "promotions" | "orders" | "knowledge" | "contacts" | "analytics" | "settings" | "leads-revival">("dashboard");
   const [inboxFilter, setInboxFilter] = useState<"all" | "normal" | "groups" | "revival">("all");
@@ -822,14 +966,40 @@ export default function DashboardPage() {
         body: JSON.stringify({ url: scrapeUrl.trim(), currency: scrapeCurrency.trim() })
       });
       const data = await res.json();
-      if (data.success && data.catalog) {
-        setConfig((prev: any) => ({
-          ...prev,
+      if (data.success) {
+        const scrapedItems: any[] = data.items || [];
+        const existingItems: any[] = config.products || [];
+        
+        const mergedItems = [...existingItems];
+        scrapedItems.forEach((item) => {
+          const idx = mergedItems.findIndex((e) => e.title.toLowerCase().trim() === item.title.toLowerCase().trim());
+          if (idx === -1) {
+            mergedItems.push(item);
+          } else {
+            if (!mergedItems[idx].image && item.image) mergedItems[idx].image = item.image;
+            if (!mergedItems[idx].link && item.link) mergedItems[idx].link = item.link;
+            mergedItems[idx].price = item.price;
+          }
+        });
+
+        const formattedCatalog = formatProductsText(mergedItems, scrapeCurrency.trim());
+
+        const updatedConfig = {
+          ...config,
           storeUrl: scrapeUrl.trim(),
           storeCurrency: scrapeCurrency.trim(),
-          productInfo: prev.productInfo + "\n\n" + data.catalog
-        }));
+          products: mergedItems,
+          productInfo: formattedCatalog || data.catalog || config.productInfo
+        };
+
+        setConfig(updatedConfig);
         setScrapeUrl("");
+
+        await fetch("/api/whatsapp/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatedConfig)
+        });
       } else {
         alert(data.error || "Failed to scrape website");
       }
@@ -2190,46 +2360,398 @@ export default function DashboardPage() {
                 />
               </div>
               
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Product Information Knowledge Base</label>
-                <textarea 
-                  value={config.productInfo}
-                  onChange={(e) => setConfig({ ...config, productInfo: e.target.value })}
-                  className="w-full h-32 p-4 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800"
-                  placeholder="Paste your pricing, features, and product details here..."
-                />
+              {/* Website Auto-Scraper & Product Catalog Module */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-5">
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                      <Package className="w-5 h-5 text-purple-600" />
+                      <span>Product Catalog & Knowledge Base</span>
+                      <span className="bg-purple-100 text-purple-700 px-2.5 py-0.5 rounded-full text-xs font-bold">
+                        {(config.products || []).length} Products
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium mt-1">
+                      Auto-scrape store catalog or manually add/edit products, pricing, links, and pictures.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowRawCatalogText(!showRawCatalogText)}
+                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition"
+                    >
+                      {showRawCatalogText ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      <span>{showRawCatalogText ? "Hide Raw Text" : "View Raw Text"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openAddProductModal}
+                      className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-md shadow-purple-500/20 transition cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>+ Add Product</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Auto-Scraper Bar */}
+                <div className="bg-purple-50/50 p-5 rounded-2xl border border-purple-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Globe className="w-4 h-4 text-purple-600" /> Auto-Fetch & Synchronize Store URL
+                    </span>
+                    <span className="text-[11px] text-purple-600 font-bold">Shopify, WooCommerce & Generic Sites</span>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <input
+                      type="url"
+                      value={scrapeUrl}
+                      onChange={(e) => setScrapeUrl(e.target.value)}
+                      placeholder="https://yourstore.com"
+                      className="flex-1 px-4 py-2.5 text-xs bg-white border border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-semibold text-slate-900"
+                    />
+                    <input
+                      type="text"
+                      value={scrapeCurrency}
+                      onChange={(e) => setScrapeCurrency(e.target.value)}
+                      placeholder="Rs."
+                      className="w-20 px-3 py-2.5 text-xs bg-white border border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-center font-bold text-slate-900"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleScrape}
+                      disabled={isScraping || !scrapeUrl.trim()}
+                      className={`px-5 py-2.5 rounded-xl text-xs font-extrabold text-white shadow-md flex items-center justify-center gap-2 transition cursor-pointer ${
+                        isScraping || !scrapeUrl.trim()
+                          ? "bg-slate-300 cursor-not-allowed"
+                          : "bg-purple-600 hover:bg-purple-700 shadow-purple-600/20"
+                      }`}
+                    >
+                      {isScraping ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Scraping Store...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4" />
+                          <span>Auto-Populate Catalog</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filter & Search */}
+                <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+                  <div className="relative w-full sm:w-72">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                    <input
+                      type="text"
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
+                      placeholder="Search products..."
+                      className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                  </div>
+
+                  <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto pb-1">
+                    {(() => {
+                      const prods = config.products || [];
+                      const categories = ["all", ...Array.from(new Set(prods.map((p: any) => p.category).filter(Boolean)))];
+                      return categories.map((cat: any) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setSelectedCategory(cat)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition shrink-0 ${
+                            selectedCategory === cat
+                              ? "bg-purple-600 text-white shadow-sm"
+                              : "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      ));
+                    })()}
+                  </div>
+                </div>
+
+                {/* Product Grid */}
+                {(() => {
+                  const prods: any[] = config.products || [];
+                  const filtered = prods.filter((p) => {
+                    const matchesSearch =
+                      !productSearch ||
+                      p.title?.toLowerCase().includes(productSearch.toLowerCase()) ||
+                      p.description?.toLowerCase().includes(productSearch.toLowerCase());
+                    const matchesCat = selectedCategory === "all" || p.category === selectedCategory;
+                    return matchesSearch && matchesCat;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="text-center py-12 px-4 bg-slate-50/80 rounded-2xl border-2 border-dashed border-slate-200">
+                        <Package className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                        <h4 className="text-sm font-bold text-slate-700">No Products in Catalog</h4>
+                        <p className="text-xs text-slate-400 font-medium mt-1 max-w-sm mx-auto">
+                          Paste your website URL above and click "Auto-Populate Catalog" or click "+ Add Product" to create catalog items manually.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={openAddProductModal}
+                          className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition"
+                        >
+                          <Plus className="w-4 h-4" /> Add First Product
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {filtered.map((prod) => (
+                        <div
+                          key={prod.id}
+                          className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition flex flex-col group"
+                        >
+                          <div className="h-44 bg-slate-100 relative overflow-hidden flex items-center justify-center">
+                            {prod.image ? (
+                              <img
+                                src={prod.image}
+                                alt={prod.title}
+                                className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                                onError={(e) => {
+                                  (e.target as any).onerror = null;
+                                  (e.target as any).src = "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500";
+                                }}
+                              />
+                            ) : (
+                              <div className="text-center p-4">
+                                <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-1" />
+                                <span className="text-[11px] font-bold text-slate-400">No Picture Attached</span>
+                              </div>
+                            )}
+                            {prod.category && (
+                              <span className="absolute top-2 left-2 bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-extrabold px-2.5 py-1 rounded-lg uppercase">
+                                {prod.category}
+                              </span>
+                            )}
+                            <span className="absolute top-2 right-2 bg-purple-600 text-white text-xs font-extrabold px-2.5 py-1 rounded-lg shadow-sm">
+                              {prod.price}
+                            </span>
+                          </div>
+
+                          <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                            <div>
+                              <h4 className="font-extrabold text-xs text-slate-900 line-clamp-1">{prod.title}</h4>
+                              {prod.description && (
+                                <p className="text-[11px] text-slate-500 font-medium line-clamp-2 mt-1">{prod.description}</p>
+                              )}
+                              {prod.variations && prod.variations.length > 0 && (
+                                <div className="mt-2 text-[10px] text-purple-700 font-bold bg-purple-50 border border-purple-100 p-1.5 rounded-lg">
+                                  Variations: {prod.variations.map((v: any) => `${v.title} (${v.price})`).join(", ")}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                              {prod.link ? (
+                                <a
+                                  href={prod.link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 truncate"
+                                >
+                                  <ExternalLink className="w-3 h-3 shrink-0" />
+                                  <span className="truncate">View Link</span>
+                                </a>
+                              ) : (
+                                <span className="text-[11px] text-slate-400 font-medium">No Link</span>
+                              )}
+
+                              <div className="flex gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditProductModal(prod)}
+                                  className="p-1.5 bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700 rounded-lg transition"
+                                  title="Edit Product"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteProduct(prod.id)}
+                                  className="p-1.5 bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 rounded-lg transition"
+                                  title="Delete Product"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                {/* Raw Text Fallback */}
+                {showRawCatalogText && (
+                  <div className="mt-4 pt-4 border-t border-slate-200 space-y-2">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">Raw AI System Prompt Catalog Text</label>
+                    <textarea
+                      value={config.productInfo}
+                      onChange={(e) => setConfig({ ...config, productInfo: e.target.value })}
+                      rows={6}
+                      className="w-full p-4 text-xs bg-slate-900 text-emerald-400 font-mono rounded-2xl border border-slate-800 focus:outline-none"
+                    />
+                  </div>
+                )}
               </div>
 
-              {/* Website Scraper */}
-              <div className="bg-purple-50/40 p-6 rounded-2xl border border-purple-100/80 shadow-sm space-y-4">
-                <div>
-                  <h3 className="text-sm font-extrabold text-slate-900">Universal Website Scraper</h3>
-                  <p className="text-xs text-slate-500 font-medium mt-1">Paste your store link to automatically extract products, images, and links into the Knowledge Base.</p>
+              {/* Product Add / Edit Modal */}
+              {showProductModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+                  <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 my-8">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                      <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                        <Package className="w-5 h-5 text-purple-600" />
+                        <span>{editingProduct ? "Edit Product Details" : "Add New Product"}</span>
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => setShowProductModal(false)}
+                        className="text-slate-400 hover:text-slate-600 p-1 transition"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-4 text-xs font-semibold">
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">Product Title *</label>
+                        <input
+                          type="text"
+                          value={prodTitle}
+                          onChange={(e) => setProdTitle(e.target.value)}
+                          placeholder="e.g. Heroic Kids Outfit"
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-slate-900 font-bold"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-slate-700 font-bold mb-1">Base Price / Range</label>
+                          <input
+                            type="text"
+                            value={prodPrice}
+                            onChange={(e) => setProdPrice(e.target.value)}
+                            placeholder="e.g. Rs. 3,500 or $25"
+                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-700 font-bold mb-1">Category</label>
+                          <input
+                            type="text"
+                            value={prodCategory}
+                            onChange={(e) => setProdCategory(e.target.value)}
+                            placeholder="e.g. Kids Festive Wear"
+                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-slate-900"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">Product Image (URL or File Upload)</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="url"
+                            value={prodImage}
+                            onChange={(e) => setProdImage(e.target.value)}
+                            placeholder="https://yourstore.com/images/heroic.jpg"
+                            className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-slate-900"
+                          />
+                          <input
+                            type="file"
+                            ref={prodFileInputRef}
+                            className="hidden"
+                            accept="image/*"
+                            onChange={handleImageFileChange}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => prodFileInputRef.current?.click()}
+                            className="px-3.5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold flex items-center gap-1.5 transition shrink-0"
+                          >
+                            <Upload className="w-4 h-4" />
+                            <span>Upload</span>
+                          </button>
+                        </div>
+                        {prodImage && (
+                          <div className="mt-2 h-20 w-20 rounded-xl overflow-hidden border border-slate-200">
+                            <img src={prodImage} alt="Preview" className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">Product Page Link (URL)</label>
+                        <input
+                          type="url"
+                          value={prodLink}
+                          onChange={(e) => setProdLink(e.target.value)}
+                          placeholder="https://cutecoodle.com/products/heroic"
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-slate-900"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">Price Variations (Optional)</label>
+                        <input
+                          type="text"
+                          value={prodVariations}
+                          onChange={(e) => setProdVariations(e.target.value)}
+                          placeholder="e.g. 1-2 Yrs: Rs. 3500, 3-4 Yrs: Rs. 3800, 5-6 Yrs: Rs. 4200"
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-slate-900"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">Separate variations with commas in Title: Price format.</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">Short Description</label>
+                        <textarea
+                          rows={2}
+                          value={prodDesc}
+                          onChange={(e) => setProdDesc(e.target.value)}
+                          placeholder="A charming little outfit for your little hero - perfect for special occasions!"
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-slate-900"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowProductModal(false)}
+                        className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveProductModal}
+                        className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-md shadow-purple-600/20 transition cursor-pointer"
+                      >
+                        {editingProduct ? "Save Changes" : "Create Product"}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex gap-3">
-                  <input 
-                    type="text" 
-                    value={scrapeUrl}
-                    onChange={(e) => setScrapeUrl(e.target.value)}
-                    placeholder="https://yourstore.com"
-                    className="flex-1 px-4 py-2.5 text-xs bg-white border border-purple-100 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold"
-                  />
-                  <input 
-                    type="text" 
-                    value={scrapeCurrency}
-                    onChange={(e) => setScrapeCurrency(e.target.value)}
-                    placeholder="Rs."
-                    className="w-20 px-4 py-2.5 text-xs bg-white border border-purple-100 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition text-center font-bold"
-                  />
-                  <button 
-                    onClick={handleScrape}
-                    disabled={isScraping || !scrapeUrl.trim()}
-                    className={`px-6 py-2.5 rounded-xl text-xs font-bold text-white shadow-md transition-all cursor-pointer ${isScraping || !scrapeUrl.trim() ? 'bg-slate-300 cursor-not-allowed' : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-purple-500/20'}`}
-                  >
-                    {isScraping ? 'Scraping...' : 'Scrape Store'}
-                  </button>
-                </div>
-              </div>
+              )}
 
               <div className="pt-2 pb-6 border-b border-slate-100">
                 <button 

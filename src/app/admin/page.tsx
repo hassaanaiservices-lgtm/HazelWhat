@@ -43,18 +43,26 @@ import {
   AlertCircle,
   LayoutDashboard,
   LogOut,
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  Package,
+  Edit3,
+  Upload,
+  ExternalLink,
+  Image as ImageIcon,
+  Tag,
+  Trash2,
+  X,
+  Plus,
   Bell,
   ChevronDown,
   ArrowUpRight,
   ArrowDownRight,
   ShoppingBag,
   User,
-  Eye,
-  EyeOff,
-  ShieldCheck,
   UserCheck2,
   ArrowLeft,
-  Trash2,
   QrCode,
   Smartphone,
   Calendar
@@ -361,28 +369,182 @@ export default function VoiceSaaSApp() {
     }, 800);
   };
 
-  const handleAutoScrapeWebsite = () => {
+  // Product Catalog State in Admin Panel
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
+  const [prodTitle, setProdTitle] = useState("");
+  const [prodPrice, setProdPrice] = useState("");
+  const [prodImage, setProdImage] = useState("");
+  const [prodLink, setProdLink] = useState("");
+  const [prodCategory, setProdCategory] = useState("");
+  const [prodDesc, setProdDesc] = useState("");
+  const [prodVariations, setProdVariations] = useState("");
+  const [productSearch, setProductSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [showRawCatalogText, setShowRawCatalogText] = useState(false);
+  const prodFileInputRef = useState<HTMLInputElement | null>(null);
+
+  const resetAdminProductForm = () => {
+    setProdTitle("");
+    setProdPrice("");
+    setProdImage("");
+    setProdLink("");
+    setProdCategory("");
+    setProdDesc("");
+    setProdVariations("");
+    setEditingProduct(null);
+  };
+
+  const openAdminAddProductModal = () => {
+    resetAdminProductForm();
+    setShowProductModal(true);
+  };
+
+  const openAdminEditProductModal = (prod: any) => {
+    setEditingProduct(prod);
+    setProdTitle(prod.title || "");
+    setProdPrice(prod.price || "");
+    setProdImage(prod.image || "");
+    setProdLink(prod.link || "");
+    setProdCategory(prod.category || "");
+    setProdDesc(prod.description || "");
+    setProdVariations(
+      prod.variations && Array.isArray(prod.variations)
+        ? prod.variations.map((v: any) => `${v.title}: ${v.price}`).join(", ")
+        : ""
+    );
+    setShowProductModal(true);
+  };
+
+  const formatTenantProductsText = (products: any[], currency: string = "$") => {
+    if (!products || products.length === 0) return "";
+    let text = "--- E-COMMERCE CATALOG ---\n\n";
+    const grouped: Record<string, any[]> = {};
+    products.forEach((p) => {
+      const cat = p.category || "General Products";
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push(p);
+    });
+
+    for (const [cat, items] of Object.entries(grouped)) {
+      text += `\n### CATEGORY: ${cat.toUpperCase()} ###\n`;
+      items.forEach((p) => {
+        let variationsText = "";
+        if (p.variations && p.variations.length > 0) {
+          variationsText = "\n  Variations:";
+          p.variations.forEach((v: any) => {
+            variationsText += `\n    - ${v.title}: ${v.price}`;
+          });
+        }
+        text += `- ${p.title} (Base Price/Range: ${p.price})\n  Image: ${p.image || "N/A"}\n  Link: ${p.link || "N/A"}${p.description ? `\n  Description: ${p.description}` : ""}${variationsText}\n\n`;
+      });
+    }
+    return text;
+  };
+
+  const handleSaveAdminProductModal = () => {
+    if (!prodTitle.trim()) {
+      alert("Product Title is required");
+      return;
+    }
+    const currentList = selectedTenant.products || [];
+    let updated: any[];
+
+    const parsedVariations = prodVariations.trim()
+      ? prodVariations.split(",").map((v) => {
+          const parts = v.split(":");
+          return { title: parts[0]?.trim() || "Option", price: parts[1]?.trim() || prodPrice };
+        })
+      : undefined;
+
+    const newProdItem = {
+      id: editingProduct ? editingProduct.id : `custom-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      title: prodTitle.trim(),
+      price: prodPrice.trim() || `${selectedTenant.currency || 'PKR'} 0`,
+      image: prodImage.trim(),
+      link: prodLink.trim(),
+      category: prodCategory.trim() || "General Products",
+      description: prodDesc.trim(),
+      variations: parsedVariations
+    };
+
+    if (editingProduct) {
+      updated = currentList.map((p: any) => (p.id === editingProduct.id ? newProdItem : p));
+    } else {
+      updated = [...currentList, newProdItem];
+    }
+
+    const newCatalogText = formatTenantProductsText(updated, selectedTenant.currency || "PKR");
+    handleUpdateTenantConfig({
+      products: updated,
+      productKnowledgeBase: newCatalogText || selectedTenant.productKnowledgeBase
+    });
+
+    setShowProductModal(false);
+    resetAdminProductForm();
+  };
+
+  const handleDeleteAdminProduct = (productId: string) => {
+    if (!confirm("Are you sure you want to delete this product?")) return;
+    const updated = (selectedTenant.products || []).filter((p: any) => p.id !== productId);
+    const newCatalogText = formatTenantProductsText(updated, selectedTenant.currency || "PKR");
+    handleUpdateTenantConfig({
+      products: updated,
+      productKnowledgeBase: newCatalogText || selectedTenant.productKnowledgeBase
+    });
+  };
+
+  const handleAutoScrapeWebsite = async () => {
     if (!websiteUrl.trim()) return;
     setIsScraping(true);
     setScrapeSuccessMsg(null);
 
-    setTimeout(() => {
-      const cleanUrl = websiteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
-      const scrapedPrompt = `You are the lead AI Sales & Support Agent for ${cleanUrl}. Your goal is to represent the business, book meetings, answer pricing/services queries, and deliver clear responses based on official company policy. Always maintain a professional and welcoming tone.`;
-      
-      const scrapedKB = `=== AUTO-SCRAPED WEBSITE CONTENT FROM ${cleanUrl} ===\n\nCompany Overview:\n${cleanUrl} is a premier provider of automated solutions and client management services.\n\nOperating Hours:\nMonday - Friday: 9:00 AM - 6:00 PM EST\nSaturday: 10:00 AM - 2:00 PM EST\nSunday: Closed`;
-
-      const scrapedProducts = `=== AUTO-SCRAPED PRODUCT & SERVICE CATALOG ===\n\n1. Standard Package (${CURRENCY_SYMBOLS[selectedTenant.currency || 'PKR']}${selectedTenant.monthlySubscriptionFee}/mo)\n   - 800 Voice Minutes Included\n   - WhatsApp Integration\n   - Real-time Deepgram TTS\n\n2. Enterprise Suite (${CURRENCY_SYMBOLS[selectedTenant.currency || 'PKR']}${selectedTenant.installationFee} Setup)`;
-
-      handleUpdateTenantConfig({
-        systemPrompt: scrapedPrompt,
-        knowledgeBase: scrapedKB,
-        productKnowledgeBase: scrapedProducts,
+    try {
+      const res = await fetch("/api/whatsapp/scrape", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: websiteUrl.trim(), currency: selectedTenant.currency || "PKR" })
       });
+      const data = await res.json();
+      if (data.success) {
+        const scrapedItems: any[] = data.items || [];
+        const existingItems: any[] = selectedTenant.products || [];
 
+        const mergedItems = [...existingItems];
+        scrapedItems.forEach((item) => {
+          const idx = mergedItems.findIndex((e) => e.title.toLowerCase().trim() === item.title.toLowerCase().trim());
+          if (idx === -1) {
+            mergedItems.push(item);
+          } else {
+            if (!mergedItems[idx].image && item.image) mergedItems[idx].image = item.image;
+            if (!mergedItems[idx].link && item.link) mergedItems[idx].link = item.link;
+            mergedItems[idx].price = item.price;
+          }
+        });
+
+        const formattedCatalog = formatTenantProductsText(mergedItems, selectedTenant.currency || "PKR");
+
+        const cleanUrl = websiteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+        const scrapedPrompt = selectedTenant.systemPrompt || `You are the lead AI Sales & Support Agent for ${cleanUrl}. Your goal is to represent the business, book meetings, answer pricing/services queries, and deliver clear responses based on official company policy. Always maintain a professional and welcoming tone.`;
+        const scrapedKB = selectedTenant.knowledgeBase || `=== AUTO-SCRAPED WEBSITE CONTENT FROM ${cleanUrl} ===\n\nCompany Overview:\n${cleanUrl} is a premier provider of automated solutions and client management services.`;
+
+        handleUpdateTenantConfig({
+          systemPrompt: scrapedPrompt,
+          knowledgeBase: scrapedKB,
+          products: mergedItems,
+          productKnowledgeBase: formattedCatalog || data.catalog || selectedTenant.productKnowledgeBase,
+        });
+
+        setScrapeSuccessMsg(`Successfully scraped & auto-populated ${mergedItems.length} products with pictures & links from ${websiteUrl}!`);
+      } else {
+        alert(data.error || "Failed to scrape website");
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert("Error occurred while scraping.");
+    } finally {
       setIsScraping(false);
-      setScrapeSuccessMsg(`Successfully scraped & auto-populated Knowledge Base, Product Catalog, and System Prompt from ${websiteUrl}!`);
-    }, 1200);
+    }
   };
 
   return (
@@ -1256,19 +1418,209 @@ export default function VoiceSaaSApp() {
                         />
                       </div>
 
-                      <div>
-                        <label className="text-xs font-bold text-slate-600 uppercase mb-2 block">Products & Services Catalog</label>
-                        <textarea
-                          rows={3}
-                          value={selectedTenant.productKnowledgeBase}
-                          onChange={e => handleUpdateTenantConfig({ productKnowledgeBase: e.target.value })}
-                          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        />
+                      <div className="space-y-4 pt-2 border-t border-slate-100">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-600 uppercase flex items-center gap-2">
+                            <Package className="w-4 h-4 text-purple-600" />
+                            <span>Products Catalog ({ (selectedTenant.products || []).length })</span>
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setShowRawCatalogText(!showRawCatalogText)}
+                              className="text-[11px] font-bold text-slate-500 hover:text-slate-800 underline"
+                            >
+                              {showRawCatalogText ? "Hide Raw" : "View Raw Text"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={openAdminAddProductModal}
+                              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition"
+                            >
+                              <Plus className="w-3.5 h-3.5" /> + Add Item
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Visual Cards */}
+                        {(() => {
+                          const prods: any[] = selectedTenant.products || [];
+                          if (prods.length === 0) {
+                            return (
+                              <div className="p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-center text-xs text-slate-400 font-medium">
+                                No product cards added yet. Click "Auto-Populate Setup" or "+ Add Item" above!
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-1">
+                              {prods.map((prod) => (
+                                <div key={prod.id} className="bg-slate-50 rounded-xl p-3 border border-slate-200 flex gap-3 relative group">
+                                  <div className="w-16 h-16 bg-slate-200 rounded-lg overflow-hidden shrink-0 flex items-center justify-center">
+                                    {prod.image ? (
+                                      <img src={prod.image} alt={prod.title} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <ImageIcon className="w-5 h-5 text-slate-400" />
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <h5 className="text-xs font-bold text-slate-900 truncate">{prod.title}</h5>
+                                    <p className="text-[11px] text-purple-700 font-extrabold mt-0.5">{prod.price}</p>
+                                    {prod.link && (
+                                      <a href={prod.link} target="_blank" rel="noopener noreferrer" className="text-[10px] text-indigo-600 hover:underline flex items-center gap-0.5 truncate mt-1">
+                                        <ExternalLink className="w-2.5 h-2.5 shrink-0" /> <span className="truncate">{prod.link}</span>
+                                      </a>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-col justify-between items-end">
+                                    <button
+                                      type="button"
+                                      onClick={() => openAdminEditProductModal(prod)}
+                                      className="p-1 text-slate-500 hover:text-purple-700 transition"
+                                      title="Edit Item"
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteAdminProduct(prod.id)}
+                                      className="p-1 text-slate-500 hover:text-rose-600 transition"
+                                      title="Delete Item"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
+
+                        {showRawCatalogText && (
+                          <textarea
+                            rows={3}
+                            value={selectedTenant.productKnowledgeBase}
+                            onChange={e => handleUpdateTenantConfig({ productKnowledgeBase: e.target.value })}
+                            className="w-full p-4 bg-slate-900 text-emerald-400 font-mono rounded-xl text-xs focus:outline-none"
+                          />
+                        )}
                       </div>
                     </div>
 
                   </div>
 
+                </div>
+              )}
+
+              {/* Admin Product Add / Edit Modal */}
+              {showProductModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+                  <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 my-8">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                      <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                        <Package className="w-5 h-5 text-purple-600" />
+                        <span>{editingProduct ? "Edit Tenant Product" : "Add Product to Tenant Catalog"}</span>
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => setShowProductModal(false)}
+                        className="text-slate-400 hover:text-slate-600 p-1 transition"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-4 text-xs font-semibold">
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">Product Title *</label>
+                        <input
+                          type="text"
+                          value={prodTitle}
+                          onChange={(e) => setProdTitle(e.target.value)}
+                          placeholder="e.g. Heroic Suit"
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-slate-900 font-bold"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-slate-700 font-bold mb-1">Price / Range</label>
+                          <input
+                            type="text"
+                            value={prodPrice}
+                            onChange={(e) => setProdPrice(e.target.value)}
+                            placeholder="e.g. PKR 3,500"
+                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-slate-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-700 font-bold mb-1">Category</label>
+                          <input
+                            type="text"
+                            value={prodCategory}
+                            onChange={(e) => setProdCategory(e.target.value)}
+                            placeholder="e.g. Outfits"
+                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-slate-900"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">Product Image URL</label>
+                        <input
+                          type="url"
+                          value={prodImage}
+                          onChange={(e) => setProdImage(e.target.value)}
+                          placeholder="https://yourstore.com/images/heroic.jpg"
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-slate-900"
+                        />
+                        {prodImage && (
+                          <div className="mt-2 h-16 w-16 rounded-lg overflow-hidden border border-slate-200">
+                            <img src={prodImage} alt="Preview" className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">Product Page Link (URL)</label>
+                        <input
+                          type="url"
+                          value={prodLink}
+                          onChange={(e) => setProdLink(e.target.value)}
+                          placeholder="https://yourstore.com/products/heroic"
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-slate-900"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-700 font-bold mb-1">Price Variations (Optional)</label>
+                        <input
+                          type="text"
+                          value={prodVariations}
+                          onChange={(e) => setProdVariations(e.target.value)}
+                          placeholder="e.g. Small: Rs. 3500, Medium: Rs. 3800"
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-slate-900"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowProductModal(false)}
+                        className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveAdminProductModal}
+                        className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold shadow-md shadow-purple-600/20 transition cursor-pointer"
+                      >
+                        {editingProduct ? "Save Changes" : "Add Product"}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 

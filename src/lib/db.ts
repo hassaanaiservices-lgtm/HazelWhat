@@ -34,6 +34,8 @@ export interface ChatMessage {
   mediaType?: string;
 }
 
+import { ProductItem } from './scraper';
+
 export interface FollowUpConfig {
   enabled: boolean;
   delayMinutes: number;
@@ -43,6 +45,7 @@ export interface FollowUpConfig {
 export interface Config {
   systemPrompt: string;
   productInfo: string;
+  products?: ProductItem[];
   keywordReplies?: { keyword: string; reply: string }[];
   enabledFeatures?: string[];
   globalAiEnabled?: boolean;
@@ -55,6 +58,33 @@ export interface Config {
   anthropicApiKey?: string;
   openRouterApiKey?: string;
   apiKey?: string;
+}
+
+export function formatProductsToCatalog(products: ProductItem[], currency: string = "$"): string {
+  if (!products || products.length === 0) return "";
+  let text = "--- E-COMMERCE CATALOG ---\n\n";
+  const grouped: Record<string, ProductItem[]> = {};
+
+  products.forEach(p => {
+    const cat = p.category || "General Products";
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(p);
+  });
+
+  for (const [cat, items] of Object.entries(grouped)) {
+    text += `\n### CATEGORY: ${cat.toUpperCase()} ###\n`;
+    items.forEach(p => {
+      let variationsText = "";
+      if (p.variations && p.variations.length > 0) {
+        variationsText = "\n  Variations:";
+        p.variations.forEach(v => {
+          variationsText += `\n    - ${v.title}: ${v.price}`;
+        });
+      }
+      text += `- ${p.title} (Base Price/Range: ${p.price})\n  Image: ${p.image || "N/A"}\n  Link: ${p.link || "N/A"}${p.description ? `\n  Description: ${p.description}` : ""}${variationsText}\n\n`;
+    });
+  }
+  return text;
 }
 
 export interface Appointment {

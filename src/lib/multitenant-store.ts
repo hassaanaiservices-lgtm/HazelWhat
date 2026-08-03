@@ -1,3 +1,5 @@
+import { ProductItem } from './scraper';
+
 export interface Partner {
   id: string;
   name: string;
@@ -39,6 +41,7 @@ export interface Tenant {
   systemPrompt: string;
   knowledgeBase: string; // Business Knowledge Base & FAQs
   productKnowledgeBase: string; // Specific Products / Inventory Knowledge Base
+  products?: ProductItem[]; // Structured visual product catalog items
   followupMechanism: string; // Automated follow-up rules & schedule
   llmModel: 'gpt-4o-mini' | 'gpt-4o' | 'claude-3-5-sonnet' | 'gemini-1.5-flash';
   temperature: number;
