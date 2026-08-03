@@ -25,6 +25,11 @@ export default function DashboardPage() {
   });
   
   const [savingConfig, setSavingConfig] = useState(false);
+  const [savingKB, setSavingKB] = useState(false);
+  const [kbSaveSuccess, setKbSaveSuccess] = useState(false);
+  const [savingKeywords, setSavingKeywords] = useState(false);
+  const [keywordsSaveSuccess, setKeywordsSaveSuccess] = useState(false);
+  const [isAutopilotSaving, setIsAutopilotSaving] = useState(false);
   const [apiKeyStatus, setApiKeyStatus] = useState<string>("Not Checked");
   const [apiKeyError, setApiKeyError] = useState<string>("");
   const [showApiKey, setShowApiKey] = useState(false);
@@ -1097,6 +1102,65 @@ export default function DashboardPage() {
     }
   };
 
+  const toggleGlobalAiAutopilot = async () => {
+    const nextState = config.globalAiEnabled === false ? true : false;
+    setConfig((prev: any) => ({ ...prev, globalAiEnabled: nextState }));
+    setIsAutopilotSaving(true);
+    try {
+      await fetch("/api/whatsapp/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ globalAiEnabled: nextState })
+      });
+    } catch (e) {
+      console.error("Error auto-saving Global AI Autopilot:", e);
+    } finally {
+      setIsAutopilotSaving(false);
+    }
+  };
+
+  const saveKnowledgeBase = async () => {
+    setSavingKB(true);
+    setKbSaveSuccess(false);
+    try {
+      await fetch("/api/whatsapp/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemPrompt: config.systemPrompt,
+          productInfo: config.productInfo,
+          products: config.products
+        })
+      });
+      setKbSaveSuccess(true);
+      setTimeout(() => setKbSaveSuccess(false), 3000);
+    } catch (e) {
+      console.error("Error saving Knowledge Base:", e);
+    } finally {
+      setSavingKB(false);
+    }
+  };
+
+  const saveKeywordRules = async () => {
+    setSavingKeywords(true);
+    setKeywordsSaveSuccess(false);
+    try {
+      await fetch("/api/whatsapp/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keywordReplies: config.keywordReplies
+        })
+      });
+      setKeywordsSaveSuccess(true);
+      setTimeout(() => setKeywordsSaveSuccess(false), 3000);
+    } catch (e) {
+      console.error("Error saving Keyword Rules:", e);
+    } finally {
+      setSavingKeywords(false);
+    }
+  };
+
   const saveConfig = async () => {
     setSavingConfig(true);
     try {
@@ -1973,6 +2037,36 @@ export default function DashboardPage() {
             </div>
           )}
 
+          {/* Global AI Autopilot Auto-Toggle */}
+          <div className="p-3.5 mx-4 mt-4 bg-gradient-to-r from-purple-50/90 via-indigo-50/70 to-purple-50/90 rounded-2xl border border-purple-200/70 flex items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="relative flex items-center justify-center">
+                <span className={`w-3 h-3 rounded-full ${config.globalAiEnabled !== false ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+              </div>
+              <div className="min-w-0">
+                <h4 className="text-xs font-extrabold text-slate-900 truncate">Global AI Autopilot</h4>
+                <p className="text-[10px] text-slate-500 font-semibold truncate">Auto-save on toggle</p>
+              </div>
+            </div>
+            <button
+              onClick={toggleGlobalAiAutopilot}
+              disabled={isAutopilotSaving}
+              className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 ${
+                config.globalAiEnabled !== false
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-purple-500/20 hover:from-purple-700 hover:to-indigo-700'
+                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+              }`}
+              title={config.globalAiEnabled !== false ? "Click to Disable Global AI Autopilot" : "Click to Enable Global AI Autopilot"}
+            >
+              {isAutopilotSaving ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Zap className="w-3.5 h-3.5 fill-current" />
+              )}
+              <span>{config.globalAiEnabled !== false ? 'ON' : 'OFF'}</span>
+            </button>
+          </div>
+
           {/* Search */}
           <div className="p-4 pb-2">
             <div className="bg-slate-100/70 border border-slate-200/60 rounded-xl flex items-center px-4 py-2.5 gap-3 focus-within:ring-2 focus-within:ring-purple-500/20 focus-within:border-purple-500 transition-all relative">
@@ -2525,19 +2619,7 @@ export default function DashboardPage() {
             </h2>
             <div className="dash-card p-8 space-y-8">
               
-              {/* Global Autopilot Toggle */}
-              <div className="flex items-center justify-between bg-slate-50/80 p-6 rounded-2xl border border-slate-200/60">
-                <div>
-                  <h3 className="text-sm font-extrabold text-slate-900">Global AI Autopilot</h3>
-                  <p className="text-xs text-slate-500 font-medium mt-1">When disabled, the AI will stop automatically replying to all incoming messages by default.</p>
-                </div>
-                <div 
-                  onClick={() => setConfig({ ...config, globalAiEnabled: config.globalAiEnabled === false ? true : false })}
-                  className={`w-14 h-8 flex items-center rounded-full p-1 cursor-pointer transition-colors shadow-inner ${config.globalAiEnabled !== false ? 'bg-purple-600' : 'bg-slate-300'}`}
-                >
-                  <div className={`bg-white w-6 h-6 rounded-full shadow-md transform transition-transform ${config.globalAiEnabled !== false ? 'translate-x-6' : 'translate-x-0'}`} />
-                </div>
-              </div>
+
 
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">System Prompt / Persona</label>
@@ -2942,14 +3024,36 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              <div className="pt-2 pb-6 border-b border-slate-100">
+              <div className="pt-2 pb-6 border-b border-slate-100 flex items-center justify-between flex-wrap gap-4 bg-slate-50/70 p-5 rounded-2xl border border-slate-200/60">
+                <div>
+                  <h4 className="text-xs font-extrabold text-slate-900">Knowledge Base & Catalog</h4>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">Save System Prompt persona and Product Catalog updates independently.</p>
+                </div>
                 <button 
-                  onClick={saveConfig}
-                  disabled={savingConfig}
-                  className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold h-13 rounded-xl shadow-md shadow-purple-500/20 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
+                  onClick={saveKnowledgeBase}
+                  disabled={savingKB}
+                  className={`px-6 py-3 rounded-xl font-extrabold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-purple-500/20 active:scale-95 ${
+                    kbSaveSuccess
+                      ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                      : "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white"
+                  }`}
                 >
-                  {savingConfig ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  Save Settings & Knowledge Base
+                  {savingKB ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Saving Knowledge Base...</span>
+                    </>
+                  ) : kbSaveSuccess ? (
+                    <>
+                      <CheckCircle2 className="h-4 w-4 animate-bounce text-yellow-300" />
+                      <span>Knowledge Base Saved!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      <span>Save Knowledge Base</span>
+                    </>
+                  )}
                 </button>
               </div>
 
@@ -3020,14 +3124,36 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="pt-4">
+              <div className="pt-4 flex items-center justify-between flex-wrap gap-4 bg-slate-50/70 p-5 rounded-2xl border border-slate-200/60">
+                <div>
+                  <h4 className="text-xs font-extrabold text-slate-900">Keyword Auto-Replies</h4>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">Save exact keyword match trigger rules independently.</p>
+                </div>
                 <button 
-                  onClick={saveConfig}
-                  disabled={savingConfig}
-                  className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold h-13 rounded-xl shadow-md shadow-purple-500/20 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
+                  onClick={saveKeywordRules}
+                  disabled={savingKeywords}
+                  className={`px-6 py-3 rounded-xl font-extrabold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-purple-500/20 active:scale-95 ${
+                    keywordsSaveSuccess
+                      ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                      : "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white"
+                  }`}
                 >
-                  {savingConfig ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  Save Configuration
+                  {savingKeywords ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Saving Keyword Rules...</span>
+                    </>
+                  ) : keywordsSaveSuccess ? (
+                    <>
+                      <CheckCircle2 className="h-4 w-4 animate-bounce text-yellow-300" />
+                      <span>Keyword Rules Saved!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      <span>Save Keyword Rules</span>
+                    </>
+                  )}
                 </button>
               </div>
 
