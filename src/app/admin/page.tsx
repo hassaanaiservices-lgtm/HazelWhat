@@ -201,6 +201,66 @@ export default function VoiceSaaSApp() {
 
   const selectedTenant = tenants.find(t => t.id === selectedTenantId) || tenants[0] || defaultFallbackTenant;
 
+  const fetchTenants = async () => {
+    try {
+      const res = await fetch('/api/admin/tenants');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.tenants) && data.tenants.length > 0) {
+        setTenants(data.tenants);
+        if (Array.isArray(data.partners) && data.partners.length > 0) {
+          setPartners(data.partners);
+        }
+        setSelectedTenantId(data.tenants[0].id);
+      } else {
+        const stored = localStorage.getItem('hazel_admin_tenants');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setTenants(parsed);
+            setSelectedTenantId(parsed[0].id);
+          }
+        }
+        const storedPartners = localStorage.getItem('hazel_admin_partners');
+        if (storedPartners) {
+          const parsedP = JSON.parse(storedPartners);
+          if (Array.isArray(parsedP) && parsedP.length > 0) setPartners(parsedP);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch tenants:', e);
+      const stored = localStorage.getItem('hazel_admin_tenants');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setTenants(parsed);
+          setSelectedTenantId(parsed[0].id);
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    fetchTenants();
+  }, []);
+
+  const persistTenants = async (newTenants: Tenant[], newPartners?: Partner[]) => {
+    setTenants(newTenants);
+    try {
+      localStorage.setItem('hazel_admin_tenants', JSON.stringify(newTenants));
+      if (newPartners) {
+        setPartners(newPartners);
+        localStorage.setItem('hazel_admin_partners', JSON.stringify(newPartners));
+      }
+      await fetch('/api/admin/tenants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenants: newTenants, partners: newPartners || partners })
+      });
+    } catch (e) {
+      console.error('Failed to persist tenants:', e);
+    }
+  };
+
   // Reset dirty flag whenever tenant selection changes
   useEffect(() => {
     setIsDirty(false);
@@ -291,7 +351,8 @@ export default function VoiceSaaSApp() {
       conversationalLeadsCount: 0,
     };
 
-    setTenants([created, ...tenants]);
+    const newTenantsList = [created, ...tenants];
+    persistTenants(newTenantsList);
     setShowAddTenant(false);
     setSelectedTenantId(created.id);
     setActiveTab('clients');
@@ -320,7 +381,8 @@ export default function VoiceSaaSApp() {
       clientsAssigned: 0,
       permissions: newAdminForm.accessLevel === 'read_write' ? ['edit_setup', 'manage_billing'] : ['view_only'],
     };
-    setPartners([...partners, createdAdmin]);
+    const newPartnersList = [...partners, createdAdmin];
+    persistTenants(tenants, newPartnersList);
     setShowAddAdminModal(false);
     setNewAdminForm({ name: '', email: '', role: 'admin', accessLevel: 'read_write' });
   };
@@ -351,9 +413,9 @@ export default function VoiceSaaSApp() {
   };
 
   const toggleTenantStatus = (tenantId: string) => {
-    setTenants(tenants.map(t => {
+    const updated = tenants.map(t => {
       if (t.id === tenantId) {
-        const nextStatus = t.status === 'active' ? 'suspended' : 'active';
+        const nextStatus: Tenant['status'] = t.status === 'active' ? 'suspended' : 'active';
         return { 
           ...t, 
           status: nextStatus,
@@ -361,7 +423,8 @@ export default function VoiceSaaSApp() {
         };
       }
       return t;
-    }));
+    });
+    persistTenants(updated);
   };
 
   const handleUpdateTenantConfig = (updated: Partial<Tenant>) => {
@@ -373,6 +436,7 @@ export default function VoiceSaaSApp() {
     if (!canSave) return;
     
     setIsSavingConfig(true);
+    persistTenants(tenants);
     setTimeout(() => {
       setIsSavingConfig(false);
       setIsDirty(false);

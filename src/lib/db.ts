@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { Tenant, Partner } from './multitenant-store';
 
 export const DB_DIR = (function() {
   let dir = process.env.DATABASE_DIR || path.join(process.cwd(), '.data');
@@ -213,6 +214,8 @@ export interface DbSchema {
   orders: Order[];
   scheduledFollowUps: ScheduledFollowUp[];
   revivalCampaigns: RevivalCampaign[];
+  tenants?: Tenant[];
+  partners?: Partner[];
 }
 
 const DEFAULT_CONFIG: Config = {
@@ -254,11 +257,13 @@ function initDb(): DbSchema {
       promotions: parsed.promotions || [],
       orders: parsed.orders || [],
       scheduledFollowUps: parsed.scheduledFollowUps || [],
-      revivalCampaigns: parsed.revivalCampaigns || []
+      revivalCampaigns: parsed.revivalCampaigns || [],
+      tenants: parsed.tenants || [],
+      partners: parsed.partners || []
     };
   } catch (e) {
     console.error("DB Corrupted, resetting to default");
-    return { chats: {}, config: DEFAULT_CONFIG, appointments: [], customers: {}, promotions: [], orders: [], scheduledFollowUps: [], revivalCampaigns: [] };
+    return { chats: {}, config: DEFAULT_CONFIG, appointments: [], customers: {}, promotions: [], orders: [], scheduledFollowUps: [], revivalCampaigns: [], tenants: [], partners: [] };
   }
 }
 
@@ -538,5 +543,26 @@ export class DB {
       db.revivalCampaigns[idx] = { ...db.revivalCampaigns[idx], ...updates };
       saveDb(db);
     }
+  }
+
+  // --- Tenants & Partners Methods ---
+  static getTenants(): Tenant[] {
+    return initDb().tenants || [];
+  }
+
+  static saveTenants(tenants: Tenant[]) {
+    const db = initDb();
+    db.tenants = tenants;
+    saveDb(db);
+  }
+
+  static getPartners(): Partner[] {
+    return initDb().partners || [];
+  }
+
+  static savePartners(partners: Partner[]) {
+    const db = initDb();
+    db.partners = partners;
+    saveDb(db);
   }
 }
