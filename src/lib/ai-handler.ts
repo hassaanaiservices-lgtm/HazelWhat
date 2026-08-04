@@ -38,23 +38,23 @@ function getApiKey(config: any): string {
     config.apiKey,
     config.anthropicApiKey,
     config.openRouterApiKey,
-    process.env["Api key"],
     process.env["API_KEY"],
+    getEnvKey("API_KEY"),
+    process.env["OPENAI_API_KEY"],
+    getEnvKey("OPENAI_API_KEY"),
+    process.env["ANTHROPIC_API_KEY"],
+    getEnvKey("ANTHROPIC_API_KEY"),
+    process.env["OPENROUTER_API_KEY"],
+    getEnvKey("OPENROUTER_API_KEY"),
+    process.env["Api key"],
+    getEnvKey("Api key"),
     process.env["Api_key"],
     process.env["api_key"],
     process.env["ApiKey"],
     process.env["apikey"],
     process.env["APIKEY"],
-    process.env["OPENAI_API_KEY"],
-    process.env["ANTHROPIC_API_KEY"],
-    process.env["OPENROUTER_API_KEY"],
-    getEnvKey("Api key"),
-    getEnvKey("API_KEY"),
     getEnvKey("Api_key"),
-    getEnvKey("api_key"),
-    getEnvKey("OPENAI_API_KEY"),
-    getEnvKey("ANTHROPIC_API_KEY"),
-    getEnvKey("OPENROUTER_API_KEY")
+    getEnvKey("api_key")
   ];
 
   for (const k of keys) {
@@ -63,6 +63,97 @@ function getApiKey(config: any): string {
     }
   }
   return "";
+}
+
+function getDeepgramSettings(config: any): { apiKey: string; voice: string } {
+  let apiKey = (
+    config.deepgramApiKey ||
+    config.apiKey ||
+    getEnvKey("DEEPGRAM_API_KEY") ||
+    process.env.DEEPGRAM_API_KEY ||
+    process.env.API_KEY ||
+    ""
+  ).trim();
+
+  let voice = config.deepgramVoice || "aura-asteria-en";
+
+  if (!apiKey) {
+    try {
+      const tenants = (DB as any).getTenants?.() || [];
+      if (tenants.length > 0 && tenants[0].deepgramApiKey) {
+        apiKey = tenants[0].deepgramApiKey.trim();
+        if (tenants[0].deepgramVoice) voice = tenants[0].deepgramVoice;
+      }
+    } catch (e) {}
+  }
+
+  return { apiKey, voice };
+}
+
+async function transcribeAudioWithDeepgram(buffer: Buffer, apiKey: string, mimetype = "audio/ogg"): Promise<string> {
+  if (!apiKey || !apiKey.trim()) {
+    console.warn("[Deepgram STT] Deepgram API key is missing.");
+    return "";
+  }
+  try {
+    const cleanMime = mimetype.split(';')[0] || "audio/ogg";
+    console.log(`[Deepgram STT] Transcribing ${buffer.length} bytes of audio (${cleanMime})...`);
+    
+    const res = await fetch("https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true", {
+      method: "POST",
+      headers: {
+        "Authorization": `Token ${apiKey.trim()}`,
+        "Content-Type": cleanMime
+      },
+      body: new Uint8Array(buffer)
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[Deepgram STT] API error (${res.status}):`, errText);
+      return "";
+    }
+
+    const data = await res.json();
+    const transcript = data?.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
+    console.log(`[Deepgram STT] Transcribed text: "${transcript}"`);
+    return transcript;
+  } catch (err) {
+    console.error("[Deepgram STT] Exception during transcription:", err);
+    return "";
+  }
+}
+
+async function generateSpeechWithDeepgram(text: string, apiKey: string, voice = "aura-asteria-en"): Promise<Buffer | null> {
+  if (!apiKey || !apiKey.trim() || !text || !text.trim()) return null;
+  try {
+    const cleanText = text.replace(/[*_~`#]/g, '').trim();
+    if (!cleanText) return null;
+
+    console.log(`[Deepgram TTS] Synthesizing speech for: "${cleanText.substring(0, 60)}..." using voice ${voice}`);
+    const res = await fetch(`https://api.deepgram.com/v1/speak?model=${encodeURIComponent(voice)}`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Token ${apiKey.trim()}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ text: cleanText })
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[Deepgram TTS] API error (${res.status}):`, errText);
+      return null;
+    }
+
+    const arrayBuffer = await res.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    console.log(`[Deepgram TTS] Speech synthesis successful: generated ${buffer.length} bytes.`);
+    return buffer;
+  } catch (err) {
+    console.error("[Deepgram TTS] Exception during speech synthesis:", err);
+    return null;
+  }
 }
 
 export function detectKeyType(key: string): "anthropic" | "openrouter" | "deepseek" | "unknown" {
@@ -420,17 +511,44 @@ export async function handleWhatsAppMessage(msg: any) {
     }
     
     const hasImage = !!msg.message?.imageMessage;
+    const hasAudio = !!msg.message?.audioMessage;
     
-    if (!from || (!content && !hasImage)) return;
+    if (!from || (!content && !hasImage && !hasAudio)) return;
 
-    console.log(`[AI Handler] Received message from ${from}: ${content} (HasImage: ${hasImage})`);
+    console.log(`[AI Handler] Received message from ${from}: ${content} (HasImage: ${hasImage}, HasAudio: ${hasAudio})`);
 
-    let base64Image = null;
+    let base64Image: string | null = null;
+    let base64Audio: string | null = null;
+    let audioBuffer: Buffer | null = null;
+    let audioMime = "audio/ogg";
+
     if (hasImage) {
       console.log(`[AI Handler] Downloading incoming media for vision analysis...`);
       const buffer = await WhatsAppManager.downloadMedia(msg);
       if (buffer) {
         base64Image = buffer.toString('base64');
+      }
+    }
+
+    if (hasAudio) {
+      audioMime = msg.message?.audioMessage?.mimetype || "audio/ogg";
+      console.log(`[AI Handler] Downloading incoming voice note / audio message (${audioMime})...`);
+      audioBuffer = await WhatsAppManager.downloadMedia(msg);
+      if (audioBuffer) {
+        base64Audio = audioBuffer.toString('base64');
+      }
+    }
+
+    const config = DB.getConfig();
+    const { apiKey: deepgramApiKey, voice: deepgramVoice } = getDeepgramSettings(config);
+
+    let voiceTranscript = "";
+    if (hasAudio && audioBuffer) {
+      if (deepgramApiKey) {
+        voiceTranscript = await transcribeAudioWithDeepgram(audioBuffer, deepgramApiKey, audioMime);
+      }
+      if (!content && voiceTranscript) {
+        content = voiceTranscript;
       }
     }
 
@@ -471,7 +589,17 @@ export async function handleWhatsAppMessage(msg: any) {
       return;
     }
 
-    DB.addChatMessage(from, { role: "user", content: hasImage ? `[Image] ${content}` : content });
+    if (hasAudio) {
+      const userDisplay = voiceTranscript ? `🎤 [Voice Note]: "${voiceTranscript}"` : "🎤 [Voice Note]";
+      DB.addChatMessage(from, { 
+        role: "user", 
+        content: userDisplay,
+        mediaUrl: base64Audio ? `data:${audioMime};base64,${base64Audio}` : undefined,
+        mediaType: audioMime
+      });
+    } else {
+      DB.addChatMessage(from, { role: "user", content: hasImage ? `[Image] ${content}` : content });
+    }
     
     const existingCustomer = DB.getCustomer(from);
     const currentStage = existingCustomer?.pipelineStage || "new";
@@ -509,9 +637,6 @@ export async function handleWhatsAppMessage(msg: any) {
       tags: updatedTags,
       ...(msg.pushName ? { name: msg.pushName } : {})
     });
-    DB.cancelPendingFollowUps(from);
-
-    const config = DB.getConfig();
     const customer = DB.getCustomer(from);
 
     const globalAiEnabled = config.globalAiEnabled !== false;
@@ -925,11 +1050,33 @@ Keep their history in mind and treat them like a valued returning customer.`;
 
     let sentMsg = null;
     if (aiReply.length > 0) {
-      sentMsg = await WhatsAppManager.sendMessage(from, aiReply);
-      console.log(`[AI Handler] Replied to ${from}: ${aiReply}`);
-    }
+      let voiceSent = false;
 
-    DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: aiReply || "[Media Sent]" });
+      // If user sent a voice note AND Deepgram API Key is configured, reply with a voice note!
+      if (hasAudio && deepgramApiKey) {
+        console.log(`[AI Handler] Synthesizing Deepgram TTS voice note reply for ${from}...`);
+        const ttsBuffer = await generateSpeechWithDeepgram(aiReply, deepgramApiKey, deepgramVoice);
+        if (ttsBuffer) {
+          sentMsg = await WhatsAppManager.sendMedia(from, ttsBuffer, "audio/mp4", "voice_note.mp4", aiReply, true);
+          const base64Tts = ttsBuffer.toString("base64");
+          DB.addChatMessage(from, {
+            id: sentMsg?.key?.id,
+            role: "assistant",
+            content: aiReply,
+            mediaUrl: `data:audio/mp4;base64,${base64Tts}`,
+            mediaType: "audio/mp4"
+          });
+          voiceSent = true;
+          console.log(`[AI Handler] Replied to ${from} with Voice Note!`);
+        }
+      }
+
+      if (!voiceSent) {
+        sentMsg = await WhatsAppManager.sendMessage(from, aiReply);
+        console.log(`[AI Handler] Replied to ${from}: ${aiReply}`);
+        DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: aiReply || "[Media Sent]" });
+      }
+    }
     
   } catch (error) {
     console.error("[AI Handler] OUTER Error processing message:", error);
