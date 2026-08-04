@@ -375,9 +375,9 @@ export default function VoiceSaaSApp() {
       deepgramVoice: 'aura-asteria-en',
 
       // API Keys
-      deepgramApiKey: `dg_live_${Math.random().toString(36).substring(2, 14)}`,
-      openaiApiKey: `sk-proj-${Math.random().toString(36).substring(2, 16)}`,
-      omnivoiceApiKey: `ov_live_${Math.random().toString(36).substring(2, 12)}`,
+      deepgramApiKey: '',
+      openaiApiKey: '',
+      omnivoiceApiKey: '',
       omnivoiceNumber: `+1 (555) ${Math.floor(100 + Math.random() * 900)}-${Math.floor(1000 + Math.random() * 9000)}`,
 
       createdAt: new Date().toISOString(),
@@ -474,16 +474,19 @@ export default function VoiceSaaSApp() {
     setIsDirty(true);
   };
 
-  const handleSaveClientSetup = () => {
+  const handleSaveClientSetup = async () => {
     if (!canSave) return;
     
     setIsSavingConfig(true);
-    persistTenants(tenants);
-    setTimeout(() => {
+    try {
+      await persistTenants(tenants);
+    } catch (e) {
+      console.error('Failed to save client setup:', e);
+    } finally {
       setIsSavingConfig(false);
       setIsDirty(false);
       setShowSaveSuccessModal(true);
-    }, 800);
+    }
   };
 
   // Product Catalog State in Admin Panel

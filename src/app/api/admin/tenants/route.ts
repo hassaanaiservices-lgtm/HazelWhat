@@ -8,19 +8,17 @@ export async function GET() {
     let tenants = DB.getTenants();
     const partners = DB.getPartners();
 
-    // If local tenants array is empty or wiped after deployment, attempt to restore from Supabase
-    if (!tenants || tenants.length === 0) {
-      try {
-        const { fetchTenantsFromSupabase } = await import("@/lib/supabase");
-        const supabaseTenants = await fetchTenantsFromSupabase();
-        if (supabaseTenants && supabaseTenants.length > 0) {
-          console.log(`[Tenants API] Restored ${supabaseTenants.length} tenant(s) from Supabase persistence.`);
-          DB.saveTenants(supabaseTenants);
-          tenants = supabaseTenants;
-        }
-      } catch (e) {
-        console.error('[Tenants API] Error restoring from Supabase:', e);
+    // Prioritize Supabase persistence whenever available to keep database in sync across restarts
+    try {
+      const { fetchTenantsFromSupabase } = await import("@/lib/supabase");
+      const supabaseTenants = await fetchTenantsFromSupabase();
+      if (supabaseTenants && supabaseTenants.length > 0) {
+        console.log(`[Tenants API] Loaded ${supabaseTenants.length} tenant(s) from Supabase persistence.`);
+        DB.saveTenants(supabaseTenants);
+        tenants = supabaseTenants;
       }
+    } catch (e) {
+      console.error('[Tenants API] Error reading from Supabase:', e);
     }
 
     return NextResponse.json({ success: true, tenants, partners });
@@ -33,7 +31,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     if (Array.isArray(body.tenants)) {
-      DB.saveTenants(body.tenants);
+      await DB.saveTenantsAsync(body.tenants);
     }
     if (Array.isArray(body.partners)) {
       DB.savePartners(body.partners);

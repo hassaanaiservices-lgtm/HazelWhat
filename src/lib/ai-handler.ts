@@ -66,33 +66,35 @@ function getApiKey(config: any): string {
 }
 
 function getDeepgramSettings(config: any): { apiKey: string; voice: string } {
-  // Deepgram keys are managed exclusively by admin in the tenant setup — NOT by the client.
-  // Priority: 1) Tenant record  2) DEEPGRAM_API_KEY env var  3) config.deepgramApiKey (legacy)
   let apiKey = "";
   let voice = "aura-asteria-en";
 
-  // Check all tenant records for a Deepgram key
+  // Priority 1: Check Railway environment variable first
+  const envKey = getEnvKey("DEEPGRAM_API_KEY") || process.env.DEEPGRAM_API_KEY || "";
+  if (envKey && envKey.trim()) {
+    apiKey = envKey.trim();
+  }
+
+  // Priority 2: Check tenant records for a valid custom Deepgram key (ignoring mock placeholders like dg_live_...)
   try {
     const tenants = DB.getTenants() || [];
     for (const t of tenants) {
+      if (t.deepgramVoice) voice = t.deepgramVoice;
       if (t.deepgramApiKey && t.deepgramApiKey.trim()) {
-        apiKey = t.deepgramApiKey.trim();
-        if (t.deepgramVoice) voice = t.deepgramVoice;
-        break;
+        const candidate = t.deepgramApiKey.trim();
+        // Only override env key if tenant key is a real key (not auto-generated placeholder)
+        if (!candidate.startsWith("dg_live_")) {
+          apiKey = candidate;
+          break;
+        }
       }
     }
   } catch (e) {
     console.error("[Deepgram Settings] Error reading tenants:", e);
   }
 
-  // Fallback to env var
-  if (!apiKey) {
-    const envKey = getEnvKey("DEEPGRAM_API_KEY") || process.env.DEEPGRAM_API_KEY || "";
-    if (envKey.trim()) apiKey = envKey.trim();
-  }
-
-  // Legacy fallback: config.deepgramApiKey (if admin set it in client config before migration)
-  if (!apiKey && config.deepgramApiKey && config.deepgramApiKey.trim()) {
+  // Legacy fallback: config.deepgramApiKey
+  if (!apiKey && config.deepgramApiKey && config.deepgramApiKey.trim() && !config.deepgramApiKey.startsWith("dg_live_")) {
     apiKey = config.deepgramApiKey.trim();
   }
   if (config.deepgramVoice) voice = config.deepgramVoice;

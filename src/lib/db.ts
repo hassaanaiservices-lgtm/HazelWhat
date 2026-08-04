@@ -587,6 +587,24 @@ export class DB {
     }
   }
 
+  static async saveTenantsAsync(tenants: Tenant[]): Promise<boolean> {
+    const db = initDb();
+    db.tenants = tenants;
+    saveDb(db);
+
+    try {
+      const { upsertTenantToSupabase, isSupabaseConfigured } = await import('./supabase');
+      if (isSupabaseConfigured) {
+        const results = await Promise.all(tenants.map(t => upsertTenantToSupabase(t)));
+        console.log(`[DB] Supabase sync completed for ${tenants.length} tenants. Success: ${results.every(Boolean)}`);
+        return results.every(Boolean);
+      }
+    } catch (err) {
+      console.error('[DB] Supabase async sync error:', err);
+    }
+    return true;
+  }
+
   static getPartners(): Partner[] {
     return initDb().partners || [];
   }
