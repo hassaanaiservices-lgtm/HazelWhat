@@ -777,9 +777,18 @@ export async function handleWhatsAppMessage(msg: any) {
 
     let aiReply = "I'm sorry, I didn't quite catch that. Could you rephrase?";
     
-    // Resolve active Tenant from multi-tenant database so AI uses the exact client system prompt, knowledge base, & catalog!
+    // Resolve active Tenant from multi-tenant database by phone matching or active status
     const tenants = DB.getTenants() || [];
-    const activeTenant = tenants.find(t => t.status === 'active') || tenants[0];
+    const cleanFromDigits = (from || "").replace(/[^\d]/g, "");
+    let activeTenant = tenants.find(t => {
+      if (!t.phoneNumber) return false;
+      const tDigits = t.phoneNumber.replace(/[^\d]/g, "");
+      return tDigits.length > 5 && (cleanFromDigits.includes(tDigits) || tDigits.includes(cleanFromDigits));
+    });
+
+    if (!activeTenant) {
+      activeTenant = tenants.find(t => t.status === 'active') || tenants[0];
+    }
     
     const activeSystemPrompt = activeTenant?.systemPrompt?.trim() || config.systemPrompt;
     const activeKnowledgeBase = activeTenant?.knowledgeBase?.trim() || config.productInfo;

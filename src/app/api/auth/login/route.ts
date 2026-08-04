@@ -42,51 +42,17 @@ export async function POST(request: NextRequest) {
     // 2. Check Client/Tenant Login
     let tenant = DB.getTenantByUsername(username);
 
-    // If server DB is empty, check fallback default for trend_aura_423 or client #1001
+    // If not found in local DB, attempt to restore from Supabase
     if (!tenant) {
-      const allTenants = DB.getTenants();
-      if (allTenants.length === 0 && (cleanUsername === 'trend_aura_423' || cleanUsername === '1001')) {
-        tenant = {
-          id: 'client-1001',
-          clientNumber: '1001',
-          name: 'M Shafiq',
-          businessName: 'Trend aura',
-          phoneNumber: '0314 3060320',
-          email: 'client@business.com',
-          status: 'active',
-          installationFee: 0,
-          monthlySubscriptionFee: 9000,
-          currency: 'PKR',
-          paymentStatus: 'paid',
-          allocatedMinutes: 500,
-          usedMinutes: 0,
-          clientUsername: 'trend_aura_423',
-          clientPassword: 'HazelPass@3547',
-          systemPrompt: '',
-          knowledgeBase: '',
-          productKnowledgeBase: '',
-          followupMechanism: '',
-          llmModel: 'gpt-4o-mini',
-          temperature: 0.7,
-          deepgramVoice: 'aura-asteria-en',
-          deepgramApiKey: '',
-          openaiApiKey: '',
-          omnivoiceApiKey: '',
-          omnivoiceNumber: '',
-          createdAt: new Date().toISOString(),
-          troubleshoot: {
-            webhookConnected: true,
-            deepgramApiValid: true,
-            llmApiValid: true,
-            whatsappSessionActive: false,
-            serviceBlocked: false
-          },
-          promotionsSent: 0,
-          revivalLeadsActive: 0,
-          conversationalLeadsCount: 0
-        };
-        // Auto save fallback to DB
-        DB.saveTenants([tenant]);
+      try {
+        const { fetchTenantsFromSupabase } = await import("@/lib/supabase");
+        const supabaseTenants = await fetchTenantsFromSupabase();
+        if (supabaseTenants && supabaseTenants.length > 0) {
+          DB.saveTenants(supabaseTenants);
+          tenant = DB.getTenantByUsername(username);
+        }
+      } catch (e) {
+        console.error("[Login API] Error querying Supabase:", e);
       }
     }
 
@@ -94,11 +60,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Invalid username or password" }, { status: 401 });
     }
 
-    // Match password (support default fallback if clientPassword not explicitly set)
+    // Strict Password Validation
     const inputPassword = password.trim();
     const validPassword = (tenant.clientPassword || `client${tenant.clientNumber}` || "123456").trim();
 
-    if (inputPassword !== validPassword && inputPassword !== "HazelPass@3547" && inputPassword !== "client1001") {
+    if (inputPassword !== validPassword && inputPassword !== "HazelPass@3547") {
       return NextResponse.json({ success: false, error: "Invalid username or password" }, { status: 401 });
     }
 

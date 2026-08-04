@@ -572,24 +572,15 @@ export class DB {
     }) || null;
   }
 
+  static getTenantById(id: string): Tenant | null {
+    if (!id) return null;
+    const tenants = DB.getTenants();
+    return tenants.find(t => t.id === id) || null;
+  }
+
   static saveTenants(tenants: Tenant[]) {
     const db = initDb();
     db.tenants = tenants;
-    
-    // Mirror active tenant into db.config for backward compatibility
-    const active = tenants.find(t => t.status === 'active') || tenants[0];
-    if (active) {
-      db.config = {
-        ...db.config,
-        systemPrompt: active.systemPrompt || db.config.systemPrompt,
-        productInfo: active.knowledgeBase || db.config.productInfo,
-        products: active.products || db.config.products || [],
-        deepgramApiKey: active.deepgramApiKey || db.config.deepgramApiKey,
-        deepgramVoice: active.deepgramVoice || db.config.deepgramVoice,
-        businessName: active.businessName || db.config.businessName,
-        storeCurrency: active.currency || db.config.storeCurrency || 'PKR',
-      };
-    }
     saveDb(db);
 
     // Async sync to Supabase if configured
@@ -605,21 +596,6 @@ export class DB {
   static async saveTenantsAsync(tenants: Tenant[]): Promise<boolean> {
     const db = initDb();
     db.tenants = tenants;
-    
-    // Mirror active tenant into db.config for backward compatibility
-    const active = tenants.find(t => t.status === 'active') || tenants[0];
-    if (active) {
-      db.config = {
-        ...db.config,
-        systemPrompt: active.systemPrompt || db.config.systemPrompt,
-        productInfo: active.knowledgeBase || db.config.productInfo,
-        products: active.products || db.config.products || [],
-        deepgramApiKey: active.deepgramApiKey || db.config.deepgramApiKey,
-        deepgramVoice: active.deepgramVoice || db.config.deepgramVoice,
-        businessName: active.businessName || db.config.businessName,
-        storeCurrency: active.currency || db.config.storeCurrency || 'PKR',
-      };
-    }
     saveDb(db);
 
     try {
