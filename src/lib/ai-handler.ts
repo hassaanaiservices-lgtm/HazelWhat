@@ -66,14 +66,20 @@ function getApiKey(config: any): string {
 }
 
 function getDeepgramSettings(config: any): { apiKey: string; voice: string } {
-  let apiKey = (
-    config.deepgramApiKey ||
-    config.apiKey ||
-    getEnvKey("DEEPGRAM_API_KEY") ||
-    process.env.DEEPGRAM_API_KEY ||
-    process.env.API_KEY ||
-    ""
-  ).trim();
+  // ONLY use keys explicitly designated as Deepgram keys — never fall back to LLM API keys
+  const candidates = [
+    config.deepgramApiKey,
+    getEnvKey("DEEPGRAM_API_KEY"),
+    process.env.DEEPGRAM_API_KEY
+  ];
+
+  let apiKey = "";
+  for (const k of candidates) {
+    if (k && typeof k === "string" && k.trim()) {
+      apiKey = k.trim();
+      break;
+    }
+  }
 
   let voice = config.deepgramVoice || "aura-asteria-en";
 
@@ -87,6 +93,7 @@ function getDeepgramSettings(config: any): { apiKey: string; voice: string } {
     } catch (e) {}
   }
 
+  console.log(`[Deepgram Settings] Key found: ${apiKey ? "YES (" + apiKey.substring(0, 8) + "...)" : "NO KEY CONFIGURED"}`);
   return { apiKey, voice };
 }
 
@@ -578,19 +585,31 @@ export async function handleWhatsAppMessage(msg: any) {
 
     let voiceTranscript = "";
     if (hasAudio && audioBuffer) {
+      console.log(`[AI Handler] Voice note detected. Audio buffer size: ${audioBuffer.length} bytes. Deepgram key configured: ${!!deepgramApiKey}`);
+      
+      // Step 1: Try Deepgram STT if key is configured
       if (deepgramApiKey) {
         voiceTranscript = await transcribeAudioWithDeepgram(audioBuffer, deepgramApiKey, audioMime);
+        console.log(`[AI Handler] Deepgram STT result: "${voiceTranscript || "(empty)"}"`);
       }
+      
+      // Step 2: Try OpenAI Whisper if Deepgram failed — only with actual OpenAI keys
       if (!voiceTranscript) {
-        const unifiedKey = getApiKey(config);
-        if (unifiedKey && unifiedKey.startsWith("sk-")) {
-          voiceTranscript = await transcribeAudioWithOpenAI(audioBuffer, unifiedKey, audioMime);
+        const openaiKey = getEnvKey("OPENAI_API_KEY") || process.env.OPENAI_API_KEY || "";
+        if (openaiKey && openaiKey.trim()) {
+          voiceTranscript = await transcribeAudioWithOpenAI(audioBuffer, openaiKey.trim(), audioMime);
+          console.log(`[AI Handler] OpenAI Whisper STT result: "${voiceTranscript || "(empty)"}"`);
+        } else {
+          console.log(`[AI Handler] No OpenAI key found for Whisper fallback. No Deepgram key either: ${!deepgramApiKey}`);
         }
       }
+      
       if (voiceTranscript) {
         content = voiceTranscript;
+        console.log(`[AI Handler] Voice transcribed successfully! Content set to: "${content}"`);
       } else if (!content) {
         content = "Hi! I sent a voice note inquiring about your products, pricing, and availability.";
+        console.log(`[AI Handler] No STT available — using fallback voice content for AI processing.`);
       }
     }
 
