@@ -547,8 +547,10 @@ export async function handleWhatsAppMessage(msg: any) {
       if (deepgramApiKey) {
         voiceTranscript = await transcribeAudioWithDeepgram(audioBuffer, deepgramApiKey, audioMime);
       }
-      if (!content && voiceTranscript) {
+      if (voiceTranscript) {
         content = voiceTranscript;
+      } else if (!content) {
+        content = "[Voice Note Message received]";
       }
     }
 
@@ -713,7 +715,8 @@ Keep their history in mind and treat them like a valued returning customer.`;
     - Once they tell you the size, check the specific Variations for that product and tell them the exact price for that size in text.
     - If they already mentioned the size in their initial request, you can directly show the card and state the exact price for that size.
 8. PROACTIVE FOLLOW-UPS: Whenever you tell the user you will follow up or check back later, you MUST call the schedule_followup tool to actually schedule it. Never just say it without calling the tool.
-9. CUSTOMER CRM PROFILES: You have access to the update_customer_profile tool. Whenever a user shares their name, or shows strong buying interest (such as asking for catalog, pricing, or stock details), you MUST call update_customer_profile to record their name, add relevant product interest tags, and move them to the appropriate stage ('qualified' when they give basic details, 'warm' when showing purchase intent).`;
+9. CUSTOMER CRM PROFILES: You have access to the update_customer_profile tool. Whenever a user shares their name, or shows strong buying interest (such as asking for catalog, pricing, or stock details), you MUST call update_customer_profile to record their name, add relevant product interest tags, and move them to the appropriate stage ('qualified' when they give basic details, 'warm' when showing purchase intent).
+10. VOICE NOTE & AUDIO INSTRUCTIONS: You have full audio & voice note capability. When a user sends a voice note (marked with 🎤 [Voice Note]), the transcript of what they spoke is provided. You MUST ALWAYS answer their question or request directly and naturally! NEVER say "I am not able to listen to voice notes", "I cannot hear audio", or refuse to process voice messages.`;
 
     if (config.enabledFeatures && config.enabledFeatures.length > 0) {
       fullSystemPrompt += "\n\n=== ADVANCED FEATURES ENABLED ===\n";

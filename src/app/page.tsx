@@ -2134,6 +2134,40 @@ export default function DashboardPage() {
                     </p>
                   )}
                 </div>
+
+                {/* Deepgram API Key & Voice Selection */}
+                <div className="border-t border-slate-100 pt-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-bold text-slate-700">Deepgram Voice API Key (Speech-To-Text & Voice Reply)</label>
+                    <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                      Voice Engine
+                    </span>
+                  </div>
+                  <input 
+                    type="password" 
+                    value={config.deepgramApiKey || ''} 
+                    onChange={e => setConfig({...config, deepgramApiKey: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 font-medium focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all mb-4"
+                    placeholder="Enter Deepgram API Key (dg_live_...)"
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">Voice Model</label>
+                      <select 
+                        value={config.deepgramVoice || 'aura-asteria-en'}
+                        onChange={e => setConfig({...config, deepgramVoice: e.target.value})}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-purple-500"
+                      >
+                        <option value="aura-asteria-en">Asteria (Female - English)</option>
+                        <option value="aura-luna-en">Luna (Female - Soft English)</option>
+                        <option value="aura-stella-en">Stella (Female - Clear)</option>
+                        <option value="aura-athena-en">Athena (Female - Professional)</option>
+                        <option value="aura-arcas-en">Arcas (Male - Natural)</option>
+                        <option value="aura-zeus-en">Zeus (Male - Deep English)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             

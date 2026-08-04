@@ -59,6 +59,8 @@ export interface Config {
   anthropicApiKey?: string;
   openRouterApiKey?: string;
   apiKey?: string;
+  deepgramApiKey?: string;
+  deepgramVoice?: string;
 }
 
 export function formatProductsToCatalog(products: ProductItem[], currency: string = "$"): string {
