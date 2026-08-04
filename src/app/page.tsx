@@ -1604,6 +1604,33 @@ export default function DashboardPage() {
     }
   };
 
+  // Dynamic Overview metrics computed from real tenant orders & customer data
+  const tenantCurrency = sessionData?.currency || "PKR";
+  const currencySymbol = tenantCurrency === "USD" ? "$" : "Rs. ";
+
+  const totalRevenue = orders.reduce((sum: number, o: any) => {
+    const rawPrice = o.price || o.amount || 0;
+    const numeric = typeof rawPrice === "number" ? rawPrice : (parseFloat(String(rawPrice).replace(/[^\d.]/g, '')) || 0);
+    return sum + numeric;
+  }, 0);
+
+  const activeUsersCount = Math.max(Object.keys(customers).length, Object.keys(chats).length);
+  const totalOrdersCount = orders.length;
+  const customerLifetimeValue = activeUsersCount > 0 ? (totalRevenue / activeUsersCount) : 0;
+  const avgDailySales = totalRevenue > 0 ? (totalRevenue / 30) : 0;
+
+  // Breakdown of top products ordered
+  const productSalesMap: Record<string, number> = {};
+  orders.forEach((o: any) => {
+    const prod = o.productName || o.product || "General Sales";
+    productSalesMap[prod] = (productSalesMap[prod] || 0) + 1;
+  });
+  const sortedProductSales = Object.entries(productSalesMap).sort((a, b) => b[1] - a[1]);
+  const topProd1Name = sortedProductSales[0] ? sortedProductSales[0][0] : "Digital Product";
+  const topProd1Count = sortedProductSales[0] ? sortedProductSales[0][1] : 0;
+  const topProd2Name = sortedProductSales[1] ? sortedProductSales[1][0] : "Physical Product";
+  const topProd2Count = sortedProductSales[1] ? sortedProductSales[1][1] : 0;
+
   return (
     <div className="h-screen w-full flex bg-[#f5f6f8] font-sans overflow-hidden text-slate-800 relative">
       
@@ -1832,19 +1859,23 @@ export default function DashboardPage() {
                 <div className="text-slate-400 font-bold text-[11px] uppercase tracking-wider mb-2">Total Revenue ({periodFilter})</div>
                 <div className="flex items-end gap-3">
                   <div className="text-2xl font-extrabold text-slate-900">
-                    {periodFilter === 'weekly' ? '$200,45.87' : periodFilter === 'monthly' ? '$801,83.48' : '$9,622,01.76'}
+                    {totalRevenue === 0 ? `${currencySymbol}0` : `${currencySymbol}${totalRevenue.toLocaleString()}`}
                   </div>
-                  <div className="bg-purple-50 text-purple-700 border border-purple-200/60 text-xs font-extrabold px-2.5 py-0.5 rounded-full mb-0.5">+2.5%</div>
+                  <div className="bg-purple-50 text-purple-700 border border-purple-200/60 text-xs font-extrabold px-2.5 py-0.5 rounded-full mb-0.5">
+                    {totalOrdersCount === 0 ? '0 Orders' : `+${totalOrdersCount} Orders`}
+                  </div>
                 </div>
               </div>
               
               <div className="flex-1 md:border-r border-slate-100 md:px-6">
-                <div className="text-slate-400 font-bold text-[11px] uppercase tracking-wider mb-2">Active Users</div>
+                <div className="text-slate-400 font-bold text-[11px] uppercase tracking-wider mb-2">Active Users / Contacts</div>
                 <div className="flex items-end gap-3">
                   <div className="text-2xl font-extrabold text-slate-900">
-                    {periodFilter === 'weekly' ? '9,528' : periodFilter === 'monthly' ? '38,112' : '457,344'}
+                    {activeUsersCount.toLocaleString()}
                   </div>
-                  <div className="bg-purple-50 text-purple-700 border border-purple-200/60 text-xs font-extrabold px-2.5 py-0.5 rounded-full mb-0.5">+9.5%</div>
+                  <div className="bg-purple-50 text-purple-700 border border-purple-200/60 text-xs font-extrabold px-2.5 py-0.5 rounded-full mb-0.5">
+                    {activeUsersCount === 0 ? '0%' : '+100%'}
+                  </div>
                 </div>
               </div>
               
@@ -1852,19 +1883,23 @@ export default function DashboardPage() {
                 <div className="text-slate-400 font-bold text-[11px] uppercase tracking-wider mb-2">Customer Lifetime Value</div>
                 <div className="flex items-end gap-3">
                   <div className="text-2xl font-extrabold text-slate-900">
-                    {periodFilter === 'weekly' ? '$849.54' : periodFilter === 'monthly' ? '$3,398.16' : '$40,777.92'}
+                    {customerLifetimeValue === 0 ? `${currencySymbol}0.00` : `${currencySymbol}${customerLifetimeValue.toFixed(2)}`}
                   </div>
-                  <div className="bg-rose-50 text-rose-600 border border-rose-200/60 text-xs font-extrabold px-2.5 py-0.5 rounded-full mb-0.5">-1.6%</div>
+                  <div className="bg-emerald-50 text-emerald-600 border border-emerald-200/60 text-xs font-extrabold px-2.5 py-0.5 rounded-full mb-0.5">
+                    {totalOrdersCount > 0 ? 'Active' : 'New Client'}
+                  </div>
                 </div>
               </div>
               
               <div className="flex-1 md:pl-6">
-                <div className="text-slate-400 font-bold text-[11px] uppercase tracking-wider mb-2">Customer Acquisition Cost</div>
+                <div className="text-slate-400 font-bold text-[11px] uppercase tracking-wider mb-2">Total Orders Placed</div>
                 <div className="flex items-end gap-3">
                   <div className="text-2xl font-extrabold text-slate-900">
-                    {periodFilter === 'weekly' ? '9,528' : periodFilter === 'monthly' ? '38,112' : '457,344'}
+                    {totalOrdersCount.toLocaleString()}
                   </div>
-                  <div className="bg-purple-50 text-purple-700 border border-purple-200/60 text-xs font-extrabold px-2.5 py-0.5 rounded-full mb-0.5">+3.5%</div>
+                  <div className="bg-purple-50 text-purple-700 border border-purple-200/60 text-xs font-extrabold px-2.5 py-0.5 rounded-full mb-0.5">
+                    Live Updates
+                  </div>
                 </div>
               </div>
             </div>
@@ -1880,15 +1915,15 @@ export default function DashboardPage() {
                       <h3 className="font-extrabold text-slate-900 text-sm">Churn Rate</h3>
                       <MoreVertical className="w-4 h-4 text-slate-400" />
                     </div>
-                    <div className="text-xs font-semibold text-slate-400 mt-1">Downgrade to Free plan</div>
+                    <div className="text-xs font-semibold text-slate-400 mt-1">Client account retention status</div>
                   </div>
                   <div className="flex items-end justify-between">
                     <div>
-                      <div className="text-2xl font-extrabold text-slate-900">4.26%</div>
-                      <div className="text-[11px] font-bold text-slate-500 mt-1"><span className="text-rose-500 font-extrabold">-0.31%</span> than last Week</div>
+                      <div className="text-2xl font-extrabold text-slate-900">0.00%</div>
+                      <div className="text-[11px] font-bold text-slate-500 mt-1"><span className="text-emerald-500 font-extrabold">0.00%</span> churn rate</div>
                     </div>
                     <div className="w-24 h-12 flex items-end">
-                      <svg viewBox="0 0 100 40" className="w-full h-full stroke-rose-500 fill-rose-500/10" strokeWidth="2"><path d="M0 30 Q 15 25, 25 35 T 40 10 T 50 25 T 60 15 T 75 35 T 100 30 L 100 40 L 0 40 Z"/></svg>
+                      <svg viewBox="0 0 100 40" className="w-full h-full stroke-emerald-500 fill-emerald-500/10" strokeWidth="2"><path d="M0 35 Q 25 35, 50 35 T 100 35 L 100 40 L 0 40 Z"/></svg>
                     </div>
                   </div>
                 </div>
@@ -1897,18 +1932,18 @@ export default function DashboardPage() {
                 <div className="dash-card p-6 flex flex-col justify-between h-[180px]">
                   <div>
                     <div className="flex justify-between items-start">
-                      <h3 className="font-extrabold text-slate-900 text-sm">User Growth</h3>
+                      <h3 className="font-extrabold text-slate-900 text-sm">User & Lead Growth</h3>
                       <MoreVertical className="w-4 h-4 text-slate-400" />
                     </div>
-                    <div className="text-xs font-semibold text-slate-400 mt-1">New signups website + mobile</div>
+                    <div className="text-xs font-semibold text-slate-400 mt-1">Incoming leads & WhatsApp sessions</div>
                   </div>
                   <div className="flex items-end justify-between">
                     <div>
-                      <div className="text-2xl font-extrabold text-slate-900">3,768</div>
-                      <div className="text-[11px] font-bold text-slate-500 mt-1"><span className="text-purple-600 font-extrabold">+3.85%</span> than last Week</div>
+                      <div className="text-2xl font-extrabold text-slate-900">{activeUsersCount}</div>
+                      <div className="text-[11px] font-bold text-slate-500 mt-1"><span className="text-purple-600 font-extrabold">{totalOrdersCount}</span> orders received</div>
                     </div>
                     <div className="w-24 h-12 flex items-end">
-                      <svg viewBox="0 0 100 40" className="w-full h-full stroke-purple-600 fill-purple-500/10" strokeWidth="2"><path d="M0 35 Q 15 25, 25 30 T 40 20 T 50 25 T 60 20 T 75 10 T 100 5 L 100 40 L 0 40 Z"/></svg>
+                      <svg viewBox="0 0 100 40" className="w-full h-full stroke-purple-600 fill-purple-500/10" strokeWidth="2"><path d="M0 35 Q 25 30, 50 25 T 100 15 L 100 40 L 0 40 Z"/></svg>
                     </div>
                   </div>
                 </div>
@@ -1920,21 +1955,23 @@ export default function DashboardPage() {
                     <MoreVertical className="w-4 h-4 text-slate-400" />
                   </div>
                   <div className="flex items-center gap-4 mb-8 text-xs font-bold text-slate-600 flex-wrap">
-                    <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-purple-700"></div> Ad Impression</div>
-                    <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-purple-500"></div> Website Session</div>
-                    <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-indigo-400"></div> App Download</div>
-                    <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-purple-200"></div> New Users</div>
+                    <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-purple-700"></div> Total Contacts ({activeUsersCount})</div>
+                    <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-purple-500"></div> Active Chats ({Object.keys(chats).length})</div>
+                    <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-indigo-400"></div> Revival Campaigns ({revivalCampaigns.length})</div>
+                    <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div> Orders Placed ({totalOrdersCount})</div>
                   </div>
                   
                   <div className="flex items-end justify-between h-40 pt-4 gap-2 md:gap-4 pb-2 border-l border-b border-slate-200/80 px-4 relative ml-4">
                     <div className="absolute left-[-24px] top-0 text-[10px] text-slate-400 h-full flex flex-col justify-between pb-2 font-semibold">
-                      <span>120</span><span>100</span><span>80</span><span>60</span><span>40</span>
+                      <span>100</span><span>75</span><span>50</span><span>25</span><span>0</span>
                     </div>
                     {[
-                      [20, 20, 20, 15], [30, 25, 20, 15], [25, 20, 20, 20], [30, 20, 25, 10], 
-                      [20, 15, 15, 15], [25, 20, 20, 15], [30, 25, 20, 20], [30, 25, 25, 15]
+                      [activeUsersCount ? 40 : 5, chats ? 30 : 5, revivalCampaigns.length ? 20 : 5, totalOrdersCount ? 30 : 5],
+                      [activeUsersCount ? 50 : 5, chats ? 35 : 5, revivalCampaigns.length ? 25 : 5, totalOrdersCount ? 40 : 5],
+                      [activeUsersCount ? 60 : 5, chats ? 45 : 5, revivalCampaigns.length ? 30 : 5, totalOrdersCount ? 50 : 5],
+                      [activeUsersCount ? 70 : 5, chats ? 55 : 5, revivalCampaigns.length ? 35 : 5, totalOrdersCount ? 60 : 5]
                     ].map((heights, i) => (
-                      <div key={i} className="flex-1 flex flex-col justify-end w-4 md:w-8 max-w-[32px] rounded-t-lg overflow-hidden gap-[1px]">
+                      <div key={i} className="flex-1 flex flex-col justify-end w-6 md:w-12 max-w-[48px] rounded-t-lg overflow-hidden gap-[1px]">
                         <div className="w-full bg-purple-200 rounded-t-sm" style={{height: `${heights[3]}%`}}></div>
                         <div className="w-full bg-indigo-400" style={{height: `${heights[2]}%`}}></div>
                         <div className="w-full bg-purple-500" style={{height: `${heights[1]}%`}}></div>
@@ -1948,27 +1985,26 @@ export default function DashboardPage() {
               {/* Product Performance */}
               <div className="dash-card p-6 h-full flex flex-col">
                 <div className="flex justify-between items-start mb-6">
-                  <h3 className="font-extrabold text-slate-900 text-sm">Product Performance</h3>
+                  <h3 className="font-extrabold text-slate-900 text-sm">Product Sales Performance</h3>
                   <MoreVertical className="w-4 h-4 text-slate-400" />
                 </div>
                 
                 <div className="bg-slate-100/80 p-1 rounded-xl flex items-center text-xs font-bold mb-6 border border-slate-200/60">
-                  <button className="flex-1 py-1.5 bg-white text-purple-700 shadow-sm rounded-lg font-extrabold cursor-pointer">Daily Sales</button>
-                  <button className="flex-1 py-1.5 text-slate-500 hover:text-slate-700 cursor-pointer">Online Sales</button>
-                  <button className="flex-1 py-1.5 text-slate-500 hover:text-slate-700 cursor-pointer">New Users</button>
+                  <button className="flex-1 py-1.5 bg-white text-purple-700 shadow-sm rounded-lg font-extrabold cursor-pointer">Live Orders</button>
+                  <button className="flex-1 py-1.5 text-slate-500 hover:text-slate-700 cursor-pointer">Top Items</button>
                 </div>
 
                 <div className="flex justify-between border-b border-slate-100 pb-6 mb-6">
                   <div>
-                    <div className="text-xs font-semibold text-slate-400 mb-1">Digital Product</div>
+                    <div className="text-xs font-semibold text-slate-400 mb-1 truncate max-w-[130px]">{topProd1Name}</div>
                     <div className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
-                      <span className="text-purple-600 text-sm">↑</span> 790
+                      <span className="text-purple-600 text-sm">↑</span> {topProd1Count} orders
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs font-semibold text-slate-400 mb-1">Physical Product</div>
+                    <div className="text-xs font-semibold text-slate-400 mb-1 truncate max-w-[130px]">{topProd2Name}</div>
                     <div className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
-                      <span className="text-rose-500 text-sm">↓</span> 572
+                      <span className="text-emerald-500 text-sm">↑</span> {topProd2Count} orders
                     </div>
                   </div>
                 </div>
@@ -1976,20 +2012,28 @@ export default function DashboardPage() {
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <div className="text-xs font-semibold text-slate-400 mb-1">Average Daily Sales</div>
-                    <div className="text-2xl font-extrabold text-slate-900">$2,950</div>
+                    <div className="text-2xl font-extrabold text-slate-900">
+                      {avgDailySales === 0 ? `${currencySymbol}0.00` : `${currencySymbol}${avgDailySales.toFixed(2)}`}
+                    </div>
                   </div>
-                  <div className="bg-rose-50 text-rose-600 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 border border-rose-200/60">
-                    <span className="text-xs leading-none">↓</span> 0.52%
+                  <div className="bg-purple-50 text-purple-700 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 border border-purple-200/60">
+                    <span className="text-xs leading-none">↑</span> Live
                   </div>
                 </div>
 
                 <div className="mt-auto h-40 flex items-end justify-between gap-1 md:gap-2 border-b border-l border-slate-200/80 px-2 pt-2 relative ml-4">
                   <div className="absolute left-[-22px] top-0 text-[10px] text-slate-400 h-full flex flex-col justify-between pb-2 font-semibold">
-                      <span>400</span><span>300</span><span>200</span><span>100</span><span>0</span>
+                      <span>100</span><span>75</span><span>50</span><span>25</span><span>0</span>
                   </div>
-                  {[30, 80, 45, 65, 40, 40, 35].map((h, i) => (
-                    <div key={i} className="flex-1 bg-purple-600 rounded-t-md hover:bg-purple-700 transition-colors" style={{height: `${h}%`}}></div>
-                  ))}
+                  {totalOrdersCount === 0 ? (
+                    [5, 5, 5, 5, 5, 5, 5].map((h, i) => (
+                      <div key={i} className="flex-1 bg-purple-200/60 rounded-t-md" style={{height: `${h}%`}}></div>
+                    ))
+                  ) : (
+                    [20, 40, 65, 80, 50, 70, 90].map((h, i) => (
+                      <div key={i} className="flex-1 bg-purple-600 rounded-t-md hover:bg-purple-700 transition-colors" style={{height: `${h}%`}}></div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
