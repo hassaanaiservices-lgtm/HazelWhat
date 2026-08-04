@@ -66,34 +66,38 @@ function getApiKey(config: any): string {
 }
 
 function getDeepgramSettings(config: any): { apiKey: string; voice: string } {
-  // ONLY use keys explicitly designated as Deepgram keys — never fall back to LLM API keys
-  const candidates = [
-    config.deepgramApiKey,
-    getEnvKey("DEEPGRAM_API_KEY"),
-    process.env.DEEPGRAM_API_KEY
-  ];
-
+  // Deepgram keys are managed exclusively by admin in the tenant setup — NOT by the client.
+  // Priority: 1) Tenant record  2) DEEPGRAM_API_KEY env var  3) config.deepgramApiKey (legacy)
   let apiKey = "";
-  for (const k of candidates) {
-    if (k && typeof k === "string" && k.trim()) {
-      apiKey = k.trim();
-      break;
-    }
-  }
+  let voice = "aura-asteria-en";
 
-  let voice = config.deepgramVoice || "aura-asteria-en";
-
-  if (!apiKey) {
-    try {
-      const tenants = (DB as any).getTenants?.() || [];
-      if (tenants.length > 0 && tenants[0].deepgramApiKey) {
-        apiKey = tenants[0].deepgramApiKey.trim();
-        if (tenants[0].deepgramVoice) voice = tenants[0].deepgramVoice;
+  // Check all tenant records for a Deepgram key
+  try {
+    const tenants = DB.getTenants() || [];
+    for (const t of tenants) {
+      if (t.deepgramApiKey && t.deepgramApiKey.trim()) {
+        apiKey = t.deepgramApiKey.trim();
+        if (t.deepgramVoice) voice = t.deepgramVoice;
+        break;
       }
-    } catch (e) {}
+    }
+  } catch (e) {
+    console.error("[Deepgram Settings] Error reading tenants:", e);
   }
 
-  console.log(`[Deepgram Settings] Key found: ${apiKey ? "YES (" + apiKey.substring(0, 8) + "...)" : "NO KEY CONFIGURED"}`);
+  // Fallback to env var
+  if (!apiKey) {
+    const envKey = getEnvKey("DEEPGRAM_API_KEY") || process.env.DEEPGRAM_API_KEY || "";
+    if (envKey.trim()) apiKey = envKey.trim();
+  }
+
+  // Legacy fallback: config.deepgramApiKey (if admin set it in client config before migration)
+  if (!apiKey && config.deepgramApiKey && config.deepgramApiKey.trim()) {
+    apiKey = config.deepgramApiKey.trim();
+  }
+  if (config.deepgramVoice) voice = config.deepgramVoice;
+
+  console.log(`[Deepgram Settings] Key found: ${apiKey ? "YES (" + apiKey.substring(0, 8) + "...)" : "NO KEY CONFIGURED"}, Voice: ${voice}`);
   return { apiKey, voice };
 }
 
