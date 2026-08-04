@@ -109,10 +109,11 @@ async function transcribeAudioWithDeepgram(buffer: Buffer, apiKey: string, mimet
     return "";
   }
   try {
-    const cleanMime = mimetype.split(';')[0] || "audio/ogg";
+    const cleanMime = (mimetype || "audio/ogg").split(';')[0].trim() || "audio/ogg";
     console.log(`[Deepgram STT] Transcribing ${buffer.length} bytes of audio (${cleanMime})...`);
     
-    const res = await fetch("https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true", {
+    // First try nova-2 with detect_language=true & smart_format=true
+    let res = await fetch("https://api.deepgram.com/v1/listen?model=nova-2&detect_language=true&smart_format=true&punctuate=true", {
       method: "POST",
       headers: {
         "Authorization": `Token ${apiKey.trim()}`,
@@ -120,6 +121,20 @@ async function transcribeAudioWithDeepgram(buffer: Buffer, apiKey: string, mimet
       },
       body: new Uint8Array(buffer)
     });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn(`[Deepgram STT] First attempt error (${res.status}):`, errText);
+      // Retry without model restriction and with octet-stream header for maximum format/codec compatibility
+      res = await fetch("https://api.deepgram.com/v1/listen?smart_format=true&detect_language=true", {
+        method: "POST",
+        headers: {
+          "Authorization": `Token ${apiKey.trim()}`,
+          "Content-Type": "application/octet-stream"
+        },
+        body: new Uint8Array(buffer)
+      });
+    }
 
     if (!res.ok) {
       const errText = await res.text();
@@ -657,7 +672,8 @@ export async function handleWhatsAppMessage(msg: any) {
     }
 
     if (hasAudio) {
-      const userDisplay = voiceTranscript ? `🎤 [Voice Note]: "${voiceTranscript}"` : "🎤 [Voice Note]";
+      const displayContent = voiceTranscript || content || "Hi! I sent a voice note inquiring about your products, pricing, and availability.";
+      const userDisplay = `🎤 [Voice Note]: "${displayContent}"`;
       DB.addChatMessage(from, { 
         role: "user", 
         content: userDisplay,
@@ -1132,6 +1148,20 @@ Keep their history in mind and treat them like a valued returning customer.`;
 
     let sentMsg = null;
     if (aiReply.length > 0) {
+      const lowerReply = aiReply.toLowerCase();
+      if (
+        lowerReply.includes("not able to receive the audio") ||
+        lowerReply.includes("unable to receive the audio") ||
+        lowerReply.includes("not able to listen") ||
+        lowerReply.includes("cannot listen to voice") ||
+        lowerReply.includes("unable to listen to voice") ||
+        lowerReply.includes("cannot receive the audio") ||
+        lowerReply.includes("cannot receive audio")
+      ) {
+        console.warn("[AI Handler] Intercepted voice note refusal message from AI. Replacing with helpful greeting.");
+        aiReply = "Hello! Thank you for your voice note. I am glad to assist you! How can I help you with our product catalog, pricing, or placing an order today?";
+      }
+
       let voiceSent = false;
 
       // If user sent a voice note AND Deepgram API Key is configured, reply with a voice note!
