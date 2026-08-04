@@ -17,6 +17,9 @@ export function middleware(request: NextRequest) {
 
   // 1. If user is NOT logged in:
   if (!sessionCookie || !sessionCookie.value) {
+    if (pathname === '/admin/login') {
+      return NextResponse.redirect(new URL('/login?portal=admin', request.url));
+    }
     // If they are NOT on /login, redirect immediately to /login
     if (pathname !== '/login') {
       const loginUrl = new URL('/login', request.url);
@@ -29,14 +32,14 @@ export function middleware(request: NextRequest) {
   try {
     const session = JSON.parse(sessionCookie.value);
 
-    // If super admin visits /login or /, send to /admin
+    // If super admin visits /login, /admin/login or /, send to /admin
     if (session.role === 'admin') {
-      if (pathname === '/login' || pathname === '/') {
+      if (pathname === '/login' || pathname === '/admin/login' || pathname === '/') {
         return NextResponse.redirect(new URL('/admin', request.url));
       }
     } else {
-      // If client visits /login or /client, send to / (Full Client Messaging Panel Workspace)
-      if (pathname === '/login' || pathname === '/client') {
+      // If client visits /login, /admin/login or /client, send to / (Full Client Messaging Panel Workspace)
+      if (pathname === '/login' || pathname === '/admin/login' || pathname === '/client') {
         return NextResponse.redirect(new URL('/', request.url));
       }
     }

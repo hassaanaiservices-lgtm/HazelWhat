@@ -210,7 +210,35 @@ export default function DashboardPage() {
     }
   };
 
-  const [activeTab, setActiveTab] = useState<"dashboard" | "inbox" | "agents" | "channels" | "promotions" | "orders" | "knowledge" | "contacts" | "analytics" | "settings" | "leads-revival">("dashboard");
+  const [activeTab, setActiveTabRaw] = useState<"dashboard" | "inbox" | "agents" | "channels" | "promotions" | "orders" | "knowledge" | "contacts" | "analytics" | "settings" | "leads-revival">("dashboard");
+
+  const setActiveTab = (tab: "dashboard" | "inbox" | "agents" | "channels" | "promotions" | "orders" | "knowledge" | "contacts" | "analytics" | "settings" | "leads-revival") => {
+    setActiveTabRaw(tab);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tab);
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
+
+  // Sync tab from URL query on initial load & popstate (browser back/forward)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const syncTabFromUrl = () => {
+        const params = new URLSearchParams(window.location.search);
+        const urlTab = params.get('tab');
+        const validTabs = ["dashboard", "inbox", "agents", "channels", "promotions", "orders", "knowledge", "contacts", "analytics", "settings", "leads-revival"];
+        if (urlTab && validTabs.includes(urlTab)) {
+          setActiveTabRaw(urlTab as any);
+        }
+      };
+
+      syncTabFromUrl();
+      window.addEventListener('popstate', syncTabFromUrl);
+      return () => window.removeEventListener('popstate', syncTabFromUrl);
+    }
+  }, []);
+
   const [inboxFilter, setInboxFilter] = useState<"all" | "normal" | "groups" | "revival">("all");
   const [inboxSearch, setInboxSearch] = useState<string>("");
   const [revivalCampaigns, setRevivalCampaigns] = useState<any[]>([]);

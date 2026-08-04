@@ -127,7 +127,35 @@ const defaultFallbackTenant: Tenant = {
 };
 
 export default function VoiceSaaSApp() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'clients' | 'admins'>('dashboard');
+  const [activeTab, setActiveTabRaw] = useState<'dashboard' | 'clients' | 'admins'>('dashboard');
+
+  const setActiveTab = (tab: 'dashboard' | 'clients' | 'admins') => {
+    setActiveTabRaw(tab);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tab);
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
+
+  // Sync tab from URL query on initial load & popstate (browser back/forward)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const syncTabFromUrl = () => {
+        const params = new URLSearchParams(window.location.search);
+        const urlTab = params.get('tab');
+        const validTabs = ['dashboard', 'clients', 'admins'];
+        if (urlTab && validTabs.includes(urlTab)) {
+          setActiveTabRaw(urlTab as any);
+        }
+      };
+
+      syncTabFromUrl();
+      window.addEventListener('popstate', syncTabFromUrl);
+      return () => window.removeEventListener('popstate', syncTabFromUrl);
+    }
+  }, []);
+
   const [clientSubTab, setClientSubTab] = useState<'setup' | 'directory'>('directory');
   const [tenants, setTenants] = useState<Tenant[]>(initialTenants);
   const [partners, setPartners] = useState<Partner[]>(initialPartners);

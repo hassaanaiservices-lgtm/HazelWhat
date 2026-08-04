@@ -23,6 +23,31 @@ export default function LoginPage() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [portal, setPortal] = useState<'client' | 'admin'>('client');
+
+  // Sync portal from URL search query on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlPortal = params.get('portal');
+      if (urlPortal === 'admin') {
+        setPortal('admin');
+      } else if (urlPortal === 'client') {
+        setPortal('client');
+      }
+    }
+  }, []);
+
+  // Handle portal tab switch
+  const handlePortalSwitch = (newPortal: 'client' | 'admin') => {
+    setPortal(newPortal);
+    setError('');
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('portal', newPortal);
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
 
   // Auto-check if client/admin is already logged in with persistent session cookie
   useEffect(() => {
@@ -123,7 +148,7 @@ export default function LoginPage() {
 
         <div className="hidden sm:flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
           <ShieldCheck className="w-3.5 h-3.5" />
-          <span>Secure Client Access</span>
+          <span>{portal === 'admin' ? 'Super Admin Portal' : 'Secure Client Access'}</span>
         </div>
       </header>
 
@@ -134,13 +159,47 @@ export default function LoginPage() {
           {/* Top Subtle Border highlight */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500" />
 
+          {/* Portal Switcher Tabs */}
+          <div className="flex rounded-xl bg-slate-950/90 p-1 border border-slate-800 mb-6">
+            <button
+              type="button"
+              onClick={() => handlePortalSwitch('client')}
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                portal === 'client'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>Client Portal</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePortalSwitch('admin')}
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                portal === 'admin'
+                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Super Admin</span>
+            </button>
+          </div>
+
           <div className="text-center mb-8">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700/60 text-xs font-medium text-slate-300 mb-3">
               <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              Client Portal Sign In
+              {portal === 'admin' ? 'Super Admin Access' : 'Client Portal Sign In'}
             </div>
-            <h2 className="text-2xl font-bold text-white tracking-tight">Welcome Back</h2>
-            <p className="text-sm text-slate-400 mt-1">Sign in to manage your WhatsApp bot & live chats</p>
+            <h2 className="text-2xl font-bold text-white tracking-tight">
+              {portal === 'admin' ? 'Admin Portal Sign In' : 'Welcome Back'}
+            </h2>
+            <p className="text-sm text-slate-400 mt-1">
+              {portal === 'admin'
+                ? 'Sign in to manage client tenants & global platform settings'
+                : 'Sign in to manage your WhatsApp bot & live chats'}
+            </p>
           </div>
 
           {/* Feedback Alerts */}
@@ -161,7 +220,7 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                Username / Email / Client ID
+                {portal === 'admin' ? 'Admin Email / Username' : 'Username / Email / Client ID'}
               </label>
               <div className="relative">
                 <User className="w-5 h-5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -170,7 +229,7 @@ export default function LoginPage() {
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="e.g. royal_fashion or info@client.com"
+                  placeholder={portal === 'admin' ? 'e.g. admin@hazelwhat.com' : 'e.g. royal_fashion or info@client.com'}
                   className="w-full bg-slate-950/80 border border-slate-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl py-3 pl-11 pr-4 text-sm text-slate-100 placeholder-slate-500 outline-none transition-all"
                 />
               </div>
@@ -217,7 +276,7 @@ export default function LoginPage() {
                 </>
               ) : (
                 <>
-                  <span>Sign In to Dashboard</span>
+                  <span>{portal === 'admin' ? 'Sign In as Super Admin' : 'Sign In to Dashboard'}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -240,3 +299,4 @@ export default function LoginPage() {
     </div>
   );
 }
+
