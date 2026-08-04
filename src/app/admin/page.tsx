@@ -61,6 +61,7 @@ import {
   ArrowDownRight,
   ShoppingBag,
   User,
+  Bot,
   UserCheck2,
   ArrowLeft,
   QrCode,
@@ -721,6 +722,16 @@ export default function VoiceSaaSApp() {
               <ShieldCheck className="w-5 h-5" />
               <span>Team Admins</span>
             </button>
+
+            {/* TAB 4: SWITCH TO CLIENT WORKSPACE */}
+            <a
+              href="/"
+              className="w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-sm font-semibold transition-all cursor-pointer bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/80 shadow-xs mt-4"
+            >
+              <Bot className="w-5 h-5 text-emerald-600 shrink-0" />
+              <span>Client Workspace</span>
+              <ExternalLink className="w-3.5 h-3.5 ml-auto text-emerald-500 shrink-0" />
+            </a>
           </nav>
         </div>
 

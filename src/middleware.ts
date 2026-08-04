@@ -5,7 +5,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const sessionCookie = request.cookies.get('hazel_session');
 
-  // Allow static assets, next internal files, and login API
+  // Allow static assets, next internal files, and API routes
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
@@ -32,14 +32,24 @@ export function middleware(request: NextRequest) {
   try {
     const session = JSON.parse(sessionCookie.value);
 
-    // If super admin visits /login, /admin/login or /, send to /admin
+    // If super admin:
     if (session.role === 'admin') {
-      if (pathname === '/login' || pathname === '/admin/login' || pathname === '/') {
+      // If super admin visits /login or /admin/login, send to /admin
+      if (pathname === '/login' || pathname === '/admin/login') {
         return NextResponse.redirect(new URL('/admin', request.url));
       }
-    } else {
-      // If client visits /login, /admin/login or /client, send to / (Full Client Messaging Panel Workspace)
-      if (pathname === '/login' || pathname === '/admin/login' || pathname === '/client') {
+      // Super admin can freely access BOTH / (Client Panel) and /admin (Admin Dashboard)!
+      return NextResponse.next();
+    } 
+
+    // If client user:
+    if (session.role === 'client') {
+      // Client cannot access /admin or /admin/login -> redirect to /
+      if (pathname.startsWith('/admin')) {
+        return NextResponse.redirect(new URL('/', request.url));
+      }
+      // If client visits /login or /client, send to / (Full Client Workspace)
+      if (pathname === '/login' || pathname === '/client') {
         return NextResponse.redirect(new URL('/', request.url));
       }
     }
@@ -57,3 +67,4 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
+

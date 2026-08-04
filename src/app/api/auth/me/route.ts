@@ -16,9 +16,12 @@ export async function GET() {
     const session = JSON.parse(sessionCookie.value);
 
     if (session.role === "admin") {
+      const tenants = DB.getTenants();
+      const defaultTenant = tenants[0] || null;
       return NextResponse.json({
         authenticated: true,
-        user: session
+        user: session,
+        tenant: defaultTenant
       });
     }
 
