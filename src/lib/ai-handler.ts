@@ -158,8 +158,8 @@ async function generateSpeechWithDeepgram(text: string, apiKey: string, voice = 
     const cleanText = text.replace(/[*_~`#]/g, '').trim();
     if (!cleanText) return null;
 
-    console.log(`[Deepgram TTS] Synthesizing speech for: "${cleanText.substring(0, 60)}..." using voice ${voice}`);
-    const res = await fetch(`https://api.deepgram.com/v1/speak?model=${encodeURIComponent(voice)}`, {
+    console.log(`[Deepgram TTS] Synthesizing OGG Opus speech for: "${cleanText.substring(0, 60)}..." using voice ${voice}`);
+    let res = await fetch(`https://api.deepgram.com/v1/speak?model=${encodeURIComponent(voice)}&container=ogg&encoding=opus`, {
       method: "POST",
       headers: {
         "Authorization": `Token ${apiKey.trim()}`,
@@ -167,6 +167,20 @@ async function generateSpeechWithDeepgram(text: string, apiKey: string, voice = 
       },
       body: JSON.stringify({ text: cleanText })
     });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn(`[Deepgram TTS] OGG Opus primary error (${res.status}):`, errText);
+      // Fallback attempt without explicit container parameters
+      res = await fetch(`https://api.deepgram.com/v1/speak?model=${encodeURIComponent(voice)}`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Token ${apiKey.trim()}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ text: cleanText })
+      });
+    }
 
     if (!res.ok) {
       const errText = await res.text();
@@ -762,9 +776,20 @@ export async function handleWhatsAppMessage(msg: any) {
     }
 
     let aiReply = "I'm sorry, I didn't quite catch that. Could you rephrase?";
-    const structuredCatalog = config.products && config.products.length > 0 ? formatProductsToCatalog(config.products, config.storeCurrency || "$") : "";
-    const activeProductCatalog = structuredCatalog || config.productInfo || "";
-    let fullSystemPrompt = `${config.systemPrompt}\n\nToday's Date: ${new Date().toISOString().split('T')[0]}\n\nProduct Information & Catalog:\n${activeProductCatalog}`;
+    
+    // Resolve active Tenant from multi-tenant database so AI uses the exact client system prompt, knowledge base, & catalog!
+    const tenants = DB.getTenants() || [];
+    const activeTenant = tenants.find(t => t.status === 'active') || tenants[0];
+    
+    const activeSystemPrompt = activeTenant?.systemPrompt?.trim() || config.systemPrompt;
+    const activeKnowledgeBase = activeTenant?.knowledgeBase?.trim() || config.productInfo;
+    const activeProductKB = activeTenant?.productKnowledgeBase?.trim() || "";
+    const activeProducts = (activeTenant?.products && activeTenant.products.length > 0) ? activeTenant.products : (config.products || []);
+    const activeCurrency = activeTenant?.currency || config.storeCurrency || "PKR";
+
+    const structuredCatalog = activeProducts.length > 0 ? formatProductsToCatalog(activeProducts, activeCurrency) : "";
+    const activeProductCatalog = [structuredCatalog, activeKnowledgeBase, activeProductKB].filter(Boolean).join("\n\n");
+    let fullSystemPrompt = `${activeSystemPrompt}\n\nToday's Date: ${new Date().toISOString().split('T')[0]}\n\nProduct Information & Catalog:\n${activeProductCatalog}`;
 
     const customerTags = existingCustomer?.tags || [];
     const hasRevivalTag = customerTags.includes("revival-sent") || customerTags.includes("revival-replied");
@@ -798,7 +823,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
 8. PROACTIVE FOLLOW-UPS: Whenever you tell the user you will follow up or check back later, you MUST call the schedule_followup tool to actually schedule it. Never just say it without calling the tool.
 9. CUSTOMER CRM PROFILES: You have access to the update_customer_profile tool. Whenever a user shares their name, or shows strong buying interest (such as asking for catalog, pricing, or stock details), you MUST call update_customer_profile to record their name, add relevant product interest tags, and move them to the appropriate stage ('qualified' when they give basic details, 'warm' when showing purchase intent).
 10. VOICE NOTE & AUDIO INSTRUCTIONS: You have full audio & voice note capability. When a user sends a voice note (marked with 🎤 [Voice Note]), the transcript of what they spoke is provided. You MUST ALWAYS answer their question or request directly and naturally! NEVER say "I am not able to listen to voice notes", "I cannot hear audio", or refuse to process voice messages.
-11. LANGUAGE & URDU INSTRUCTIONS: Match the customer's language naturally. If the customer speaks/writes in Urdu or Roman Urdu (e.g. "Aoa", "kya price hai", "kese ho", "dress dikhayen"), or if they send a voice note, you MUST respond in natural, friendly Roman Urdu (or Urdu script)! Example: "AOA! Shukriya contact karne ka. Hum Cute Coodle hain, aapko kitne saal ke bachay ke liye dress chahiye?". Keep your voice replies concise, warm, and natural.`;
+11. 4-LANGUAGE MASTER INSTRUCTIONS: You fluently support Pashto (پښتو), Urdu (اردو / Roman Urdu), Punjabi (پنجابی / Roman Punjabi), and English. Automatically detect the user's language or spoken voice note, and ALWAYS respond in the exact same language with natural vocabulary! Example (Urdu/Roman Urdu): "AOA! Shukriya contact karne ka. Hum Cute Coodle hain, aapko kis item ke baaray mein jan'na hai?". Keep your responses concise, warm, and natural.`;
 
     if (config.enabledFeatures && config.enabledFeatures.length > 0) {
       fullSystemPrompt += "\n\n=== ADVANCED FEATURES ENABLED ===\n";
@@ -1170,17 +1195,17 @@ Keep their history in mind and treat them like a valued returning customer.`;
         console.log(`[AI Handler] Synthesizing Deepgram TTS voice note reply for ${from}...`);
         const ttsBuffer = await generateSpeechWithDeepgram(aiReply, deepgramApiKey, deepgramVoice);
         if (ttsBuffer) {
-          sentMsg = await WhatsAppManager.sendMedia(from, ttsBuffer, "audio/mp4", "voice_note.mp4", aiReply, true);
+          sentMsg = await WhatsAppManager.sendMedia(from, ttsBuffer, "audio/ogg; codecs=opus", "voice_note.opus", aiReply, true);
           const base64Tts = ttsBuffer.toString("base64");
           DB.addChatMessage(from, {
             id: sentMsg?.key?.id,
             role: "assistant",
             content: aiReply,
-            mediaUrl: `data:audio/mp4;base64,${base64Tts}`,
-            mediaType: "audio/mp4"
+            mediaUrl: `data:audio/ogg;base64,${base64Tts}`,
+            mediaType: "audio/ogg"
           });
           voiceSent = true;
-          console.log(`[AI Handler] Replied to ${from} with Voice Note!`);
+          console.log(`[AI Handler] Replied to ${from} with native OGG Opus Voice Note!`);
         }
       }
 

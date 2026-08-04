@@ -31,7 +31,17 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     if (Array.isArray(body.tenants)) {
-      await DB.saveTenantsAsync(body.tenants);
+      const existing = DB.getTenants() || [];
+      const mergedMap = new Map<string, any>();
+      existing.forEach(t => mergedMap.set(t.id, t));
+      body.tenants.forEach((t: any) => {
+        if (t.id) {
+          const prev = mergedMap.get(t.id) || {};
+          mergedMap.set(t.id, { ...prev, ...t });
+        }
+      });
+      const mergedTenants = Array.from(mergedMap.values());
+      await DB.saveTenantsAsync(mergedTenants);
     }
     if (Array.isArray(body.partners)) {
       DB.savePartners(body.partners);

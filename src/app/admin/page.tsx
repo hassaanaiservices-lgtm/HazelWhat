@@ -338,8 +338,8 @@ export default function VoiceSaaSApp() {
     selectedTenant.monthlySubscriptionFee >= 0
   );
 
-  // Enable Save button ONLY if there are unsaved edits (isDirty) AND form is fully valid
-  const canSave = isDirty && isSetupFormComplete;
+  // Enable Save button whenever edits are made (isDirty)
+  const canSave = isDirty;
 
   const handleAddClient = (e: React.FormEvent) => {
     e.preventDefault();
