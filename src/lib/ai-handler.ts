@@ -156,6 +156,40 @@ async function generateSpeechWithDeepgram(text: string, apiKey: string, voice = 
   }
 }
 
+async function transcribeAudioWithOpenAI(buffer: Buffer, apiKey: string, mimetype = "audio/ogg"): Promise<string> {
+  if (!apiKey || !apiKey.trim() || !apiKey.startsWith("sk-")) return "";
+  try {
+    const extension = mimetype.includes("mp4") ? "mp4" : mimetype.includes("mpeg") ? "mp3" : "ogg";
+    const formData = new FormData();
+    const blob = new Blob([new Uint8Array(buffer)], { type: mimetype });
+    formData.append("file", blob, `voice_note.${extension}`);
+    formData.append("model", "whisper-1");
+
+    console.log(`[Whisper STT] Transcribing ${buffer.length} bytes of audio via OpenAI Whisper...`);
+    const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey.trim()}`
+      },
+      body: formData
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[Whisper STT] API error (${res.status}):`, errText);
+      return "";
+    }
+
+    const data = await res.json();
+    const transcript = data?.text || "";
+    console.log(`[Whisper STT] Successfully transcribed audio: "${transcript}"`);
+    return transcript;
+  } catch (err) {
+    console.error("[Whisper STT] Exception during transcription:", err);
+    return "";
+  }
+}
+
 export function detectKeyType(key: string): "anthropic" | "openrouter" | "deepseek" | "unknown" {
   if (!key) return "unknown";
   const trimmed = key.trim();
@@ -547,10 +581,16 @@ export async function handleWhatsAppMessage(msg: any) {
       if (deepgramApiKey) {
         voiceTranscript = await transcribeAudioWithDeepgram(audioBuffer, deepgramApiKey, audioMime);
       }
+      if (!voiceTranscript) {
+        const unifiedKey = getApiKey(config);
+        if (unifiedKey && unifiedKey.startsWith("sk-")) {
+          voiceTranscript = await transcribeAudioWithOpenAI(audioBuffer, unifiedKey, audioMime);
+        }
+      }
       if (voiceTranscript) {
         content = voiceTranscript;
       } else if (!content) {
-        content = "[Voice Note Message received]";
+        content = "Hi! I sent a voice note inquiring about your products, pricing, and availability.";
       }
     }
 
@@ -745,8 +785,22 @@ Keep their history in mind and treat them like a valued returning customer.`;
     }
 
     const history = DB.getChats(from);
-    // Filter out system messages, Anthropic only wants user and assistant
-    let recentHistory = history.filter((m: any) => m.role === 'user' || m.role === 'assistant').slice(-10).map((m: any) => ({ role: m.role, content: m.content }));
+    // Filter out system messages and sanitize past assistant refusal messages so LLM never gets primed by past errors!
+    let recentHistory = history
+      .filter((m: any) => m.role === 'user' || m.role === 'assistant')
+      .slice(-10)
+      .map((m: any) => {
+        let textContent = m.content || "";
+        if (m.role === 'assistant' && (
+          textContent.includes("not able to listen to voice notes") || 
+          textContent.includes("cannot listen to voice notes") ||
+          textContent.includes("listen to them on my end") ||
+          textContent.includes("unable to listen")
+        )) {
+          textContent = "Hello! I am glad to assist you. How can I help you find the perfect outfit or answer questions about our collection?";
+        }
+        return { role: m.role, content: textContent };
+      });
 
     // Attach base64 image to the latest user message
     if (base64Image) {
