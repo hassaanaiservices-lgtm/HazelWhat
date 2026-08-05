@@ -139,12 +139,16 @@ export default function DashboardPage() {
     return text;
   };
 
-  const saveProductsAndConfig = (updatedProducts: any[]) => {
+  const saveProductsAndConfig = (updatedProducts: any[], customProductInfo?: string) => {
     const formattedCatalog = formatProductsText(updatedProducts, scrapeCurrency || "$");
+    const updatedCatalogInfo = customProductInfo !== undefined 
+      ? customProductInfo 
+      : (updatedProducts.length === 0 ? "" : (formattedCatalog || config.productInfo));
+
     const updatedConfig = {
       ...config,
       products: updatedProducts,
-      productInfo: formattedCatalog || config.productInfo
+      productInfo: updatedCatalogInfo
     };
     setConfig(updatedConfig);
     fetch("/api/whatsapp/config", {
@@ -152,6 +156,14 @@ export default function DashboardPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updatedConfig)
     }).catch(console.error);
+  };
+
+  const handleClearCatalog = () => {
+    if (!confirm("Are you sure you want to clear the entire product catalog? This will remove all loaded products and reset the catalog knowledge base.")) {
+      return;
+    }
+    setScrapeUrl("");
+    saveProductsAndConfig([], "");
   };
 
   const handleSaveProductModal = () => {
@@ -1234,6 +1246,15 @@ export default function DashboardPage() {
 
   const handleScrape = async () => {
     if (!scrapeUrl.trim()) return;
+
+    const existingCount = (config.products || []).length;
+    if (existingCount > 0) {
+      const confirmReplace = confirm(
+        `Auto-populating from a new website will replace your existing product catalog (${existingCount} products). Do you want to proceed?`
+      );
+      if (!confirmReplace) return;
+    }
+
     setIsScraping(true);
     try {
       const res = await fetch("/api/whatsapp/scrape", {
@@ -1244,28 +1265,14 @@ export default function DashboardPage() {
       const data = await res.json();
       if (data.success) {
         const scrapedItems: any[] = data.items || [];
-        const existingItems: any[] = config.products || [];
-        
-        const mergedItems = [...existingItems];
-        scrapedItems.forEach((item) => {
-          const idx = mergedItems.findIndex((e) => e.title.toLowerCase().trim() === item.title.toLowerCase().trim());
-          if (idx === -1) {
-            mergedItems.push(item);
-          } else {
-            if (!mergedItems[idx].image && item.image) mergedItems[idx].image = item.image;
-            if (!mergedItems[idx].link && item.link) mergedItems[idx].link = item.link;
-            mergedItems[idx].price = item.price;
-          }
-        });
-
-        const formattedCatalog = formatProductsText(mergedItems, scrapeCurrency.trim());
+        const formattedCatalog = formatProductsText(scrapedItems, scrapeCurrency.trim());
 
         const updatedConfig = {
           ...config,
           storeUrl: scrapeUrl.trim(),
           storeCurrency: scrapeCurrency.trim(),
-          products: mergedItems,
-          productInfo: formattedCatalog || data.catalog || config.productInfo
+          products: scrapedItems,
+          productInfo: formattedCatalog || data.catalog || ""
         };
 
         setConfig(updatedConfig);
@@ -2776,6 +2783,17 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="flex items-center gap-3">
+                    {(config.products || []).length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleClearCatalog}
+                        className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/80 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                        title="Clear all products from catalog"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span>Clear Catalog</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setShowRawCatalogText(!showRawCatalogText)}

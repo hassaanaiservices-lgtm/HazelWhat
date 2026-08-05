@@ -610,12 +610,29 @@ export default function VoiceSaaSApp() {
     const newCatalogText = formatTenantProductsText(updated, selectedTenant.currency || "PKR");
     handleUpdateTenantConfig({
       products: updated,
-      productKnowledgeBase: newCatalogText || selectedTenant.productKnowledgeBase
+      productKnowledgeBase: newCatalogText || ""
+    });
+  };
+
+  const handleClearAdminCatalog = () => {
+    if (!confirm("Are you sure you want to clear the entire product catalog for this client?")) return;
+    handleUpdateTenantConfig({
+      products: [],
+      productKnowledgeBase: ""
     });
   };
 
   const handleAutoScrapeWebsite = async () => {
     if (!websiteUrl.trim()) return;
+
+    const existingCount = (selectedTenant.products || []).length;
+    if (existingCount > 0) {
+      const confirmReplace = confirm(
+        `Auto-populating from a new website will replace the existing product catalog (${existingCount} products) for this client. Do you want to proceed?`
+      );
+      if (!confirmReplace) return;
+    }
+
     setIsScraping(true);
     setScrapeSuccessMsg(null);
 
@@ -628,21 +645,7 @@ export default function VoiceSaaSApp() {
       const data = await res.json();
       if (data.success) {
         const scrapedItems: any[] = data.items || [];
-        const existingItems: any[] = selectedTenant.products || [];
-
-        const mergedItems = [...existingItems];
-        scrapedItems.forEach((item) => {
-          const idx = mergedItems.findIndex((e) => e.title.toLowerCase().trim() === item.title.toLowerCase().trim());
-          if (idx === -1) {
-            mergedItems.push(item);
-          } else {
-            if (!mergedItems[idx].image && item.image) mergedItems[idx].image = item.image;
-            if (!mergedItems[idx].link && item.link) mergedItems[idx].link = item.link;
-            mergedItems[idx].price = item.price;
-          }
-        });
-
-        const formattedCatalog = formatTenantProductsText(mergedItems, selectedTenant.currency || "PKR");
+        const formattedCatalog = formatTenantProductsText(scrapedItems, selectedTenant.currency || "PKR");
 
         const cleanUrl = websiteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
         const scrapedPrompt = selectedTenant.systemPrompt || `You are the lead AI Sales & Support Agent for ${cleanUrl}. Your goal is to represent the business, book meetings, answer pricing/services queries, and deliver clear responses based on official company policy. Always maintain a professional and welcoming tone.`;
@@ -651,20 +654,19 @@ export default function VoiceSaaSApp() {
         handleUpdateTenantConfig({
           systemPrompt: scrapedPrompt,
           knowledgeBase: scrapedKB,
-          products: mergedItems,
-          productKnowledgeBase: formattedCatalog || data.catalog || selectedTenant.productKnowledgeBase,
+          products: scrapedItems,
+          productKnowledgeBase: formattedCatalog || data.catalog || "",
         });
 
-        setScrapeSuccessMsg(`Successfully scraped & auto-populated ${mergedItems.length} products with pictures & links from ${websiteUrl}!`);
+        setScrapeSuccessMsg(`Successfully scraped & auto-populated ${scrapedItems.length} products with pictures & links from ${websiteUrl}!`);
       } else {
         alert(data.error || "Failed to scrape website");
       }
-    } catch (e: any) {
+    } catch (e) {
       console.error(e);
       alert("Error occurred while scraping.");
-    } finally {
-      setIsScraping(false);
     }
+    setIsScraping(false);
   };
 
   return (
@@ -1606,6 +1608,16 @@ export default function VoiceSaaSApp() {
                             <span>Products Catalog ({ (selectedTenant.products || []).length })</span>
                           </label>
                           <div className="flex items-center gap-2">
+                            {(selectedTenant.products || []).length > 0 && (
+                              <button
+                                type="button"
+                                onClick={handleClearAdminCatalog}
+                                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                                title="Clear all products from catalog"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-rose-600" /> Clear Catalog
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => setShowRawCatalogText(!showRawCatalogText)}
