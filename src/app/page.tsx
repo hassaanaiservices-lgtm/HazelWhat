@@ -4289,81 +4289,117 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
-            <div className="flex gap-2 mb-2">
-              {['all', 'pending', 'confirmed', 'cancelled'].map(filter => (
+            <div className="flex gap-2 mb-2 flex-wrap">
+              {[
+                { id: 'all', label: 'All Items' },
+                { id: 'orders', label: '🛒 Orders' },
+                { id: 'appointments', label: '📅 Appointments' },
+                { id: 'pending', label: 'Pending' },
+                { id: 'confirmed', label: 'Confirmed' },
+                { id: 'cancelled', label: 'Cancelled' }
+              ].map(filter => (
                 <button
-                  key={filter}
-                  onClick={() => setOrderFilter(filter as any)}
-                  className={`px-4 py-2 rounded-xl text-xs font-extrabold capitalize transition-all cursor-pointer ${
-                    orderFilter === filter 
+                  key={filter.id}
+                  onClick={() => setOrderFilter(filter.id as any)}
+                  className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                    orderFilter === filter.id 
                       ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20' 
                       : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200/80'
                   }`}
                 >
-                  {filter}
+                  {filter.label}
                 </button>
               ))}
             </div>
 
             <div className="dash-card p-8 min-h-[500px]">
-              {orders.filter(o => orderFilter === 'all' || o.status === orderFilter).length === 0 ? (
+              {orders.filter(o => {
+                if (orderFilter === 'all') return true;
+                if (orderFilter === 'orders') return !o.productName.includes('Appointment') && !o.productName.startsWith('📅');
+                if (orderFilter === 'appointments') return o.productName.includes('Appointment') || o.productName.startsWith('📅');
+                return o.status === orderFilter;
+              }).length === 0 ? (
                 <div className="text-center p-12 bg-slate-50/80 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 font-bold text-xs">
-                  No orders found.
+                  No orders or appointments found.
                 </div>
               ) : (
                 <div className="grid gap-4">
-                  {orders.filter(o => orderFilter === 'all' || o.status === orderFilter).reverse().map((order) => (
-                    <div key={order.id} className="bg-slate-50/80 p-6 rounded-2xl border border-slate-200/60 flex flex-col sm:flex-row gap-6 items-start sm:items-center">
-                      
-                      {/* Product Image */}
-                      <div className="w-20 h-20 rounded-xl bg-slate-200 shrink-0 overflow-hidden border border-slate-200 flex items-center justify-center text-slate-400">
-                        {order.productImageUrl ? (
-                          <img src={order.productImageUrl} alt={order.productName} className="w-full h-full object-cover" />
-                        ) : (
-                          <ShoppingCart className="h-7 w-7 opacity-40 text-purple-600" />
-                        )}
-                      </div>
-                      
-                      {/* Order Details */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="text-xs font-extrabold text-slate-900">{order.id}</span>
-                          <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                            order.status === 'pending' ? 'bg-amber-100 text-amber-800' :
-                            order.status === 'confirmed' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
-                            order.status === 'cancelled' ? 'bg-rose-100 text-rose-800' :
-                            'bg-slate-200 text-slate-700'
-                          }`}>
-                            {order.status}
-                          </span>
-                          <span className="text-xs text-slate-400 ml-auto font-semibold">{new Date(order.timestamp).toLocaleString()}</span>
+                  {orders.filter(o => {
+                    if (orderFilter === 'all') return true;
+                    if (orderFilter === 'orders') return !o.productName.includes('Appointment') && !o.productName.startsWith('📅');
+                    if (orderFilter === 'appointments') return o.productName.includes('Appointment') || o.productName.startsWith('📅');
+                    return o.status === orderFilter;
+                  }).reverse().map((order) => {
+                    const isAppointment = order.productName.includes('Appointment') || order.productName.startsWith('📅');
+                    return (
+                      <div key={order.id} className="bg-slate-50/80 p-6 rounded-2xl border border-slate-200/60 flex flex-col sm:flex-row gap-6 items-start sm:items-center shadow-sm">
+                        
+                        {/* Item Icon / Image */}
+                        <div className={`w-20 h-20 rounded-xl shrink-0 overflow-hidden border flex items-center justify-center ${
+                          isAppointment 
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-600' 
+                            : 'bg-purple-50 border-purple-200 text-purple-600'
+                        }`}>
+                          {order.productImageUrl ? (
+                            <img src={order.productImageUrl} alt={order.productName} className="w-full h-full object-cover" />
+                          ) : isAppointment ? (
+                            <BookOpen className="h-8 w-8 text-indigo-600" />
+                          ) : (
+                            <ShoppingCart className="h-8 w-8 text-purple-600" />
+                          )}
                         </div>
                         
-                        <h3 className="text-sm font-extrabold text-slate-800 mb-1 truncate">{order.productName}</h3>
-                        
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-1 gap-x-4 text-xs text-slate-600 mt-2 font-medium">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold w-16 text-slate-400">Phone:</span>
-                            <span className="font-semibold text-slate-800">{order.phone}</span>
+                        {/* Details */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3 mb-2 flex-wrap">
+                            <span className="text-xs font-extrabold text-slate-900">{order.id}</span>
+                            <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                              isAppointment
+                                ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
+                                : 'bg-purple-100 text-purple-800 border border-purple-200'
+                            }`}>
+                              {isAppointment ? '📅 APPOINTMENT' : '🛒 PRODUCT ORDER'}
+                            </span>
+                            <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                              order.status === 'pending' ? 'bg-amber-100 text-amber-800' :
+                              order.status === 'confirmed' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                              order.status === 'cancelled' ? 'bg-rose-100 text-rose-800' :
+                              'bg-slate-200 text-slate-700'
+                            }`}>
+                              {order.status}
+                            </span>
+                            <span className="text-xs text-slate-400 ml-auto font-semibold">{new Date(order.timestamp).toLocaleString()}</span>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold w-16 text-slate-400">Price:</span>
-                            <span className="font-semibold text-purple-700">{order.price || 'N/A'}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold w-16 text-slate-400">Size:</span>
-                            <span className="font-semibold text-slate-800">{order.size || 'N/A'}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold w-16 text-slate-400">Color:</span>
-                            <span className="font-semibold text-slate-800">{order.color || 'N/A'}</span>
-                          </div>
-                          <div className="flex items-center gap-2 col-span-1 sm:col-span-2">
-                            <span className="font-bold w-16 text-slate-400 shrink-0">Address:</span>
-                            <span className="font-semibold text-slate-800 truncate">{order.deliveryAddress || 'Pending'}</span>
+                          
+                          <h3 className="text-sm font-extrabold text-slate-800 mb-1 truncate">{order.productName}</h3>
+                          
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-1 gap-x-4 text-xs text-slate-600 mt-2 font-medium">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold w-20 text-slate-400">Phone:</span>
+                              <span className="font-semibold text-slate-800">{order.phone}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold w-20 text-slate-400">{isAppointment ? 'Type:' : 'Price:'}</span>
+                              <span className="font-semibold text-purple-700">{order.price || (isAppointment ? 'Service Call' : 'N/A')}</span>
+                            </div>
+                            {!isAppointment && (
+                              <>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold w-20 text-slate-400">Size:</span>
+                                  <span className="font-semibold text-slate-800">{order.size || 'N/A'}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold w-20 text-slate-400">Color:</span>
+                                  <span className="font-semibold text-slate-800">{order.color || 'N/A'}</span>
+                                </div>
+                              </>
+                            )}
+                            <div className="flex items-center gap-2 col-span-1 sm:col-span-2">
+                              <span className="font-bold w-20 text-slate-400 shrink-0">{isAppointment ? 'Schedule:' : 'Address:'}</span>
+                              <span className="font-semibold text-slate-800 truncate">{order.deliveryAddress || 'Pending'}</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
 
                       {/* Action Buttons */}
                       {order.status === 'pending' && (

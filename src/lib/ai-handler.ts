@@ -814,7 +814,10 @@ Follow this funnel strategy to turn them from a dead lead into a paying customer
 Keep their history in mind and treat them like a valued returning customer.`;
     }
     
-    fullSystemPrompt += `\n\nCRITICAL RULES FOR PRODUCT RECOMMENDATIONS:
+    const botPurposeMode = config.botMode || "both";
+    fullSystemPrompt += `\n\n=== BOT MODE: ${botPurposeMode.toUpperCase()} (ORDERS & APPOINTMENTS SUPPORTED) ===\n`;
+
+    fullSystemPrompt += `\n\nCRITICAL RULES FOR ORDERS & APPOINTMENT BOOKINGS:
 1. When showing a product to the customer, you must ALWAYS call the send_product_card function with the correct product data.
 2. You must NEVER write product images, links, or markdown syntax directly in a text response.
 3. If you want to show a product, calling the tool IS the only correct action — do not also describe it in a text message at the same time.
@@ -824,15 +827,18 @@ Keep their history in mind and treat them like a valued returning customer.`;
    - If you are missing size, color, delivery address, contact number, or payment method, pass them as empty strings or omit them in the tool call.
    - AFTER calling the tool, ask the user for the remaining missing details in your text response.
    - If the user provides more details later, call place_order again to update it.
-7. VARIATIONS & PRICING: If a product has multiple variations (like different ages/sizes), do NOT immediately state a generic price. Instead:
+7. APPOINTMENTS & CALL BOOKINGS: When a user expresses intent to book a discovery call, consultation, appointment, or meeting:
+   - You MUST IMMEDIATELY call the bookAppointment tool with the customer's name, service name (e.g. 'Discovery Call'), date (YYYY-MM-DD or relative like 'Kal (6 August)'), and time (HH:MM or '11:00 AM').
+   - NEVER send a text response stating "Aap ki discovery call book ho gayi hai" or "Appointment confirmed" WITHOUT calling the bookAppointment tool first! Calling the tool is required to save the booking to the user's dashboard!
+8. VARIATIONS & PRICING: If a product has multiple variations (like different ages/sizes), do NOT immediately state a generic price. Instead:
     - First, show the product card to the user. You MUST set the price parameter to "Hidden" when calling send_product_card so the price is not shown in the card.
     - Then, ask the customer in your text response: "How old is your child?" or "What size are you looking for?"
     - Once they tell you the size, check the specific Variations for that product and tell them the exact price for that size in text.
     - If they already mentioned the size in their initial request, you can directly show the card and state the exact price for that size.
-8. PROACTIVE FOLLOW-UPS: Whenever you tell the user you will follow up or check back later, you MUST call the schedule_followup tool to actually schedule it. Never just say it without calling the tool.
-9. CUSTOMER CRM PROFILES: You have access to the update_customer_profile tool. Whenever a user shares their name, or shows strong buying interest (such as asking for catalog, pricing, or stock details), you MUST call update_customer_profile to record their name, add relevant product interest tags, and move them to the appropriate stage ('qualified' when they give basic details, 'warm' when showing purchase intent).
-10. VOICE NOTE & AUDIO INSTRUCTIONS: You have full audio & voice note capability. When a user sends a voice note (marked with 🎤 [Voice Note]), the transcript of what they spoke is provided. You MUST ALWAYS answer their question or request directly and naturally! NEVER say "I am not able to listen to voice notes", "I cannot hear audio", or refuse to process voice messages.
-11. 4-LANGUAGE MASTER INSTRUCTIONS: You fluently support Pashto (پښتو), Urdu (اردو / Roman Urdu), Punjabi (پنجابی / Roman Punjabi), and English. Automatically detect the user's language or spoken voice note, and ALWAYS respond in the exact same language with natural vocabulary! Example (Urdu/Roman Urdu): "AOA! Shukriya contact karne ka. Hum Cute Coodle hain, aapko kis item ke baaray mein jan'na hai?". Keep your responses concise, warm, and natural.`;
+9. PROACTIVE FOLLOW-UPS: Whenever you tell the user you will follow up or check back later, you MUST call the schedule_followup tool to actually schedule it. Never just say it without calling the tool.
+10. CUSTOMER CRM PROFILES: You have access to the update_customer_profile tool. Whenever a user shares their name, or shows strong buying interest (such as asking for catalog, pricing, or stock details), you MUST call update_customer_profile to record their name, add relevant product interest tags, and move them to the appropriate stage ('qualified' when they give basic details, 'warm' when showing purchase intent).
+11. VOICE NOTE & AUDIO INSTRUCTIONS: You have full audio & voice note capability. When a user sends a voice note (marked with 🎤 [Voice Note]), the transcript of what they spoke is provided. You MUST ALWAYS answer their question or request directly and naturally! NEVER say "I am not able to listen to voice notes", "I cannot hear audio", or refuse to process voice messages.
+12. 4-LANGUAGE MASTER INSTRUCTIONS: You fluently support Pashto (پښتو), Urdu (اردو / Roman Urdu), Punjabi (پنجابی / Roman Punjabi), and English. Automatically detect the user's language or spoken voice note, and ALWAYS respond in the exact same language with natural vocabulary! Example (Urdu/Roman Urdu): "AOA! Shukriya contact karne ka. Hum Cute Coodle hain, aapko kis item ke baaray mein jan'na hai?". Keep your responses concise, warm, and natural.`;
 
     if (config.enabledFeatures && config.enabledFeatures.length > 0) {
       fullSystemPrompt += "\n\n=== ADVANCED FEATURES ENABLED ===\n";
@@ -903,16 +909,16 @@ Keep their history in mind and treat them like a valued returning customer.`;
       },
       {
         name: "bookAppointment",
-        description: "Books an appointment for the user. Call checkAvailability first if you haven't.",
+        description: "Books an appointment, discovery call, meeting, or service for the user. Call this whenever the user confirms or wants to book a call or appointment.",
         input_schema: {
           type: "object",
           properties: {
-            name: { type: "string", description: "User's full name" },
-            service: { type: "string", description: "The service they want to book" },
-            date: { type: "string", description: "Date of appointment (YYYY-MM-DD)" },
-            time: { type: "string", description: "Time of appointment (HH:MM)" }
+            name: { type: "string", description: "User's full name (or pushName/phone if name not provided)" },
+            service: { type: "string", description: "The service or call name (e.g. 'Discovery Call', 'Consultation')" },
+            date: { type: "string", description: "Date of appointment (e.g., 'YYYY-MM-DD' or 'Kal (6 August)')" },
+            time: { type: "string", description: "Time of appointment (e.g., '11:00 AM')" }
           },
-          required: ["name", "service", "date", "time"]
+          required: ["service", "date", "time"]
         }
       },
       {
@@ -1025,11 +1031,10 @@ Keep their history in mind and treat them like a valued returning customer.`;
             toolResult = JSON.stringify({ availableTimes: available });
           } 
           else if (toolCall.name === "bookAppointment") {
-            const success = DB.bookAppointment(from, args.name, args.service, args.date, args.time);
-            if (success) {
-              DB.updateCustomer(from, { pipelineStage: "completed" });
-            }
-            toolResult = JSON.stringify({ success, message: success ? "Appointment booked successfully." : "Time slot already taken. Please pick another." });
+            const userName = args.name || customer?.name || from;
+            const success = DB.bookAppointment(from, userName, args.service, args.date, args.time);
+            DB.updateCustomer(from, { pipelineStage: "completed", name: userName });
+            toolResult = JSON.stringify({ success: true, message: "Appointment/Call booked successfully and recorded in dashboard." });
           }
           else if (toolCall.name === "cancelAppointment") {
             const success = DB.cancelAppointment(from, args.date, args.time);

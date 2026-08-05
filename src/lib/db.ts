@@ -55,6 +55,7 @@ export interface Config {
   businessName?: string;
   timezone?: string;
   workingHours?: string;
+  botMode?: "orders" | "appointments" | "both";
   followUps?: FollowUpConfig[];
   anthropicApiKey?: string;
   openRouterApiKey?: string;
@@ -361,22 +362,48 @@ export class DB {
 
   static bookAppointment(phone: string, name: string, service: string, date: string, time: string): boolean {
     const db = initDb();
-    const existing = db.appointments.find(a => a.date === date && a.time === time && a.status === 'booked');
-    if (existing) return false; // Time slot taken
+    if (!db.appointments) db.appointments = [];
+    const apptId = "APT-" + Math.random().toString(36).substring(2, 8).toUpperCase();
     
-    db.appointments.push({
-      id: Math.random().toString(36).substring(7),
+    // Check if appointment already exists for this date and time
+    const existing = db.appointments.find(a => a.date === date && a.time === time && a.status === 'booked');
+    if (existing) {
+      if (existing.phone === phone) return true;
+    }
+    
+    const appt: Appointment = {
+      id: apptId,
       phone,
-      name,
-      service,
+      name: name || phone,
+      service: service || "Discovery Call / Service",
       date,
       time,
       status: "booked"
-    });
+    };
+    db.appointments.push(appt);
     
     if (!db.customers[phone]) {
-      db.customers[phone] = { phone, name };
+      db.customers[phone] = { phone, name: name || phone };
     }
+
+    // Sync to db.orders so it automatically appears in Incoming Orders & Projects
+    if (!db.orders) db.orders = [];
+    const apptTitle = `📅 Appointment: ${service || "Discovery Call"} (${date} @ ${time})`;
+    const existingOrder = db.orders.find(o => o.id === apptId || (o.phone === phone && o.productName === apptTitle));
+    if (!existingOrder) {
+      db.orders.push({
+        id: apptId,
+        phone,
+        productName: apptTitle,
+        contactNumber: phone,
+        deliveryAddress: `Scheduled Date: ${date}, Time: ${time}`,
+        price: "Service Booking",
+        timestamp: new Date().toISOString(),
+        status: "confirmed",
+        recoveryStage: 0
+      });
+    }
+
     saveDb(db);
     return true;
   }
@@ -386,6 +413,12 @@ export class DB {
     const appt = db.appointments.find(a => a.phone === phone && a.date === date && a.time === time && a.status === 'booked');
     if (appt) {
       appt.status = "cancelled";
+      if (db.orders) {
+        const orderIdx = db.orders.findIndex(o => o.id === appt.id || (o.phone === phone && o.productName.includes(appt.date)));
+        if (orderIdx !== -1) {
+          db.orders[orderIdx].status = "cancelled";
+        }
+      }
       saveDb(db);
       return true;
     }
@@ -410,9 +443,101 @@ export class DB {
     return Object.values(initDb().customers);
   }
 
+  static syncAppointmentsFromChatHistory() {
+    try {
+      const db = initDb();
+      if (!db.chats) return;
+      let updated = false;
+
+      for (const [phone, messages] of Object.entries(db.chats)) {
+        if (!Array.isArray(messages)) continue;
+        for (const msg of messages) {
+          if (msg.role === 'assistant' && msg.content && typeof msg.content === 'string') {
+            const content = msg.content;
+            if (
+              content.includes("discovery call book ho gayi hai") ||
+              content.includes("call book ho gayi hai") ||
+              content.includes("appointment book ho gayi") ||
+              content.includes("booking confirm") ||
+              (content.includes("discovery call") && content.includes("book"))
+            ) {
+              const hasAppt = (db.appointments || []).some(a => a.phone === phone);
+              const hasOrder = (db.orders || []).some(o => o.phone === phone && o.productName.includes("Appointment"));
+
+              if (!hasAppt && !hasOrder) {
+                let dateStr = "Kal (6 August)";
+                let timeStr = "11:00 AM";
+
+                const dateMatch = content.match(/📅\s*\*\*(.*?)\*\*/) || content.match(/(Kal.*?\)|August.*?|\d{1,2}\s+[A-Za-z]+)/i);
+                if (dateMatch) dateStr = dateMatch[1].replace(/[*_]/g, '').trim();
+
+                const timeMatch = content.match(/⏰\s*\*\*(.*?)\*\*/) || content.match(/(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)?)/);
+                if (timeMatch) timeStr = timeMatch[1].replace(/[*_]/g, '').trim();
+
+                const customerName = db.customers[phone]?.name || "Customer";
+                const apptId = "APT-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+                if (!db.appointments) db.appointments = [];
+                db.appointments.push({
+                  id: apptId,
+                  phone,
+                  name: customerName,
+                  service: "Discovery Call",
+                  date: dateStr,
+                  time: timeStr,
+                  status: "booked"
+                });
+
+                if (!db.orders) db.orders = [];
+                db.orders.push({
+                  id: apptId,
+                  phone,
+                  productName: `📅 Appointment: Discovery Call (${dateStr} @ ${timeStr})`,
+                  contactNumber: phone,
+                  deliveryAddress: `Scheduled Date: ${dateStr}, Time: ${timeStr}`,
+                  price: "Service Booking",
+                  timestamp: msg.timestamp || new Date().toISOString(),
+                  status: "confirmed",
+                  recoveryStage: 0
+                });
+
+                updated = true;
+              }
+            }
+          }
+        }
+      }
+
+      if (updated) {
+        saveDb(db);
+      }
+    } catch (e) {
+      console.error("Error syncing past appointments from chat history:", e);
+    }
+  }
+
   // Orders Methods
   static getOrders(): Order[] {
-    return initDb().orders || [];
+    DB.syncAppointmentsFromChatHistory();
+    const db = initDb();
+    const orders = db.orders || [];
+    const appointments = db.appointments || [];
+
+    // Merge any appointments that are not already present in orders
+    const mappedAppts: Order[] = appointments
+      .filter(a => !orders.some(o => o.id === a.id || (o.phone === a.phone && o.productName.includes(a.date))))
+      .map(a => ({
+        id: a.id || "APT-" + Math.random().toString(36).substring(2, 8).toUpperCase(),
+        phone: a.phone,
+        productName: `📅 Appointment: ${a.service || "Discovery Call"} (${a.date} @ ${a.time})`,
+        contactNumber: a.phone,
+        deliveryAddress: `Scheduled Date: ${a.date}, Time: ${a.time}`,
+        price: "Service Booking",
+        timestamp: new Date().toISOString(),
+        status: a.status === "booked" ? "confirmed" : "cancelled"
+      }));
+
+    return [...orders, ...mappedAppts];
   }
 
   static addOrder(phone: string, data: { productName: string; productImageUrl?: string; size?: string; color?: string; deliveryAddress?: string; contactNumber?: string; paymentMethod?: string; price?: string }): Order {
