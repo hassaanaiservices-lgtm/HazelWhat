@@ -101,6 +101,7 @@ export interface Appointment {
   date: string;
   time: string;
   status: "booked" | "cancelled";
+  notes?: string;
 }
 
 export interface Customer {
@@ -129,6 +130,7 @@ export interface PromotionLog {
 export interface Order {
   id: string;
   phone: string;
+  customerName?: string;
   productName: string;
   productImageUrl?: string;
   size?: string;
@@ -140,6 +142,7 @@ export interface Order {
   timestamp: string;
   status: "pending" | "processing" | "shipped" | "delivered" | "cancelled" | "confirmed";
   recoveryStage?: number;
+  notes?: string;
 }
 
 export interface ScheduledFollowUp {
@@ -364,7 +367,7 @@ export class DB {
     return initDb().appointments.filter(a => a.phone === phone);
   }
 
-  static bookAppointment(phone: string, name: string, service: string, date: string, time: string): boolean {
+  static bookAppointment(phone: string, name: string, service: string, date: string, time: string, notes?: string): boolean {
     const db = initDb();
     if (!db.appointments) db.appointments = [];
     const apptId = "APT-" + Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -372,7 +375,10 @@ export class DB {
     // Check if appointment already exists for this date and time
     const existing = db.appointments.find(a => a.date === date && a.time === time && a.status === 'booked');
     if (existing) {
-      if (existing.phone === phone) return true;
+      if (existing.phone === phone) {
+        if (notes) existing.notes = notes;
+        return true;
+      }
     }
     
     const appt: Appointment = {
@@ -382,7 +388,8 @@ export class DB {
       service: service || "Discovery Call / Service",
       date,
       time,
-      status: "booked"
+      status: "booked",
+      notes
     };
     db.appointments.push(appt);
     
@@ -398,13 +405,15 @@ export class DB {
       db.orders.push({
         id: apptId,
         phone,
+        customerName: name || phone,
         productName: apptTitle,
         contactNumber: phone,
         deliveryAddress: `Scheduled Date: ${date}, Time: ${time}`,
         price: "Service Booking",
         timestamp: new Date().toISOString(),
         status: "confirmed",
-        recoveryStage: 0
+        recoveryStage: 0,
+        notes: notes || `Appointment booked for ${service || 'Service Call'}. Client scheduled for ${date} at ${time}.`
       });
     }
 
@@ -544,9 +553,11 @@ export class DB {
     return [...orders, ...mappedAppts];
   }
 
-  static addOrder(phone: string, data: { productName: string; productImageUrl?: string; size?: string; color?: string; deliveryAddress?: string; contactNumber?: string; paymentMethod?: string; price?: string }): Order {
+  static addOrder(phone: string, data: { productName: string; productImageUrl?: string; size?: string; color?: string; deliveryAddress?: string; contactNumber?: string; paymentMethod?: string; price?: string; customerName?: string; notes?: string }): Order {
     const db = initDb();
     if (!db.orders) db.orders = [];
+
+    const custName = data.customerName || db.customers[phone]?.name || phone;
 
     // Check if there is an existing pending order for this phone and product
     const existingOrder = db.orders.find(o => o.phone === phone && o.productName === data.productName && o.status === "pending");
@@ -558,6 +569,8 @@ export class DB {
       if (data.paymentMethod) existingOrder.paymentMethod = data.paymentMethod;
       if (data.price) existingOrder.price = data.price;
       if (data.productImageUrl) existingOrder.productImageUrl = data.productImageUrl;
+      if (data.notes) existingOrder.notes = data.notes;
+      if (custName) existingOrder.customerName = custName;
       
       existingOrder.timestamp = new Date().toISOString(); // Update timestamp so it jumps to top
       existingOrder.recoveryStage = 0; // Reset recovery stage since customer interacted
@@ -568,6 +581,7 @@ export class DB {
     const newOrder: Order = {
       id: "ORD-" + Math.random().toString(36).substring(2, 8).toUpperCase(),
       phone,
+      customerName: custName,
       productName: data.productName,
       productImageUrl: data.productImageUrl,
       size: data.size,
@@ -578,7 +592,8 @@ export class DB {
       price: data.price,
       timestamp: new Date().toISOString(),
       status: "pending",
-      recoveryStage: 0
+      recoveryStage: 0,
+      notes: data.notes
     };
     db.orders.push(newOrder);
     

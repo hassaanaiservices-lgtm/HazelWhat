@@ -916,7 +916,8 @@ Keep their history in mind and treat them like a valued returning customer.`;
             name: { type: "string", description: "User's full name (or pushName/phone if name not provided)" },
             service: { type: "string", description: "The service or call name (e.g. 'Discovery Call', 'Consultation')" },
             date: { type: "string", description: "Date of appointment (e.g., 'YYYY-MM-DD' or 'Kal (6 August)')" },
-            time: { type: "string", description: "Time of appointment (e.g., '11:00 AM')" }
+            time: { type: "string", description: "Time of appointment (e.g., '11:00 AM')" },
+            notes: { type: "string", description: "A 1-2 sentence summary of what the client wants to discuss during the call/appointment." }
           },
           required: ["service", "date", "time"]
         }
@@ -960,7 +961,8 @@ Keep their history in mind and treat them like a valued returning customer.`;
             address: { type: "string" },
             contact_number: { type: "string" },
             payment_method: { type: "string", description: "e.g. Cash on Delivery, Bank Transfer" },
-            price: { type: "string" }
+            price: { type: "string" },
+            notes: { type: "string", description: "Special instructions, customizations, size adjustments, or notes requested by the client." }
           },
           required: ["product_name"]
         }
@@ -1032,7 +1034,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
           } 
           else if (toolCall.name === "bookAppointment") {
             const userName = args.name || customer?.name || from;
-            const success = DB.bookAppointment(from, userName, args.service, args.date, args.time);
+            const success = DB.bookAppointment(from, userName, args.service, args.date, args.time, args.notes);
             DB.updateCustomer(from, { pipelineStage: "completed", name: userName });
             toolResult = JSON.stringify({ success: true, message: "Appointment/Call booked successfully and recorded in dashboard." });
           }
@@ -1065,7 +1067,9 @@ Keep their history in mind and treat them like a valued returning customer.`;
                 contactNumber: args.contact_number,
                 paymentMethod: args.payment_method,
                 price: args.price,
-                productImageUrl: args.image_url
+                productImageUrl: args.image_url,
+                customerName: customer?.name || from,
+                notes: args.notes
               };
               DB.addOrder(from, orderData);
               DB.updateCustomer(from, { pipelineStage: "completed" });

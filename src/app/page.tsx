@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save, MessageSquare, Settings, Plus, Trash2, Search, MoreVertical, Phone, Video, Paperclip, Smile, Mic, CheckCheck, User, Check, Send, StopCircle, Inbox, Bot, Network, BookOpen, Users, AlertCircle, ShoppingCart, Activity, Eye, EyeOff, RefreshCw, Pause, Play, Smartphone, Square, Package, Edit3, Upload, ExternalLink, Image as ImageIcon, Tag, Globe, Sparkles, Volume2, VolumeX, BellRing, Bell, LogOut } from "lucide-react";
+import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save, MessageSquare, Settings, Plus, Trash2, Search, MoreVertical, Phone, Video, Paperclip, Smile, Mic, CheckCheck, User, Check, Send, StopCircle, Inbox, Bot, Network, BookOpen, Users, AlertCircle, ShoppingCart, Activity, Eye, EyeOff, RefreshCw, Pause, Play, Smartphone, Square, Package, Edit3, Upload, ExternalLink, Image as ImageIcon, Tag, Globe, Sparkles, Volume2, VolumeX, BellRing, Bell, LogOut, FileText, Calendar, MapPin, Clock } from "lucide-react";
 import EmojiPicker from "emoji-picker-react";
 
 export default function DashboardPage() {
@@ -299,6 +299,9 @@ export default function DashboardPage() {
   const [p2VoiceMimetype, setP2VoiceMimetype] = useState<string | null>(null);
   const [p2VoiceName, setP2VoiceName] = useState<string | null>(null);
   const [p2VoicePreviewUrl, setP2VoicePreviewUrl] = useState<string | null>(null);
+  const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
+  const [notesInput, setNotesInput] = useState<string>("");
+  const [generatingNotesId, setGeneratingNotesId] = useState<string | null>(null);
 
   const [isP2Recording, setIsP2Recording] = useState(false);
   const [p2RecordTimer, setP2RecordTimer] = useState(0);
@@ -4368,110 +4371,246 @@ export default function DashboardPage() {
                     return o.status === orderFilter;
                   }).reverse().map((order) => {
                     const isAppointment = order.productName.includes('Appointment') || order.productName.startsWith('📅');
+                    const clientName = customers[order.phone]?.name || order.customerName || order.phone || "Verified Client";
+                    const isEditingThis = editingNotesId === order.id;
+
                     return (
-                      <div key={order.id} className="bg-slate-50/80 p-6 rounded-2xl border border-slate-200/60 flex flex-col sm:flex-row gap-6 items-start sm:items-center shadow-sm">
+                      <div key={order.id} className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex flex-col gap-5">
                         
-                        {/* Item Icon / Image */}
-                        <div className={`w-20 h-20 rounded-xl shrink-0 overflow-hidden border flex items-center justify-center ${
-                          isAppointment 
-                            ? 'bg-indigo-50 border-indigo-200 text-indigo-600' 
-                            : 'bg-purple-50 border-purple-200 text-purple-600'
-                        }`}>
-                          {order.productImageUrl ? (
-                            <img src={order.productImageUrl} alt={order.productName} className="w-full h-full object-cover" />
-                          ) : isAppointment ? (
-                            <BookOpen className="h-8 w-8 text-indigo-600" />
-                          ) : (
-                            <ShoppingCart className="h-8 w-8 text-purple-600" />
-                          )}
-                        </div>
-                        
-                        {/* Details */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3 mb-2 flex-wrap">
-                            <span className="text-xs font-extrabold text-slate-900">{order.id}</span>
-                            <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                              isAppointment
-                                ? 'bg-indigo-100 text-indigo-800 border border-indigo-200'
-                                : 'bg-purple-100 text-purple-800 border border-purple-200'
+                        {/* Top Header Row: ID, Category Badge, Status Badge, Timestamp */}
+                        <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-slate-100">
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            <span className="text-xs font-black text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg font-mono tracking-tight">{order.id}</span>
+                            
+                            <span className={`text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 ${
+                              isAppointment 
+                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/80' 
+                                : 'bg-purple-50 text-purple-700 border border-purple-200/80'
                             }`}>
-                              {isAppointment ? '📅 APPOINTMENT' : '🛒 PRODUCT ORDER'}
+                              {isAppointment ? <Calendar className="w-3 h-3 text-indigo-600" /> : <ShoppingCart className="w-3 h-3 text-purple-600" />}
+                              {isAppointment ? '📅 APPOINTMENT / CALL' : '🛒 PRODUCT ORDER'}
                             </span>
-                            <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                              order.status === 'pending' ? 'bg-amber-100 text-amber-800' :
-                              order.status === 'confirmed' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
-                              order.status === 'cancelled' ? 'bg-rose-100 text-rose-800' :
-                              'bg-slate-200 text-slate-700'
+
+                            <span className={`text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 ${
+                              order.status === 'pending' ? 'bg-amber-50 text-amber-800 border border-amber-200' :
+                              order.status === 'confirmed' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
+                              order.status === 'cancelled' ? 'bg-rose-50 text-rose-800 border border-rose-200' :
+                              'bg-slate-100 text-slate-700 border border-slate-200'
                             }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${
+                                order.status === 'pending' ? 'bg-amber-500 animate-pulse' :
+                                order.status === 'confirmed' ? 'bg-emerald-500' :
+                                order.status === 'cancelled' ? 'bg-rose-500' : 'bg-slate-400'
+                              }`} />
                               {order.status}
                             </span>
-                            <span className="text-xs text-slate-400 ml-auto font-semibold">{new Date(order.timestamp).toLocaleString()}</span>
                           </div>
-                          
-                          <h3 className="text-sm font-extrabold text-slate-800 mb-1 truncate">{order.productName}</h3>
-                          
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-1 gap-x-4 text-xs text-slate-600 mt-2 font-medium">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold w-20 text-slate-400">Phone:</span>
-                              <span className="font-semibold text-slate-800">{order.phone}</span>
+
+                          <span className="text-xs font-semibold text-slate-400 flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-slate-400" />
+                            {new Date(order.timestamp).toLocaleString()}
+                          </span>
+                        </div>
+
+                        {/* Client Info & Service/Product Name */}
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50/70 p-4 rounded-xl border border-slate-100">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <div className="w-7 h-7 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs shrink-0">
+                                <User className="w-4 h-4" />
+                              </div>
+                              <span className="text-sm font-black text-slate-900">{clientName}</span>
+                              <a 
+                                href={`https://wa.me/${order.phone.replace(/[^0-9]/g, '')}`} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors cursor-pointer"
+                              >
+                                <MessageCircle className="w-3 h-3" /> WhatsApp
+                              </a>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold w-20 text-slate-400">{isAppointment ? 'Type:' : 'Price:'}</span>
-                              <span className="font-semibold text-purple-700">{order.price || (isAppointment ? 'Service Call' : 'N/A')}</span>
+                            <h3 className="text-xs font-bold text-purple-950 pl-9 truncate">{order.productName}</h3>
+                          </div>
+
+                          <div className="flex items-center gap-6 text-xs font-semibold text-slate-600 pl-9 md:pl-0">
+                            <div>
+                              <span className="text-slate-400 block text-[10px] uppercase font-bold">Phone Number</span>
+                              <span className="font-extrabold text-slate-800">{order.phone}</span>
                             </div>
-                            {!isAppointment && (
-                              <>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold w-20 text-slate-400">Size:</span>
-                                  <span className="font-semibold text-slate-800">{order.size || 'N/A'}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold w-20 text-slate-400">Color:</span>
-                                  <span className="font-semibold text-slate-800">{order.color || 'N/A'}</span>
-                                </div>
-                              </>
-                            )}
-                            <div className="flex items-center gap-2 col-span-1 sm:col-span-2">
-                              <span className="font-bold w-20 text-slate-400 shrink-0">{isAppointment ? 'Schedule:' : 'Address:'}</span>
-                              <span className="font-semibold text-slate-800 truncate">{order.deliveryAddress || 'Pending'}</span>
+                            <div>
+                              <span className="text-slate-400 block text-[10px] uppercase font-bold">{isAppointment ? 'Business / Booking' : 'Price'}</span>
+                              <span className="font-extrabold text-purple-700">{order.price || (isAppointment ? 'Service Booking' : 'N/A')}</span>
                             </div>
                           </div>
                         </div>
 
-                      {/* Action Buttons */}
-                      {order.status === 'pending' && (
-                        <div className="flex flex-row sm:flex-col gap-2 shrink-0 w-full sm:w-auto">
-                          <button
-                            onClick={async () => {
-                              await fetch('/api/whatsapp/orders', {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ id: order.id, status: 'confirmed' })
-                              });
-                              fetchOrders();
-                            }}
-                            className="flex-1 sm:flex-none px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-extrabold rounded-xl transition-all shadow-md shadow-purple-500/20 cursor-pointer"
-                          >
-                            Confirm Order
-                          </button>
-                          <button
-                            onClick={async () => {
-                              await fetch('/api/whatsapp/orders', {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ id: order.id, status: 'cancelled' })
-                              });
-                              fetchOrders();
-                            }}
-                            className="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs font-extrabold rounded-xl transition-colors cursor-pointer"
-                          >
-                            Cancel Order
-                          </button>
+                        {/* Specifications / Schedule / Address grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-slate-600">
+                          <div className="flex items-start gap-2 bg-slate-50/50 p-3 rounded-lg border border-slate-100">
+                            {isAppointment ? <Calendar className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" /> : <MapPin className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />}
+                            <div>
+                              <span className="font-bold text-slate-400 block text-[10px] uppercase">{isAppointment ? 'Schedule / Date & Time' : 'Delivery Address'}</span>
+                              <span className="font-semibold text-slate-800">{order.deliveryAddress || 'Pending Details'}</span>
+                            </div>
+                          </div>
+
+                          {!isAppointment && (
+                            <div className="flex items-center gap-4 bg-slate-50/50 p-3 rounded-lg border border-slate-100">
+                              <div>
+                                <span className="font-bold text-slate-400 block text-[10px] uppercase">Size</span>
+                                <span className="font-extrabold text-slate-800">{order.size || 'N/A'}</span>
+                              </div>
+                              <div>
+                                <span className="font-bold text-slate-400 block text-[10px] uppercase">Color</span>
+                                <span className="font-extrabold text-slate-800">{order.color || 'N/A'}</span>
+                              </div>
+                              <div>
+                                <span className="font-bold text-slate-400 block text-[10px] uppercase">Payment</span>
+                                <span className="font-extrabold text-slate-800">{order.paymentMethod || 'COD'}</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
+
+                        {/* NOTES & CALL SUMMARY SECTION */}
+                        <div className="bg-gradient-to-r from-purple-50/70 via-indigo-50/40 to-slate-50/70 p-4 rounded-xl border border-purple-100/80 space-y-2">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2 text-xs font-extrabold text-purple-900">
+                              <FileText className="w-4 h-4 text-purple-600" />
+                              <span>Call Summary & Client Notes</span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={async () => {
+                                  setGeneratingNotesId(order.id);
+                                  try {
+                                    const res = await fetch('/api/whatsapp/orders', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ id: order.id, phone: order.phone })
+                                    });
+                                    const data = await res.json();
+                                    if (data.notes) {
+                                      order.notes = data.notes;
+                                      fetchOrders();
+                                    }
+                                  } catch (e) {
+                                    console.error(e);
+                                  } finally {
+                                    setGeneratingNotesId(null);
+                                  }
+                                }}
+                                disabled={generatingNotesId === order.id}
+                                className="text-[11px] font-bold text-purple-700 hover:text-purple-900 bg-white border border-purple-200 hover:border-purple-300 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 shadow-xs cursor-pointer active:scale-95"
+                              >
+                                {generatingNotesId === order.id ? <Loader2 className="w-3 h-3 animate-spin text-purple-600" /> : <Sparkles className="w-3 h-3 text-purple-600" />}
+                                <span>{generatingNotesId === order.id ? 'Generating AI Notes...' : 'Generate AI Notes'}</span>
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  if (isEditingThis) {
+                                    setEditingNotesId(null);
+                                  } else {
+                                    setEditingNotesId(order.id);
+                                    setNotesInput(order.notes || "");
+                                  }
+                                }}
+                                className="text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:border-slate-300 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 shadow-xs cursor-pointer active:scale-95"
+                              >
+                                <Edit3 className="w-3 h-3 text-slate-500" />
+                                <span>{isEditingThis ? 'Cancel' : 'Edit'}</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {isEditingThis ? (
+                            <div className="space-y-2 pt-1">
+                              <textarea
+                                value={notesInput}
+                                onChange={(e) => setNotesInput(e.target.value)}
+                                placeholder="Add custom call summary, client requirements, or special instructions..."
+                                className="w-full p-2.5 text-xs bg-white border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500/20 outline-none text-slate-800 font-medium min-h-[70px]"
+                              />
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  onClick={async () => {
+                                    await fetch('/api/whatsapp/orders', {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ id: order.id, notes: notesInput })
+                                    });
+                                    setEditingNotesId(null);
+                                    fetchOrders();
+                                  }}
+                                  className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                                >
+                                  Save Notes
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-xs text-slate-700 font-medium leading-relaxed bg-white/80 p-3 rounded-lg border border-purple-100/60">
+                              {order.notes ? (
+                                <p className="whitespace-pre-wrap">{order.notes}</p>
+                              ) : (
+                                <span className="text-slate-400 italic text-[11px]">No summary notes recorded yet. Click "Generate AI Notes" or "Edit" to record details.</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Bottom Actions Row */}
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-100 flex-wrap gap-3">
+                          <button
+                            onClick={() => {
+                              setSelectedChat(order.phone);
+                              setActiveTab("inbox");
+                            }}
+                            className="text-xs font-extrabold text-purple-700 hover:text-purple-900 flex items-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <MessageSquare className="w-4 h-4 text-purple-600" />
+                            <span>Open Chat History</span>
+                          </button>
+
+                          <div className="flex items-center gap-2">
+                            {order.status === 'pending' && (
+                              <>
+                                <button
+                                  onClick={async () => {
+                                    await fetch('/api/whatsapp/orders', {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ id: order.id, status: 'confirmed' })
+                                    });
+                                    fetchOrders();
+                                  }}
+                                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-extrabold rounded-xl transition-all shadow-md shadow-purple-500/20 cursor-pointer active:scale-95"
+                                >
+                                  Confirm
+                                </button>
+
+                                <button
+                                  onClick={async () => {
+                                    await fetch('/api/whatsapp/orders', {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ id: order.id, status: 'cancelled' })
+                                    });
+                                    fetchOrders();
+                                  }}
+                                  className="px-4 py-2 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs font-extrabold rounded-xl transition-colors cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
             )}
             </div>
