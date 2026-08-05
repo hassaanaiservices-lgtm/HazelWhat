@@ -3398,67 +3398,104 @@ export default function DashboardPage() {
                 
                 <div className="space-y-4">
                   {(() => {
-                    const defaultFUs = Array.from({length: 5}).map((_, i) => ({
-                      enabled: false,
-                      delayMinutes: [60, 1440, 2880, 4320, 7200][i],
-                      message: ""
-                    }));
+                    const defaultFUs = [
+                      { enabled: true, delayMinutes: 60, delayValue: 1, unit: 'hours' as const },
+                      { enabled: true, delayMinutes: 1440, delayValue: 1, unit: 'days' as const },
+                      { enabled: true, delayMinutes: 2880, delayValue: 2, unit: 'days' as const },
+                      { enabled: true, delayMinutes: 4320, delayValue: 3, unit: 'days' as const },
+                      { enabled: true, delayMinutes: 7200, delayValue: 5, unit: 'days' as const },
+                      { enabled: true, delayMinutes: 10080, delayValue: 7, unit: 'days' as const },
+                      { enabled: true, delayMinutes: 14400, delayValue: 10, unit: 'days' as const },
+                    ];
                     const currentFUs = config.followUps || [];
-                    const fullFUs = defaultFUs.map((df, i) => currentFUs[i] || df);
+                    const fullFUs = defaultFUs.map((df, i) => ({ ...df, ...(currentFUs[i] || {}) }));
 
-                    return fullFUs.map((fu: any, idx: number) => (
-                      <div key={idx} className={`p-5 rounded-2xl border transition-all ${fu.enabled ? 'bg-white border-purple-200 shadow-sm' : 'bg-slate-50/80 border-slate-200/80'}`}>
-                        <div className="flex items-center justify-between mb-4">
-                          <h4 className="font-bold text-slate-800 flex items-center gap-2 text-xs">
-                            <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs text-white ${fu.enabled ? 'bg-purple-600' : 'bg-slate-300'}`}>{idx + 1}</span>
-                            Follow-up {idx + 1}
-                          </h4>
-                          
-                          <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-2">
-                              <label className="text-xs font-bold text-slate-500">Wait (minutes)</label>
-                              <input 
-                                type="number"
-                                value={fu.delayMinutes}
-                                onChange={(e) => {
+                    const computeMinutes = (val: number, unit: string) => {
+                      if (unit === 'hours') return val * 60;
+                      if (unit === 'days') return val * 1440;
+                      if (unit === 'months') return val * 43200;
+                      return val; // minutes
+                    };
+
+                    const getValAndUnit = (fu: any, df: any) => {
+                      if (fu.unit && fu.delayValue !== undefined) {
+                        return { unit: fu.unit, val: fu.delayValue };
+                      }
+                      const mins = fu.delayMinutes || df.delayMinutes;
+                      if (mins >= 43200 && mins % 43200 === 0) return { unit: 'months', val: mins / 43200 };
+                      if (mins >= 1440 && mins % 1440 === 0) return { unit: 'days', val: mins / 1440 };
+                      if (mins >= 60 && mins % 60 === 0) return { unit: 'hours', val: mins / 60 };
+                      return { unit: 'minutes', val: mins };
+                    };
+
+                    return fullFUs.map((fu: any, idx: number) => {
+                      const { unit: currentUnit, val: currentValue } = getValAndUnit(fu, defaultFUs[idx]);
+
+                      return (
+                        <div key={idx} className={`p-5 rounded-2xl border transition-all ${fu.enabled ? 'bg-white border-purple-200 shadow-sm' : 'bg-slate-50/80 border-slate-200/80'}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-bold text-slate-800 flex items-center gap-2 text-xs">
+                              <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs text-white ${fu.enabled ? 'bg-purple-600' : 'bg-slate-300'}`}>{idx + 1}</span>
+                              Follow-up {idx + 1}
+                            </h4>
+                            
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-2">
+                                <label className="text-xs font-bold text-slate-500">Wait</label>
+                                <input 
+                                  type="number"
+                                  min="1"
+                                  value={currentValue}
+                                  onChange={(e) => {
+                                    const val = Math.max(1, parseInt(e.target.value) || 1);
+                                    const newMinutes = computeMinutes(val, currentUnit);
+                                    const newFUs = [...fullFUs];
+                                    newFUs[idx] = { ...newFUs[idx], delayValue: val, unit: currentUnit, delayMinutes: newMinutes };
+                                    setConfig({ ...config, followUps: newFUs });
+                                  }}
+                                  className="w-16 px-3 py-1.5 text-xs bg-white border border-slate-200/80 rounded-lg focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold"
+                                />
+                                <select
+                                  value={currentUnit}
+                                  onChange={(e) => {
+                                    const unit = e.target.value;
+                                    const newMinutes = computeMinutes(currentValue, unit);
+                                    const newFUs = [...fullFUs];
+                                    newFUs[idx] = { ...newFUs[idx], delayValue: currentValue, unit, delayMinutes: newMinutes };
+                                    setConfig({ ...config, followUps: newFUs });
+                                  }}
+                                  className="px-2.5 py-1.5 text-xs bg-white border border-slate-200/80 rounded-lg focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold text-slate-700 cursor-pointer"
+                                >
+                                  <option value="minutes">Minutes</option>
+                                  <option value="hours">Hours</option>
+                                  <option value="days">Days</option>
+                                  <option value="months">Months</option>
+                                </select>
+                              </div>
+                              <div 
+                                onClick={() => {
                                   const newFUs = [...fullFUs];
-                                  newFUs[idx] = { ...newFUs[idx], delayMinutes: parseInt(e.target.value) || 0 };
+                                  newFUs[idx] = { ...newFUs[idx], enabled: !fu.enabled };
                                   setConfig({ ...config, followUps: newFUs });
                                 }}
-                                className="w-20 px-3 py-1.5 text-xs bg-white border border-slate-200/80 rounded-lg focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold"
-                              />
-                            </div>
-                            <div 
-                              onClick={() => {
-                                const newFUs = [...fullFUs];
-                                newFUs[idx] = { ...newFUs[idx], enabled: !fu.enabled };
-                                setConfig({ ...config, followUps: newFUs });
-                              }}
-                              className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${fu.enabled ? 'bg-purple-600' : 'bg-slate-300'}`}
-                            >
-                              <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${fu.enabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                                className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${fu.enabled ? 'bg-purple-600' : 'bg-slate-300'}`}
+                              >
+                                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${fu.enabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        {fu.enabled && (
-                          <div className="mt-4 border-t border-slate-100 pt-3">
-                            <label className="text-xs font-bold text-slate-500 block mb-1">Follow-up Message Template</label>
-                            <textarea 
-                              value={fu.message || ""}
-                              onChange={(e) => {
-                                const newFUs = [...fullFUs];
-                                newFUs[idx] = { ...newFUs[idx], message: e.target.value };
-                                setConfig({ ...config, followUps: newFUs });
-                              }}
-                              rows={3}
-                              placeholder="Enter the follow-up message template. E.g. 'Hi! Just checking in to see if you have any questions...'"
-                              className="w-full p-3 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-semibold text-slate-700"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ));
+                          {fu.enabled && (
+                            <div className="mt-3 border-t border-slate-100 pt-3">
+                              <div className="flex items-center gap-2 text-xs font-semibold text-purple-700 bg-purple-50/70 p-3 rounded-xl border border-purple-100/80">
+                                <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                                <span>AI dynamically generates context-aware follow-up messages based on recent chat history. Smart intelligence automatically skips follow-ups if the deal or booking is already completed.</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
                   })()}
                 </div>
               </div>

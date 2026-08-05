@@ -47,8 +47,9 @@ export async function GET() {
         continue;
       }
 
-      if (followUpLevel >= 5) {
-        log(`  -> Skipping ${phone}: Max follow-up level (5) reached.`);
+      const totalFollowUpLevels = config.followUps?.length || 7;
+      if (followUpLevel >= totalFollowUpLevels) {
+        log(`  -> Skipping ${phone}: Max follow-up level (${totalFollowUpLevels}) reached.`);
         continue;
       }
 
@@ -59,9 +60,17 @@ export async function GET() {
 
       const delayMs = nextFollowUp.delayMinutes * 60 * 1000;
       if (elapsedMs >= delayMs) {
-        log(`[System B Follow-up] Triggering Sequence Level ${followUpLevel + 1} for ${phone}`);
+        log(`[System B Follow-up] Evaluating Sequence Level ${followUpLevel + 1} for ${phone}`);
         try {
-          // Actually trigger it using WhatsAppManager
+          const { shouldSendFollowUp, generateContextualFollowUp } = await import("@/lib/ai-handler");
+          const evaluation = await shouldSendFollowUp(phone);
+          
+          if (!evaluation.shouldFollowUp) {
+            log(`  -> Skipping ${phone}: Deal closed/resolved (${evaluation.reason})`);
+            DB.updateCustomer(phone, { leadStatus: "cold", pipelineStage: "completed" });
+            continue;
+          }
+
           const contextualMessage = await generateContextualFollowUp(phone, nextFollowUp.message);
           const sentMsg = await WhatsAppManager.sendMessage(phone, contextualMessage);
           DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage });

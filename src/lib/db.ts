@@ -40,7 +40,9 @@ import { ProductItem } from './scraper';
 export interface FollowUpConfig {
   enabled: boolean;
   delayMinutes: number;
-  message: string;
+  delayValue?: number;
+  unit?: "minutes" | "hours" | "days" | "months";
+  message?: string;
 }
 
 export interface Config {
@@ -230,11 +232,13 @@ const DEFAULT_CONFIG: Config = {
   timezone: "UTC",
   workingHours: "9:00 AM - 5:00 PM",
   followUps: [
-    { enabled: false, delayMinutes: 60, message: "Hi! Just checking if you have any questions?" },
-    { enabled: false, delayMinutes: 1440, message: "Are you still interested in our products?" },
-    { enabled: false, delayMinutes: 2880, message: "Let us know if you need any help deciding." },
-    { enabled: false, delayMinutes: 4320, message: "We haven't heard from you in a while!" },
-    { enabled: false, delayMinutes: 7200, message: "This is our last follow up. Reply to talk again!" }
+    { enabled: true, delayMinutes: 60, delayValue: 1, unit: "hours" },
+    { enabled: true, delayMinutes: 1440, delayValue: 1, unit: "days" },
+    { enabled: true, delayMinutes: 2880, delayValue: 2, unit: "days" },
+    { enabled: true, delayMinutes: 4320, delayValue: 3, unit: "days" },
+    { enabled: true, delayMinutes: 7200, delayValue: 5, unit: "days" },
+    { enabled: true, delayMinutes: 10080, delayValue: 7, unit: "days" },
+    { enabled: true, delayMinutes: 14400, delayValue: 10, unit: "days" }
   ]
 };
 

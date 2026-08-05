@@ -1235,23 +1235,111 @@ Keep their history in mind and treat them like a valued returning customer.`;
   }
 }
 
-export async function generateContextualFollowUp(phone: string, followUpPrompt: string): Promise<string> {
+export async function shouldSendFollowUp(phone: string): Promise<{ shouldFollowUp: boolean; reason: string }> {
+  const config = DB.getConfig();
+  const apiKey = getApiKey(config);
+
+  const history = DB.getChats(phone);
+  const customer = DB.getCustomer(phone);
+  const orders = DB.getOrders().filter((o: any) => o.phone === phone);
+  const appointments = DB.getAllAppointments().filter((a: any) => a.phone === phone);
+
+  // Quick state checks:
+  if (customer?.leadStatus === "cold" || customer?.pipelineStage === "completed") {
+    return { shouldFollowUp: false, reason: `Customer status is ${customer?.leadStatus || customer?.pipelineStage}` };
+  }
+
+  // Check if latest order or appointment is completed, and if user sent new messages after it
+  const userMessages = history.filter((m: any) => m.role === 'user');
+  const lastUserMsgTime = userMessages.length > 0 ? new Date(userMessages[userMessages.length - 1].timestamp).getTime() : 0;
+
+  const completedOrder = orders
+    .filter((o: any) => o.status === "completed" || o.status === "confirmed" || o.status === "paid")
+    .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+
+  if (completedOrder) {
+    const orderTime = new Date(completedOrder.timestamp).getTime();
+    // If no user messages after completed order, then deal is complete
+    if (lastUserMsgTime <= orderTime) {
+      return { shouldFollowUp: false, reason: `Deal completed: Customer confirmed order #${completedOrder.id}` };
+    }
+  }
+
+  const confirmedAppt = appointments
+    .filter((a: any) => a.status === "confirmed" || a.status === "completed")
+    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+
+  if (confirmedAppt) {
+    const apptTime = new Date(confirmedAppt.date).getTime();
+    if (lastUserMsgTime <= apptTime) {
+      return { shouldFollowUp: false, reason: `Deal completed: Customer has ${confirmedAppt.status} appointment on ${confirmedAppt.date}` };
+    }
+  }
+
+  if (!apiKey) {
+    return { shouldFollowUp: true, reason: "No API key configured for AI evaluation, defaulting to send." };
+  }
+
+  const recentHistory = history
+    .filter((m: any) => m.role === 'user' || m.role === 'assistant')
+    .slice(-8)
+    .map((m: any) => ({ role: m.role, content: m.content }));
+
+  if (recentHistory.length === 0) {
+    return { shouldFollowUp: false, reason: "No chat history available for customer." };
+  }
+
+  const systemPrompt = `You are an AI Sales & Booking Intelligence Controller evaluating WhatsApp conversation state.
+Determine whether an automated follow-up message SHOULD be sent to this customer, or if the deal/booking/inquiry is already CLOSED, COMPLETED, RESOLVED, or DECLINED.
+
+Rule to SKIP follow-up (return shouldFollowUp: false):
+1. The deal, booking, order, or appointment was successfully completed, confirmed, or finalized in the conversation.
+2. The user explicitly stated they are not interested, asked to stop/cancel, or declined.
+3. The user's query or issue was completely answered and resolved with clear closure (e.g., "Thanks that's all", "All set", "Got it, thank you").
+
+Rule to SEND follow-up (return shouldFollowUp: true):
+1. The user stopped replying mid-way through a booking, consultation, or purchasing process.
+2. The bot asked a question or offered a service/product, and the user hasn't replied yet.
+3. The conversation was left pending without closure.
+
+Respond STRICTLY with JSON only in this exact format:
+{"shouldFollowUp": boolean, "reason": "brief 1-sentence explanation"}`;
+
+  try {
+    const res = await callLLM(apiKey, systemPrompt, recentHistory, []);
+    let textContent = "";
+    for (const block of res.content) {
+      if (block.type === 'text') textContent += block.text;
+    }
+    const cleanJson = textContent.replace(/```json/gi, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(cleanJson);
+    return {
+      shouldFollowUp: parsed.shouldFollowUp ?? true,
+      reason: parsed.reason || "Evaluated by AI"
+    };
+  } catch (err: any) {
+    console.error("[AI Handler] Error evaluating shouldSendFollowUp:", err?.message || err);
+    return { shouldFollowUp: true, reason: "Fallback on AI evaluation error" };
+  }
+}
+
+export async function generateContextualFollowUp(phone: string, followUpPrompt?: string): Promise<string> {
   const config = DB.getConfig();
   const apiKey = getApiKey(config);
 
   if (!apiKey) {
-    return followUpPrompt || "Hello! Just checking in.";
+    return (followUpPrompt && followUpPrompt.trim()) || "Hi! Just checking in to see if you have any questions or if you'd like to proceed?";
   }
 
   const history = DB.getChats(phone);
-  const recentHistory = history.filter((m: any) => m.role === 'user' || m.role === 'assistant').slice(-5).map((m: any) => ({ role: m.role, content: m.content }));
+  const recentHistory = history.filter((m: any) => m.role === 'user' || m.role === 'assistant').slice(-6).map((m: any) => ({ role: m.role, content: m.content }));
 
-  let systemPrompt = `You are an expert Booking and Sales AI Assistant.\nYour goal is to re-engage the customer based on their recent chat history. Keep it natural, friendly, and concise (1-3 sentences).`;
+  let systemPrompt = `You are an expert Booking and Sales AI Assistant for ${config.businessName || 'our business'}.\nYour goal is to politely re-engage the customer based on their recent chat history. Keep it natural, friendly, and concise (1-3 sentences).`;
   
   if (followUpPrompt && followUpPrompt.trim() !== "") {
-    systemPrompt += `\n\nWe have a default follow-up message: "${followUpPrompt}".\nDO NOT just repeat this message verbatim. Instead, use it as inspiration and re-write it to directly reference what you and the user were last talking about in the chat history. Make it highly contextual and personalized.`;
+    systemPrompt += `\n\nAdditional direction: "${followUpPrompt}". Use this as inspiration and re-write it to directly reference what you and the user were last talking about in the chat history. Make it highly contextual and personalized.`;
   } else {
-    systemPrompt += `\n\nInstruction: Look at the chat history. The user hasn't replied in a while. Craft a short, personalized follow-up message to restart the conversation, referencing their last inquiry.`;
+    systemPrompt += `\n\nInstruction: Look at the chat history. Reference what the user was asking about or inquiring to book/buy, and craft a short, warm, personalized follow-up message to restart the conversation.`;
   }
 
   try {

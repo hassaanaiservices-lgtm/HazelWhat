@@ -213,9 +213,10 @@ export class WhatsAppManager {
             continue;
           }
 
-          // If all 5 follow ups sent, stop and mark as cold lead
-          if (followUpLevel >= 5) {
-            console.log(`  -> Skipping ${phone}: Max follow-up level (5) reached.`);
+          // If all follow-ups sent, stop and mark as cold lead
+          const totalFollowUpLevels = config.followUps?.length || 7;
+          if (followUpLevel >= totalFollowUpLevels) {
+            console.log(`  -> Skipping ${phone}: Max follow-up level (${totalFollowUpLevels}) reached.`);
             if (customer?.leadStatus !== "cold") DB.updateCustomer(phone, { leadStatus: "cold" });
             continue;
           }
@@ -228,9 +229,18 @@ export class WhatsAppManager {
 
           const delayMs = nextFollowUp.delayMinutes * 60 * 1000;
           if (elapsedMs >= delayMs) {
-            console.log(`[System B Follow-up] Triggering Sequence Level ${followUpLevel + 1} for ${phone}`);
+            console.log(`[System B Follow-up] Evaluating Sequence Level ${followUpLevel + 1} for ${phone}`);
             
             try {
+              const { shouldSendFollowUp } = await import('./ai-handler');
+              const evaluation = await shouldSendFollowUp(phone);
+
+              if (!evaluation.shouldFollowUp) {
+                console.log(`  -> Skipping follow-up for ${phone}: AI determined follow-up is not needed (Reason: ${evaluation.reason}).`);
+                DB.updateCustomer(phone, { leadStatus: "cold", pipelineStage: "completed" });
+                continue;
+              }
+
               const contextualMessage = await generateContextualFollowUp(phone, nextFollowUp.message);
               const sentMsg = await this.sendMessage(phone, contextualMessage);
               
