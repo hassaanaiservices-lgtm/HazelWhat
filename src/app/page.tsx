@@ -511,7 +511,7 @@ export default function DashboardPage() {
   };
 
   const [orders, setOrders] = useState<any[]>([]);
-  const [orderFilter, setOrderFilter] = useState<'all' | 'pending' | 'confirmed' | 'cancelled'>('all');
+  const [orderFilter, setOrderFilter] = useState<'all' | 'orders' | 'appointments' | 'pending' | 'confirmed' | 'cancelled'>('all');
   const [leadFilter, setLeadFilter] = useState<'all' | 'hot' | 'cold'>('all');
   const [analytics, setAnalytics] = useState<any>(null);
 
