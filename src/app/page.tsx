@@ -4429,13 +4429,13 @@ export default function DashboardPage() {
                             className="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs font-extrabold rounded-xl transition-colors cursor-pointer"
                           >
                             Cancel Order
-                          </button>
                         </div>
                       )}
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+              </div>
+            )}
             </div>
           </div>
         </div>
