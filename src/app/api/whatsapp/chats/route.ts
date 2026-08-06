@@ -23,8 +23,18 @@ export async function GET(req: NextRequest) {
     }
 
     // Tenant-isolated chat and customer fetching
-    const chats = await DB.getAllChats(tenantId);
-    const customers = await DB.getAllCustomers(tenantId);
+    let chats = await DB.getAllChats(tenantId);
+    let customers = await DB.getAllCustomers(tenantId);
+
+    // Fallback: If no chats exist under tenantId, check admin chats so legacy messages created before isolation are not lost
+    if (Object.keys(chats).length === 0) {
+      const fallbackChats = await DB.getAllChats('admin');
+      const fallbackCustomers = await DB.getAllCustomers('admin');
+      if (Object.keys(fallbackChats).length > 0) {
+        chats = fallbackChats;
+        customers = fallbackCustomers;
+      }
+    }
 
     return NextResponse.json({ 
       success: true, 

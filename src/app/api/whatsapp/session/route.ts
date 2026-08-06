@@ -6,8 +6,27 @@ import { DB_DIR } from "@/lib/db";
 import path from "path";
 import fs from "fs";
 
+import { cookies } from "next/headers";
+
+async function getTenantIdFromSession(): Promise<string | undefined> {
+  try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("hazel_session");
+    if (sessionCookie && sessionCookie.value) {
+      const session = JSON.parse(sessionCookie.value);
+      return session.role === 'admin' ? undefined : session.tenantId;
+    }
+  } catch (e) {}
+  return undefined;
+}
+
 export async function GET() {
   try {
+    const tenantId = await getTenantIdFromSession();
+    if (tenantId) {
+      WhatsAppManager.setActiveTenantId(tenantId);
+    }
+
     let status = WhatsAppManager.getStatus();
     
     // Auto-reconnect if auth credentials exist but session is disconnected
@@ -19,7 +38,7 @@ export async function GET() {
         console.log("[Session Route] Saved credentials found. Auto-connecting WhatsApp...");
         // Start session asynchronously
         WhatsAppManager.startSession(async (msg) => {
-          await handleWhatsAppMessage(msg);
+          await handleWhatsAppMessage(msg, tenantId);
         }).catch(err => {
           console.error("[Session Route] Auto-connect failed:", err);
         });
@@ -43,6 +62,11 @@ export async function GET() {
 
 export async function POST() {
   try {
+    const tenantId = await getTenantIdFromSession();
+    if (tenantId) {
+      WhatsAppManager.setActiveTenantId(tenantId);
+    }
+
     // Soft reset: close existing socket and delete local credentials
     // without calling logout() (which would deregister the device on
     // WhatsApp servers and cause "Couldn't link device" errors).
@@ -50,7 +74,7 @@ export async function POST() {
     
     // Start session and pass the AI handler for incoming messages
     await WhatsAppManager.startSession(async (msg) => {
-      await handleWhatsAppMessage(msg);
+      await handleWhatsAppMessage(msg, tenantId);
     });
     return NextResponse.json({ success: true });
   } catch (err: any) {

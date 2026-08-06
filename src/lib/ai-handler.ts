@@ -527,7 +527,7 @@ function isDuplicateMessage(msgId: string): boolean {
   return false;
 }
 
-export async function handleWhatsAppMessage(msg: any) {
+export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
   try {
     const remoteJid = msg?.key?.remoteJid;
     if (!remoteJid || remoteJid === "status@broadcast" || remoteJid.endsWith("@g.us") || remoteJid.endsWith("@newsletter")) {
@@ -552,6 +552,20 @@ export async function handleWhatsAppMessage(msg: any) {
     const interactiveResponse = msg.message?.interactiveResponseMessage;
     let content = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || "";
     
+    // Resolve Tenant ID early!
+    let resolvedTenantId = inputTenantId || WhatsAppManager.getActiveTenantId() || undefined;
+    if (!resolvedTenantId && from) {
+      const cust = await DB.getCustomer(from);
+      resolvedTenantId = cust?.tenantId;
+    }
+    if (!resolvedTenantId) {
+      const tenants = await DB.getTenants();
+      if (tenants && tenants.length === 1) {
+        resolvedTenantId = tenants[0].id;
+      }
+    }
+    resolvedTenantId = resolvedTenantId || 'admin';
+
     if (interactiveResponse?.nativeFlowResponseMessage?.name === "quick_reply") {
       try {
         const params = JSON.parse(interactiveResponse.nativeFlowResponseMessage.paramsJson || "{}");
@@ -564,8 +578,8 @@ export async function handleWhatsAppMessage(msg: any) {
           const reply = `Here is the direct link to view this product on our website: \n${link}`;
           await WhatsAppManager.sendMessage(from, reply);
           
-          await DB.addChatMessage(from, { role: "user", content: `[Clicked View Product]` });
-          await DB.addChatMessage(from, { role: "assistant", content: reply });
+          await DB.addChatMessage(from, { role: "user", content: `[Clicked View Product]` }, resolvedTenantId);
+          await DB.addChatMessage(from, { role: "assistant", content: reply }, resolvedTenantId);
           return;
         }
         else if (params.id && params.id.startsWith("order_")) {
@@ -577,8 +591,8 @@ export async function handleWhatsAppMessage(msg: any) {
           const reply = `Great choice! To place an order for *${productName}*, I just need a few details:\n\n1. What size/color would you like?\n2. What is your delivery address?\n3. Please provide a contact phone number.\n\nYou can type your answers below!`;
           await WhatsAppManager.sendMessage(from, reply);
           
-          await DB.addChatMessage(from, { role: "user", content: `[I want to order: ${productName}]` });
-          await DB.addChatMessage(from, { role: "assistant", content: reply });
+          await DB.addChatMessage(from, { role: "user", content: `[I want to order: ${productName}]` }, resolvedTenantId);
+          await DB.addChatMessage(from, { role: "assistant", content: reply }, resolvedTenantId);
           return; 
         }
       } catch (e) {
@@ -615,7 +629,7 @@ export async function handleWhatsAppMessage(msg: any) {
       }
     }
 
-    const config = await DB.getConfig();
+    const config = await DB.getConfig(resolvedTenantId);
     const { apiKey: deepgramApiKey, voice: deepgramVoice } = await getDeepgramSettings(config);
 
     let voiceTranscript = "";
@@ -654,7 +668,7 @@ export async function handleWhatsAppMessage(msg: any) {
 
     if (isOptOut) {
       console.log(`[Opt-Out] Customer ${from} requested opt-out with text: "${content}"`);
-      const existingCustomer = await DB.getCustomer(from);
+      const existingCustomer = await DB.getCustomer(from, resolvedTenantId);
       const existingTags = existingCustomer?.tags || [];
       const updatedTags = Array.from(new Set([...existingTags.filter(t => t !== "revival-sent"), "opted-out"]));
 
@@ -663,10 +677,10 @@ export async function handleWhatsAppMessage(msg: any) {
         optedOutAt: new Date().toISOString(),
         aiEnabled: false,
         tags: updatedTags
-      });
+      }, resolvedTenantId);
 
       // Update active campaign if lead was part of it
-      const activeCampaign = await DB.getActiveCampaign();
+      const activeCampaign = await DB.getActiveCampaign(resolvedTenantId);
       if (activeCampaign) {
         const optedOutList = Array.from(new Set([...(activeCampaign.optedOutPhones || []), from]));
         const progressMap = activeCampaign.leadProgress || {};
@@ -676,12 +690,12 @@ export async function handleWhatsAppMessage(msg: any) {
         await DB.updateRevivalCampaign(activeCampaign.id, {
           optedOutPhones: optedOutList,
           leadProgress: progressMap
-        });
+        }, resolvedTenantId);
       }
 
-      await DB.addChatMessage(from, { role: "user", content });
+      await DB.addChatMessage(from, { role: "user", content }, resolvedTenantId);
       await WhatsAppManager.sendMessage(from, "You have been unsubscribed from promotional updates. Reply START to opt back in.");
-      await DB.addChatMessage(from, { role: "assistant", content: "You have been unsubscribed from promotional updates. Reply START to opt back in." });
+      await DB.addChatMessage(from, { role: "assistant", content: "You have been unsubscribed from promotional updates. Reply START to opt back in." }, resolvedTenantId);
       return;
     }
 
@@ -693,19 +707,19 @@ export async function handleWhatsAppMessage(msg: any) {
         content: userDisplay,
         mediaUrl: base64Audio ? `data:${audioMime};base64,${base64Audio}` : undefined,
         mediaType: audioMime
-      });
+      }, resolvedTenantId);
     } else {
-      await DB.addChatMessage(from, { role: "user", content: hasImage ? `[Image] ${content}` : content });
+      await DB.addChatMessage(from, { role: "user", content: hasImage ? `[Image] ${content}` : content }, resolvedTenantId);
     }
     
-    const existingCustomer = await DB.getCustomer(from);
+    const existingCustomer = await DB.getCustomer(from, resolvedTenantId);
     const currentStage = existingCustomer?.pipelineStage || "new";
     
     let updatedTags = existingCustomer?.tags || [];
     let nextStage: "cold" | "new" | "qualified" | "warm" | "completed" | undefined = 
       (currentStage === "completed" || existingCustomer?.leadStatus === "cold") ? "warm" : currentStage;
     
-    const activeCampaign = await DB.getActiveCampaign();
+    const activeCampaign = await DB.getActiveCampaign(resolvedTenantId);
     if (updatedTags.includes("revival-sent") || (activeCampaign && activeCampaign.targetPhones?.includes(from))) {
       updatedTags = updatedTags.filter(t => t !== "revival-sent");
       if (!updatedTags.includes("revival-replied")) {
@@ -722,7 +736,7 @@ export async function handleWhatsAppMessage(msg: any) {
         await DB.updateRevivalCampaign(activeCampaign.id, {
           repliedPhones: repliedList,
           leadProgress: progressMap
-        });
+        }, resolvedTenantId);
       }
     }
 
@@ -736,8 +750,8 @@ export async function handleWhatsAppMessage(msg: any) {
       isOptedOut: false,
       tags: updatedTags,
       ...(msg.pushName ? { name: msg.pushName } : {})
-    });
-    const customer = await DB.getCustomer(from);
+    }, resolvedTenantId);
+    const customer = await DB.getCustomer(from, resolvedTenantId);
 
     const globalAiEnabled = config.globalAiEnabled !== false;
     const chatAiEnabled = customer?.aiEnabled;
@@ -755,7 +769,7 @@ export async function handleWhatsAppMessage(msg: any) {
     if (matchedKeyword) {
       console.log(`[AI Handler] Keyword matched: ${matchedKeyword.keyword}`);
       const sentMsg = await WhatsAppManager.sendMessage(from, matchedKeyword.reply);
-      await DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: matchedKeyword.reply });
+      await DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: matchedKeyword.reply }, resolvedTenantId);
       return;
     }
 
@@ -771,10 +785,10 @@ export async function handleWhatsAppMessage(msg: any) {
       console.error("[AI Handler] No API key is configured.");
       const fallback = "I'm currently experiencing a high volume of requests. A human agent will be with you shortly!";
       const sentMsg = await WhatsAppManager.sendMessage(from, fallback);
-      await DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: fallback });
+      await DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: fallback }, resolvedTenantId);
       
       const diagnostics = `[DIAGNOSTIC - KEY ERROR] The bot could not respond because no API keys were loaded.\n- config.apiKey: ${config.apiKey ? "Present" : "Empty"}\n- process.env.DEEPSEEK_API_KEY: ${process.env.DEEPSEEK_API_KEY ? "Present" : "Empty"}\n- process.env.API_KEY: ${process.env.API_KEY ? "Present" : "Empty"}\n- process.env.OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? "Present" : "Empty"}\n- process.env.ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? "Present" : "Empty"}\n- process.env.OPENROUTER_API_KEY: ${process.env.OPENROUTER_API_KEY ? "Present" : "Empty"}\n- process.env["Api key"]: ${process.env["Api key"] ? "Present" : "Empty"}`;
-      await DB.addChatMessage(from, { role: "assistant", content: diagnostics });
+      await DB.addChatMessage(from, { role: "assistant", content: diagnostics }, resolvedTenantId);
       return;
     }
 
@@ -1162,7 +1176,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
       
       aiReply = "I'm currently experiencing a high volume of requests and having some technical difficulties. A human agent will be with you shortly, or you can try again later!";
       const diagnostics = `[DIAGNOSTIC - API ERROR] Unified LLM call failed.\n- Key Type: ${detectKeyType(apiKey)}\n- Last Error: ${errorDetail}`;
-      DB.addChatMessage(from, { role: "assistant", content: diagnostics });
+      await DB.addChatMessage(from, { role: "assistant", content: diagnostics }, resolvedTenantId);
     }
 
     if (aiReply) {
@@ -1218,13 +1232,13 @@ Keep their history in mind and treat them like a valued returning customer.`;
         if (ttsBuffer) {
           sentMsg = await WhatsAppManager.sendMedia(from, ttsBuffer, "audio/ogg; codecs=opus", "voice_note.opus", aiReply, true);
           const base64Tts = ttsBuffer.toString("base64");
-          DB.addChatMessage(from, {
+          await DB.addChatMessage(from, {
             id: sentMsg?.key?.id,
             role: "assistant",
             content: aiReply,
             mediaUrl: `data:audio/ogg;base64,${base64Tts}`,
             mediaType: "audio/ogg"
-          });
+          }, resolvedTenantId);
           voiceSent = true;
           console.log(`[AI Handler] Replied to ${from} with native OGG Opus Voice Note!`);
         }
@@ -1233,7 +1247,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
       if (!voiceSent) {
         sentMsg = await WhatsAppManager.sendMessage(from, aiReply);
         console.log(`[AI Handler] Replied to ${from}: ${aiReply}`);
-        DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: aiReply || "[Media Sent]" });
+        await DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: aiReply || "[Media Sent]" }, resolvedTenantId);
       }
     }
     

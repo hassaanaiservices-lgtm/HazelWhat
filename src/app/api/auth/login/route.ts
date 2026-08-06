@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
         httpOnly: false,
         path: "/",
         maxAge: remember !== false ? 60 * 60 * 24 * 30 : 60 * 60 * 24,
-        sameSite: "lax"
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production"
       });
 
       return NextResponse.json({
@@ -71,12 +72,13 @@ export async function POST(request: NextRequest) {
     };
 
     const cookieStore = await cookies();
-    cookieStore.set("hazel_session", JSON.stringify(sessionData), {
-      httpOnly: false,
-      path: "/",
-      maxAge: remember !== false ? 60 * 60 * 24 * 30 : 60 * 60 * 24,
-      sameSite: "lax"
-    });
+      cookieStore.set("hazel_session", JSON.stringify(sessionData), {
+        httpOnly: false,
+        path: "/",
+        maxAge: remember !== false ? 60 * 60 * 24 * 30 : 60 * 60 * 24,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production"
+      });
 
     return NextResponse.json({
       success: true,

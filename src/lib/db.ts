@@ -259,7 +259,7 @@ export class DB {
     try {
       let query = supabase.from('chat_messages').select('*').eq('phone', phoneNumber);
       if (tenantId && tenantId !== 'admin') {
-        query = query.eq('tenant_id', tenantId);
+        query = query.or(`tenant_id.eq.${tenantId},tenant_id.eq.admin`);
       }
       const { data, error } = await query.order('timestamp', { ascending: true });
       if (error || !data) return [];
@@ -284,7 +284,7 @@ export class DB {
     try {
       let query = supabase.from('chat_messages').select('*');
       if (tenantId && tenantId !== 'admin') {
-        query = query.eq('tenant_id', tenantId);
+        query = query.or(`tenant_id.eq.${tenantId},tenant_id.eq.admin`);
       }
       const { data, error } = await query.order('timestamp', { ascending: true });
       if (error || !data) return {};
@@ -425,7 +425,9 @@ export class DB {
     if (!supabase) return undefined;
     try {
       let query = supabase.from('customers').select('*').eq('phone', phone);
-      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
+      if (tenantId && tenantId !== 'admin') {
+        query = query.or(`tenant_id.eq.${tenantId},tenant_id.eq.admin`);
+      }
       const { data } = await query.limit(1);
       if (!data || data.length === 0) return undefined;
       const c = data[0];
@@ -484,7 +486,9 @@ export class DB {
     if (!supabase) return [];
     try {
       let query = supabase.from('customers').select('*');
-      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
+      if (tenantId && tenantId !== 'admin') {
+        query = query.or(`tenant_id.eq.${tenantId},tenant_id.eq.admin`);
+      }
       const { data } = await query;
       return (data || []).map((c: any) => ({
         phone: c.phone,

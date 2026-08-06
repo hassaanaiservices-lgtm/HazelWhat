@@ -1727,12 +1727,17 @@ export default function DashboardPage() {
       <div className="w-[260px] flex-shrink-0 bg-white border-r border-slate-200/80 flex flex-col py-6 overflow-y-auto z-20 shadow-[4px_0_24px_rgba(124,58,237,0.03)] custom-scrollbar">
         
         {/* Brand Header */}
-        <div className="px-6 flex items-center justify-between mb-8">
+        <div className="px-6 mb-6">
           <div className="flex items-center gap-3 font-extrabold text-xl text-slate-900 tracking-tight">
             <div className="bg-gradient-to-tr from-purple-600 via-purple-500 to-indigo-500 p-2 rounded-xl text-white shadow-md shadow-purple-500/20">
               <Zap className="h-5 w-5 fill-white text-white" />
             </div>
-            <span>HazelWhat</span>
+            <div className="flex flex-col min-w-0">
+              <span className="leading-tight">HazelWhat</span>
+              <span className="text-[11px] font-extrabold text-purple-700 truncate max-w-[170px] bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200/80 mt-1">
+                For: {sessionData?.businessName || sessionData?.name || (sessionData?.role === 'admin' ? 'Super Admin' : 'Client Panel')}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -1800,12 +1805,12 @@ export default function DashboardPage() {
         <div className="mt-auto px-5 pt-4 border-t border-slate-100">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 bg-gradient-to-tr from-purple-600 to-indigo-500 rounded-full flex items-center justify-center text-white font-extrabold text-xs shadow-md relative">
-              H
+              {(sessionData?.businessName || sessionData?.name || 'H')[0]?.toUpperCase()}
               <div className="absolute bottom-0 right-0 h-2.5 w-2.5 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center text-[7px]"></div>
             </div>
             <div className="flex-1 min-w-0">
-              <h4 className="text-xs font-extrabold text-slate-900 truncate">Hassaan</h4>
-              <p className="text-[10px] text-purple-600 font-semibold">Online</p>
+              <h4 className="text-xs font-extrabold text-slate-900 truncate">{sessionData?.businessName || sessionData?.name || 'Hassaan'}</h4>
+              <p className="text-[10px] text-purple-600 font-semibold">{sessionData?.role === 'admin' ? 'Super Admin' : 'Client Account'}</p>
             </div>
           </div>
         </div>

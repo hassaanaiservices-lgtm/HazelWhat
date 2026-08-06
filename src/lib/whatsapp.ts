@@ -18,6 +18,7 @@ const globalForBaileys = global as unknown as {
   revivalProcessing: boolean;
   startPromise?: Promise<any> | null;
   reconnectAttempts: number;
+  activeTenantId?: string | null;
 };
 
 if (!globalForBaileys.baileysSession) {
@@ -28,6 +29,15 @@ if (globalForBaileys.reconnectAttempts === undefined) {
 }
 
 export class WhatsAppManager {
+  static setActiveTenantId(tenantId?: string | null) {
+    if (tenantId) {
+      globalForBaileys.activeTenantId = tenantId;
+    }
+  }
+
+  static getActiveTenantId(): string | null {
+    return globalForBaileys.activeTenantId || null;
+  }
   static startAutoSync() {
     if (globalForBaileys.autoSyncInterval) {
       clearInterval(globalForBaileys.autoSyncInterval);
