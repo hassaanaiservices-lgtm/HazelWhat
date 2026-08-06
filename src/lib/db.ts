@@ -368,14 +368,32 @@ export class DB {
     try {
       const resolvedTenantId = tenantId || DEFAULT_TENANT_ID;
       let tenantRecord: Tenant | null = null;
-      if (resolvedTenantId && resolvedTenantId !== 'admin') {
+      if (resolvedTenantId) {
         tenantRecord = await DB.getTenantById(resolvedTenantId);
+        if (!tenantRecord) {
+          const allTenants = await DB.getTenants();
+          if (allTenants && allTenants.length > 0) {
+            tenantRecord = allTenants.find(t => t.id === resolvedTenantId) || allTenants[0];
+          }
+        }
       }
 
       const { data } = await supabase.from('tenant_configs').select('*').eq('tenant_id', resolvedTenantId).single();
       
-      const systemPrompt = data?.system_prompt || tenantRecord?.systemPrompt || DEFAULT_CONFIG.systemPrompt;
-      const productInfo = data?.product_info || tenantRecord?.knowledgeBase || tenantRecord?.productKnowledgeBase || DEFAULT_CONFIG.productInfo;
+      const systemPrompt = (data?.system_prompt && data.system_prompt.trim() !== '') 
+        ? data.system_prompt 
+        : (tenantRecord?.systemPrompt && tenantRecord.systemPrompt.trim() !== '') 
+          ? tenantRecord.systemPrompt 
+          : DEFAULT_CONFIG.systemPrompt;
+
+      const productInfo = (data?.product_info && data.product_info.trim() !== '') 
+        ? data.product_info 
+        : (tenantRecord?.knowledgeBase && tenantRecord.knowledgeBase.trim() !== '') 
+          ? tenantRecord.knowledgeBase 
+          : (tenantRecord?.productKnowledgeBase && tenantRecord.productKnowledgeBase.trim() !== '') 
+            ? tenantRecord.productKnowledgeBase 
+            : DEFAULT_CONFIG.productInfo;
+
       const products = (data?.products && data.products.length > 0) ? data.products : (tenantRecord?.products || []);
       const businessName = data?.business_name || tenantRecord?.businessName || tenantRecord?.name || DEFAULT_CONFIG.businessName;
 
@@ -965,7 +983,13 @@ export class DB {
   static async getTenantById(id: string): Promise<Tenant | null> {
     if (!id) return null;
     const tenants = await DB.getTenants();
-    return tenants.find(t => t.id === id) || null;
+    const cleanId = id.toString().replace(/^#/, '').trim().toLowerCase();
+    return tenants.find(t => 
+      t.id === id || 
+      t.id?.toLowerCase() === cleanId || 
+      t.clientNumber?.toString().replace(/^#/, '').trim().toLowerCase() === cleanId ||
+      t.clientUsername?.trim().toLowerCase() === cleanId
+    ) || null;
   }
 
   static async saveTenants(tenants: Tenant[]): Promise<boolean> {
