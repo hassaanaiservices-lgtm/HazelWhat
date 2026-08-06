@@ -367,24 +367,33 @@ export class DB {
     if (!supabase) return DEFAULT_CONFIG;
     try {
       const resolvedTenantId = tenantId || DEFAULT_TENANT_ID;
+      let tenantRecord: Tenant | null = null;
+      if (resolvedTenantId && resolvedTenantId !== 'admin') {
+        tenantRecord = await DB.getTenantById(resolvedTenantId);
+      }
+
       const { data } = await supabase.from('tenant_configs').select('*').eq('tenant_id', resolvedTenantId).single();
-      if (!data) return DEFAULT_CONFIG;
+      
+      const systemPrompt = data?.system_prompt || tenantRecord?.systemPrompt || DEFAULT_CONFIG.systemPrompt;
+      const productInfo = data?.product_info || tenantRecord?.knowledgeBase || tenantRecord?.productKnowledgeBase || DEFAULT_CONFIG.productInfo;
+      const products = (data?.products && data.products.length > 0) ? data.products : (tenantRecord?.products || []);
+      const businessName = data?.business_name || tenantRecord?.businessName || tenantRecord?.name || DEFAULT_CONFIG.businessName;
 
       return {
-        systemPrompt: data.system_prompt || DEFAULT_CONFIG.systemPrompt,
-        productInfo: data.product_info || DEFAULT_CONFIG.productInfo,
-        products: data.products || [],
-        keywordReplies: data.keyword_replies || [],
-        enabledFeatures: data.enabled_features || [],
-        globalAiEnabled: data.global_ai_enabled !== false,
-        storeUrl: data.store_url || '',
-        storeCurrency: data.store_currency || '$',
-        businessName: data.business_name || 'My Business',
-        timezone: data.timezone || 'UTC',
-        workingHours: data.working_hours || '9:00 AM - 5:00 PM',
-        botMode: data.bot_mode || 'both',
-        maxFollowUps: data.max_follow_ups || 7,
-        followUps: data.follow_ups || DEFAULT_CONFIG.followUps
+        systemPrompt,
+        productInfo,
+        products,
+        keywordReplies: data?.keyword_replies || [],
+        enabledFeatures: data?.enabled_features || [],
+        globalAiEnabled: data?.global_ai_enabled !== false,
+        storeUrl: data?.store_url || '',
+        storeCurrency: data?.store_currency || (tenantRecord?.currency === 'PKR' ? 'Rs.' : '$'),
+        businessName,
+        timezone: data?.timezone || 'UTC',
+        workingHours: data?.working_hours || '9:00 AM - 5:00 PM',
+        botMode: data?.bot_mode || 'both',
+        maxFollowUps: data?.max_follow_ups || 7,
+        followUps: data?.follow_ups || DEFAULT_CONFIG.followUps
       };
     } catch (e) {
       return DEFAULT_CONFIG;
@@ -967,7 +976,21 @@ export class DB {
     if (!supabase) return false;
     try {
       const { upsertTenantToSupabase } = await import('./supabase');
-      const results = await Promise.all(tenants.map(t => upsertTenantToSupabase(t)));
+      const results = await Promise.all(tenants.map(async (t) => {
+        const tenantOk = await upsertTenantToSupabase(t);
+        try {
+          await supabase.from('tenant_configs').upsert({
+            tenant_id: t.id,
+            system_prompt: t.systemPrompt || '',
+            product_info: t.knowledgeBase || t.productKnowledgeBase || '',
+            products: t.products || [],
+            business_name: t.businessName || t.name || 'My Business'
+          }, { onConflict: 'tenant_id' });
+        } catch (e) {
+          console.error('[DB/Supabase] Sync tenant_configs error:', e);
+        }
+        return tenantOk;
+      }));
       return results.every(Boolean);
     } catch (err) {
       console.error('[DB/Supabase] saveTenantsAsync error:', err);

@@ -20,7 +20,10 @@ export async function GET() {
       const defaultTenant = tenants[0] || null;
       return NextResponse.json({
         authenticated: true,
-        user: session,
+        user: {
+          ...session,
+          businessName: defaultTenant?.businessName || defaultTenant?.name || "HazelWhat Workspace"
+        },
         tenant: defaultTenant
       });
     }

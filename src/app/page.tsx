@@ -1735,7 +1735,7 @@ export default function DashboardPage() {
             <div className="flex flex-col min-w-0">
               <span className="leading-tight">HazelWhat</span>
               <span className="text-[11px] font-extrabold text-purple-700 truncate max-w-[170px] bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200/80 mt-1">
-                For: {sessionData?.businessName || sessionData?.name || 'Client Panel'}
+                For: {sessionData?.businessName || config?.businessName || (sessionData?.name && !sessionData.name.includes("Super Admin") ? sessionData.name : "Workspace")}
               </span>
             </div>
           </div>
