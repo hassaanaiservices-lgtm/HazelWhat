@@ -19,13 +19,31 @@ export default function DashboardPage() {
           return;
         }
         setSessionData(data.user);
-        if (data.tenant) {
-          setConfig((prev: any) => ({
-            ...prev,
-            systemPrompt: data.tenant.systemPrompt || prev.systemPrompt,
-            productInfo: data.tenant.knowledgeBase || prev.productInfo,
-            products: data.tenant.products || prev.products || []
-          }));
+
+        // Fetch active tenant config from /api/whatsapp/config
+        try {
+          const configRes = await fetch('/api/whatsapp/config');
+          if (configRes.ok) {
+            const configData = await configRes.json();
+            if (configData.success && configData.config) {
+              setConfig((prev: any) => ({
+                ...prev,
+                ...configData.config,
+                systemPrompt: configData.config.systemPrompt || (data.tenant?.systemPrompt) || prev.systemPrompt,
+                productInfo: configData.config.productInfo || (data.tenant?.knowledgeBase) || prev.productInfo,
+                products: (configData.config.products && configData.config.products.length > 0) ? configData.config.products : (data.tenant?.products || prev.products || [])
+              }));
+            }
+          }
+        } catch (cfgErr) {
+          if (data.tenant) {
+            setConfig((prev: any) => ({
+              ...prev,
+              systemPrompt: data.tenant.systemPrompt || prev.systemPrompt,
+              productInfo: data.tenant.knowledgeBase || prev.productInfo,
+              products: data.tenant.products || prev.products || []
+            }));
+          }
         }
       } catch (err) {
         window.location.href = '/login';
