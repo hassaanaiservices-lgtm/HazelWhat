@@ -1735,7 +1735,7 @@ export default function DashboardPage() {
             <div className="flex flex-col min-w-0">
               <span className="leading-tight">HazelWhat</span>
               <span className="text-[11px] font-extrabold text-purple-700 truncate max-w-[170px] bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200/80 mt-1">
-                For: {sessionData?.businessName || sessionData?.name || (sessionData?.role === 'admin' ? 'Super Admin' : 'Client Panel')}
+                For: {sessionData?.businessName || sessionData?.name || 'Client Panel'}
               </span>
             </div>
           </div>
@@ -1788,18 +1788,6 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* Super Admin Section */}
-        {sessionData?.role === 'admin' && (
-          <>
-            <div className="px-6 mb-2 text-[11px] font-bold text-purple-600 uppercase tracking-wider">Super Admin</div>
-            <div className="flex flex-col gap-1 px-4 mb-6">
-              <a href="/admin" className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-extrabold bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200/80 transition-all shadow-xs">
-                <ShieldCheck className="h-4 w-4 text-purple-600 shrink-0" /> Admin Console
-                <ExternalLink className="h-3.5 w-3.5 ml-auto text-purple-500 shrink-0" />
-              </a>
-            </div>
-          </>
-        )}
 
         {/* Bottom User Footer */}
         <div className="mt-auto px-5 pt-4 border-t border-slate-100">
@@ -1810,7 +1798,7 @@ export default function DashboardPage() {
             </div>
             <div className="flex-1 min-w-0">
               <h4 className="text-xs font-extrabold text-slate-900 truncate">{sessionData?.businessName || sessionData?.name || 'Hassaan'}</h4>
-              <p className="text-[10px] text-purple-600 font-semibold">{sessionData?.role === 'admin' ? 'Super Admin' : 'Client Account'}</p>
+              <p className="text-[10px] text-purple-600 font-semibold">Client Account</p>
             </div>
           </div>
         </div>
