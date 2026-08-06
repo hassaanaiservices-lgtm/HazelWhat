@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { DB } from "@/lib/db";
 
@@ -16,7 +16,7 @@ export async function GET() {
     const session = JSON.parse(sessionCookie.value);
 
     if (session.role === "admin") {
-      const tenants = DB.getTenants();
+      const tenants = await DB.getTenants();
       const defaultTenant = tenants[0] || null;
       return NextResponse.json({
         authenticated: true,
@@ -25,22 +25,8 @@ export async function GET() {
       });
     }
 
-    // Fetch fresh tenant data for client
-    let tenants = DB.getTenants();
-    let tenant = tenants.find(t => t.id === session.tenantId);
-
-    if (!tenant && session.tenantId && session.tenantId !== "admin") {
-      try {
-        const { fetchTenantsFromSupabase } = await import("@/lib/supabase");
-        const supabaseTenants = await fetchTenantsFromSupabase();
-        if (supabaseTenants && supabaseTenants.length > 0) {
-          DB.saveTenants(supabaseTenants);
-          tenant = supabaseTenants.find(t => t.id === session.tenantId);
-        }
-      } catch (e) {
-        console.error('[Me API] Error loading tenant from Supabase:', e);
-      }
-    }
+    // Fetch fresh tenant data for client directly from Supabase
+    let tenant = await DB.getTenantById(session.tenantId);
 
     if (!tenant) {
       return NextResponse.json({ authenticated: false, error: "Tenant not found" }, { status: 404 });

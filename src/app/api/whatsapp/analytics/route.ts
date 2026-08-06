@@ -1,12 +1,23 @@
 import { NextResponse } from 'next/server';
 import { DB } from '@/lib/db';
+import { cookies } from "next/headers";
 
 export async function GET() {
   try {
-    const config = DB.getConfig();
-    const chats = DB.getAllChats();
-    const orders = DB.getOrders();
-    const appointments = DB.getAllAppointments();
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("hazel_session");
+    let tenantId: string | undefined;
+    if (sessionCookie && sessionCookie.value) {
+      try {
+        const session = JSON.parse(sessionCookie.value);
+        tenantId = session.role === 'admin' ? undefined : session.tenantId;
+      } catch (e) {}
+    }
+
+    const config = await DB.getConfig(tenantId);
+    const chats = await DB.getAllChats(tenantId);
+    const orders = await DB.getOrders(tenantId);
+    const appointments = await DB.getAllAppointments(tenantId);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -78,24 +89,20 @@ export async function GET() {
       .map(entry => ({ name: entry[0], count: entry[1] }));
 
     // Compute Follow-ups sent:
-    // System A (Scheduled Follow-ups sent)
-    const scheduledFollowUps = DB.getAllScheduledFollowUps();
+    const scheduledFollowUps = await DB.getAllScheduledFollowUps(tenantId);
     const sentScheduledCount = scheduledFollowUps.filter(f => f.status === 'sent').length;
 
-    // System B (Sequence Follow-ups)
-    const allCustomers = DB.getAllCustomers();
+    const allCustomers = await DB.getAllCustomers(tenantId);
     const sentSequenceCount = allCustomers.reduce((sum, c) => sum + (c.followUpLevel || 0), 0);
 
-    // System C (Abandoned Order Recovery Follow-ups)
     const sentRecoveryCount = orders.reduce((sum, o) => sum + (o.recoveryStage || 0), 0);
 
     const totalFollowUps = sentScheduledCount + sentSequenceCount + sentRecoveryCount;
 
-    // Sales Completed (status confirmed, delivered, processing, shipped)
+    // Sales Completed
     const successfulOrders = orders.filter(o => o.status === 'confirmed' || o.status === 'delivered' || o.status === 'processing' || o.status === 'shipped');
     const totalSalesCount = successfulOrders.length;
 
-    // Total Sales Revenue
     let totalSalesRevenue = 0;
     successfulOrders.forEach(o => {
       if (o.price) {

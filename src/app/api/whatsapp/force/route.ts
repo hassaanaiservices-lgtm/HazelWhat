@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WhatsAppManager } from "@/lib/whatsapp";
 import { DB } from "@/lib/db";
-import { generateContextualFollowUp, generateScheduledFollowUp } from "@/lib/ai-handler";
+import { cookies } from "next/headers";
 
 export async function GET() {
   const logs: string[] = [];
@@ -11,13 +11,23 @@ export async function GET() {
   };
 
   try {
-    const config = DB.getConfig();
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("hazel_session");
+    let tenantId: string | undefined;
+    if (sessionCookie && sessionCookie.value) {
+      try {
+        const session = JSON.parse(sessionCookie.value);
+        tenantId = session.role === 'admin' ? undefined : session.tenantId;
+      } catch (e) {}
+    }
+
+    const config = await DB.getConfig(tenantId);
     const now = Date.now();
     
     log(`\n--- [Forced Tick] System B Follow-up Check @ ${new Date(now).toLocaleTimeString()} ---`);
 
-    const chats = DB.getAllChats();
-    const stillPendingSystemA = DB.getPendingFollowUps();
+    const chats = await DB.getAllChats(tenantId);
+    const stillPendingSystemA = await DB.getPendingFollowUps(tenantId);
 
     for (const phone in chats) {
       if (phone !== "923236349759") continue;
@@ -28,7 +38,7 @@ export async function GET() {
       const lastMessage = messages[messages.length - 1];
       const elapsedMs = now - new Date(lastMessage.timestamp).getTime();
       const elapsedMinutes = (elapsedMs / (1000 * 60)).toFixed(2);
-      const customer = DB.getCustomer(phone);
+      const customer = await DB.getCustomer(phone, tenantId);
       const followUpLevel = customer?.followUpLevel || 0;
       const nextFollowUp = config.followUps?.[followUpLevel];
       const requiredMinutes = nextFollowUp?.delayMinutes || 0;
@@ -63,18 +73,18 @@ export async function GET() {
         log(`[System B Follow-up] Evaluating Sequence Level ${followUpLevel + 1} for ${phone}`);
         try {
           const { shouldSendFollowUp, generateContextualFollowUp } = await import("@/lib/ai-handler");
-          const evaluation = await shouldSendFollowUp(phone);
+          const evaluation = await shouldSendFollowUp(phone, undefined, tenantId);
           
           if (!evaluation.shouldFollowUp) {
             log(`  -> Skipping ${phone}: Deal closed/resolved (${evaluation.reason})`);
-            DB.updateCustomer(phone, { leadStatus: "cold", pipelineStage: "completed" });
+            await DB.updateCustomer(phone, { leadStatus: "cold", pipelineStage: "completed" }, tenantId);
             continue;
           }
 
-          const contextualMessage = await generateContextualFollowUp(phone, nextFollowUp.message);
+          const contextualMessage = await generateContextualFollowUp(phone, nextFollowUp.message, tenantId);
           const sentMsg = await WhatsAppManager.sendMessage(phone, contextualMessage);
-          DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage });
-          DB.updateCustomer(phone, { followUpLevel: followUpLevel + 1 });
+          await DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage }, tenantId);
+          await DB.updateCustomer(phone, { followUpLevel: followUpLevel + 1 }, tenantId);
           log(`  -> Success! Message sent.`);
         } catch (err: any) {
           log(`  -> Error sending message: ${err.message}`);

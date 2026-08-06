@@ -65,7 +65,7 @@ function getApiKey(config: any): string {
   return "";
 }
 
-function getDeepgramSettings(config: any): { apiKey: string; voice: string } {
+async function getDeepgramSettings(config: any): Promise<{ apiKey: string; voice: string }> {
   let apiKey = "";
   let voice = "aura-asteria-en";
 
@@ -77,7 +77,7 @@ function getDeepgramSettings(config: any): { apiKey: string; voice: string } {
 
   // Priority 2: Check tenant records for a valid custom Deepgram key (ignoring mock placeholders like dg_live_...)
   try {
-    const tenants = DB.getTenants() || [];
+    const tenants = (await DB.getTenants()) || [];
     for (const t of tenants) {
       if (t.deepgramVoice) voice = t.deepgramVoice;
       if (t.deepgramApiKey && t.deepgramApiKey.trim()) {
@@ -564,8 +564,8 @@ export async function handleWhatsAppMessage(msg: any) {
           const reply = `Here is the direct link to view this product on our website: \n${link}`;
           await WhatsAppManager.sendMessage(from, reply);
           
-          DB.addChatMessage(from, { role: "user", content: `[Clicked View Product]` });
-          DB.addChatMessage(from, { role: "assistant", content: reply });
+          await DB.addChatMessage(from, { role: "user", content: `[Clicked View Product]` });
+          await DB.addChatMessage(from, { role: "assistant", content: reply });
           return;
         }
         else if (params.id && params.id.startsWith("order_")) {
@@ -577,8 +577,8 @@ export async function handleWhatsAppMessage(msg: any) {
           const reply = `Great choice! To place an order for *${productName}*, I just need a few details:\n\n1. What size/color would you like?\n2. What is your delivery address?\n3. Please provide a contact phone number.\n\nYou can type your answers below!`;
           await WhatsAppManager.sendMessage(from, reply);
           
-          DB.addChatMessage(from, { role: "user", content: `[I want to order: ${productName}]` });
-          DB.addChatMessage(from, { role: "assistant", content: reply });
+          await DB.addChatMessage(from, { role: "user", content: `[I want to order: ${productName}]` });
+          await DB.addChatMessage(from, { role: "assistant", content: reply });
           return; 
         }
       } catch (e) {
@@ -615,8 +615,8 @@ export async function handleWhatsAppMessage(msg: any) {
       }
     }
 
-    const config = DB.getConfig();
-    const { apiKey: deepgramApiKey, voice: deepgramVoice } = getDeepgramSettings(config);
+    const config = await DB.getConfig();
+    const { apiKey: deepgramApiKey, voice: deepgramVoice } = await getDeepgramSettings(config);
 
     let voiceTranscript = "";
     if (hasAudio && audioBuffer) {
@@ -654,11 +654,11 @@ export async function handleWhatsAppMessage(msg: any) {
 
     if (isOptOut) {
       console.log(`[Opt-Out] Customer ${from} requested opt-out with text: "${content}"`);
-      const existingCustomer = DB.getCustomer(from);
+      const existingCustomer = await DB.getCustomer(from);
       const existingTags = existingCustomer?.tags || [];
       const updatedTags = Array.from(new Set([...existingTags.filter(t => t !== "revival-sent"), "opted-out"]));
 
-      DB.updateCustomer(from, {
+      await DB.updateCustomer(from, {
         isOptedOut: true,
         optedOutAt: new Date().toISOString(),
         aiEnabled: false,
@@ -666,54 +666,52 @@ export async function handleWhatsAppMessage(msg: any) {
       });
 
       // Update active campaign if lead was part of it
-      const activeCampaign = DB.getActiveCampaign();
+      const activeCampaign = await DB.getActiveCampaign();
       if (activeCampaign) {
         const optedOutList = Array.from(new Set([...(activeCampaign.optedOutPhones || []), from]));
         const progressMap = activeCampaign.leadProgress || {};
         if (progressMap[from]) {
           progressMap[from].status = "opted_out";
         }
-        DB.updateRevivalCampaign(activeCampaign.id, {
+        await DB.updateRevivalCampaign(activeCampaign.id, {
           optedOutPhones: optedOutList,
           leadProgress: progressMap
         });
       }
 
-      DB.addChatMessage(from, { role: "user", content });
+      await DB.addChatMessage(from, { role: "user", content });
       await WhatsAppManager.sendMessage(from, "You have been unsubscribed from promotional updates. Reply START to opt back in.");
-      DB.addChatMessage(from, { role: "assistant", content: "You have been unsubscribed from promotional updates. Reply START to opt back in." });
+      await DB.addChatMessage(from, { role: "assistant", content: "You have been unsubscribed from promotional updates. Reply START to opt back in." });
       return;
     }
 
     if (hasAudio) {
       const displayContent = voiceTranscript || content || "Hi! I sent a voice note inquiring about your products, pricing, and availability.";
       const userDisplay = `🎤 [Voice Note]: "${displayContent}"`;
-      DB.addChatMessage(from, { 
+      await DB.addChatMessage(from, { 
         role: "user", 
         content: userDisplay,
         mediaUrl: base64Audio ? `data:${audioMime};base64,${base64Audio}` : undefined,
         mediaType: audioMime
       });
     } else {
-      DB.addChatMessage(from, { role: "user", content: hasImage ? `[Image] ${content}` : content });
+      await DB.addChatMessage(from, { role: "user", content: hasImage ? `[Image] ${content}` : content });
     }
     
-    const existingCustomer = DB.getCustomer(from);
+    const existingCustomer = await DB.getCustomer(from);
     const currentStage = existingCustomer?.pipelineStage || "new";
     
     let updatedTags = existingCustomer?.tags || [];
-    // Whenever a user sends a new message, re-engage them into active pipeline & restart follow-up loop
     let nextStage: "cold" | "new" | "qualified" | "warm" | "completed" | undefined = 
       (currentStage === "completed" || existingCustomer?.leadStatus === "cold") ? "warm" : currentStage;
     
-    // Check if customer was in revival flow
-    const activeCampaign = DB.getActiveCampaign();
+    const activeCampaign = await DB.getActiveCampaign();
     if (updatedTags.includes("revival-sent") || (activeCampaign && activeCampaign.targetPhones?.includes(from))) {
       updatedTags = updatedTags.filter(t => t !== "revival-sent");
       if (!updatedTags.includes("revival-replied")) {
         updatedTags.push("revival-replied");
       }
-      nextStage = "warm"; // Move revived customer to warm stage in CRM pipeline
+      nextStage = "warm";
 
       if (activeCampaign) {
         const repliedList = Array.from(new Set([...(activeCampaign.repliedPhones || []), from]));
@@ -721,14 +719,14 @@ export async function handleWhatsAppMessage(msg: any) {
         if (progressMap[from]) {
           progressMap[from].status = "replied";
         }
-        DB.updateRevivalCampaign(activeCampaign.id, {
+        await DB.updateRevivalCampaign(activeCampaign.id, {
           repliedPhones: repliedList,
           leadProgress: progressMap
         });
       }
     }
 
-    DB.updateCustomer(from, { 
+    await DB.updateCustomer(from, { 
       jid: msg.key.remoteJid,
       isLead: true,
       leadCreatedAt: existingCustomer?.leadCreatedAt || new Date().toISOString(),
@@ -739,7 +737,7 @@ export async function handleWhatsAppMessage(msg: any) {
       tags: updatedTags,
       ...(msg.pushName ? { name: msg.pushName } : {})
     });
-    const customer = DB.getCustomer(from);
+    const customer = await DB.getCustomer(from);
 
     const globalAiEnabled = config.globalAiEnabled !== false;
     const chatAiEnabled = customer?.aiEnabled;
@@ -757,7 +755,7 @@ export async function handleWhatsAppMessage(msg: any) {
     if (matchedKeyword) {
       console.log(`[AI Handler] Keyword matched: ${matchedKeyword.keyword}`);
       const sentMsg = await WhatsAppManager.sendMessage(from, matchedKeyword.reply);
-      DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: matchedKeyword.reply });
+      await DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: matchedKeyword.reply });
       return;
     }
 
@@ -773,17 +771,17 @@ export async function handleWhatsAppMessage(msg: any) {
       console.error("[AI Handler] No API key is configured.");
       const fallback = "I'm currently experiencing a high volume of requests. A human agent will be with you shortly!";
       const sentMsg = await WhatsAppManager.sendMessage(from, fallback);
-      DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: fallback });
+      await DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: fallback });
       
       const diagnostics = `[DIAGNOSTIC - KEY ERROR] The bot could not respond because no API keys were loaded.\n- config.apiKey: ${config.apiKey ? "Present" : "Empty"}\n- process.env.DEEPSEEK_API_KEY: ${process.env.DEEPSEEK_API_KEY ? "Present" : "Empty"}\n- process.env.API_KEY: ${process.env.API_KEY ? "Present" : "Empty"}\n- process.env.OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? "Present" : "Empty"}\n- process.env.ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? "Present" : "Empty"}\n- process.env.OPENROUTER_API_KEY: ${process.env.OPENROUTER_API_KEY ? "Present" : "Empty"}\n- process.env["Api key"]: ${process.env["Api key"] ? "Present" : "Empty"}`;
-      DB.addChatMessage(from, { role: "assistant", content: diagnostics });
+      await DB.addChatMessage(from, { role: "assistant", content: diagnostics });
       return;
     }
 
     let aiReply = "I'm sorry, I didn't quite catch that. Could you rephrase?";
     
     // Resolve active Tenant from multi-tenant database by phone matching or active status
-    const tenants = DB.getTenants() || [];
+    const tenants = (await DB.getTenants()) || [];
     const cleanFromDigits = (from || "").replace(/[^\d]/g, "");
     let activeTenant = tenants.find(t => {
       if (!t.phoneNumber) return false;
@@ -871,7 +869,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
       }
     }
 
-    const history = DB.getChats(from);
+    const history = await DB.getChats(from, activeTenant?.id);
     // Filter out system messages and sanitize past assistant refusal messages so LLM never gets primed by past errors!
     let recentHistory = history
       .filter((m: any) => m.role === 'user' || m.role === 'assistant')
@@ -1031,7 +1029,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
           let toolResult = "";
 
           if (toolCall.name === "checkAvailability") {
-            const booked = DB.getAppointmentsByDate(args.date);
+            const booked = await DB.getAppointmentsByDate(args.date, customer?.tenantId);
             const bookedTimes = booked.map(a => a.time);
             const allHours = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
             const available = allHours.filter(h => !bookedTimes.includes(h));
@@ -1039,12 +1037,12 @@ Keep their history in mind and treat them like a valued returning customer.`;
           } 
           else if (toolCall.name === "bookAppointment") {
             const userName = args.name || customer?.name || from;
-            const success = DB.bookAppointment(from, userName, args.service, args.date, args.time, args.notes);
-            DB.updateCustomer(from, { pipelineStage: "completed", name: userName });
+            const success = await DB.bookAppointment(from, userName, args.service, args.date, args.time, args.notes, customer?.tenantId);
+            await DB.updateCustomer(from, { pipelineStage: "completed", name: userName }, customer?.tenantId);
             toolResult = JSON.stringify({ success: true, message: "Appointment/Call booked successfully and recorded in dashboard." });
           }
           else if (toolCall.name === "cancelAppointment") {
-            const success = DB.cancelAppointment(from, args.date, args.time);
+            const success = await DB.cancelAppointment(from, args.date, args.time, customer?.tenantId);
             toolResult = JSON.stringify({ success, message: success ? "Appointment cancelled successfully." : "No such appointment found to cancel." });
           }
           else if (toolCall.name === "send_product_card") {
@@ -1076,8 +1074,8 @@ Keep their history in mind and treat them like a valued returning customer.`;
                 customerName: customer?.name || from,
                 notes: args.notes
               };
-              DB.addOrder(from, orderData);
-              DB.updateCustomer(from, { pipelineStage: "completed" });
+              await DB.addOrder(from, orderData, customer?.tenantId);
+              await DB.updateCustomer(from, { pipelineStage: "completed" }, customer?.tenantId);
               toolResult = JSON.stringify({ success: true, message: "Order placed and saved to database successfully. You may now confirm the final order details to the user." });
             } catch (err: any) {
               console.error("[AI Handler] place_order error:", err);
@@ -1086,8 +1084,8 @@ Keep their history in mind and treat them like a valued returning customer.`;
           }
           else if (toolCall.name === "update_customer_profile") {
             try {
-              const customer = DB.getCustomer(from);
-              const currentTags = customer?.tags || [];
+              const customerRec = await DB.getCustomer(from, customer?.tenantId);
+              const currentTags = customerRec?.tags || [];
               let newTags = [...currentTags];
 
               if (args.tagsToAdd && Array.isArray(args.tagsToAdd)) {
@@ -1107,7 +1105,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
               if (args.name) updates.name = args.name;
               if (args.stage) updates.pipelineStage = args.stage;
 
-              DB.updateCustomer(from, updates);
+              await DB.updateCustomer(from, updates, customer?.tenantId);
               toolResult = JSON.stringify({ success: true, message: "Customer profile updated successfully." });
             } catch (err: any) {
               console.error("[AI Handler] update_customer_profile error:", err);
@@ -1116,15 +1114,15 @@ Keep their history in mind and treat them like a valued returning customer.`;
           }
           else if (toolCall.name === "schedule_followup") {
             try {
-              DB.cancelPendingFollowUps(from);
-              DB.addScheduledFollowUp({
+              await DB.cancelPendingFollowUps(from, customer?.tenantId);
+              await DB.addScheduledFollowUp({
                 id: Math.random().toString(36).substring(2, 9),
                 phone: from,
                 sendAt: args.send_at,
                 context: args.message_context,
                 status: "pending",
                 createdAt: new Date().toISOString()
-              });
+              }, customer?.tenantId);
               toolResult = JSON.stringify({ success: true, message: "Follow-up scheduled successfully in the database." });
             } catch (err: any) {
               console.error("[AI Handler] schedule_followup error:", err);
@@ -1244,21 +1242,18 @@ Keep their history in mind and treat them like a valued returning customer.`;
   }
 }
 
-export async function shouldSendFollowUp(phone: string): Promise<{ shouldFollowUp: boolean; reason: string }> {
-  const config = DB.getConfig();
+export async function shouldSendFollowUp(phone: string, followUpPrompt?: string, tenantId?: string): Promise<{ shouldFollowUp: boolean; reason: string }> {
+  const config = await DB.getConfig(tenantId);
   const apiKey = getApiKey(config);
 
-  const history = DB.getChats(phone);
-  const customer = DB.getCustomer(phone);
-  const orders = DB.getOrders().filter((o: any) => o.phone === phone);
-  const appointments = DB.getAllAppointments().filter((a: any) => a.phone === phone);
+  const history = await DB.getChats(phone, tenantId);
+  const customer = await DB.getCustomer(phone, tenantId);
+  const orders = (await DB.getOrders(tenantId)).filter((o: any) => o.phone === phone);
 
-  // Quick state checks:
   if (customer?.isOptedOut) {
     return { shouldFollowUp: false, reason: "Customer explicitly opted out." };
   }
 
-  // Check if latest order is completed/paid, and if user sent new messages after it
   const userMessages = history.filter((m: any) => m.role === 'user');
   const lastUserMsgTime = userMessages.length > 0 ? new Date(userMessages[userMessages.length - 1].timestamp).getTime() : 0;
 
@@ -1268,7 +1263,6 @@ export async function shouldSendFollowUp(phone: string): Promise<{ shouldFollowU
 
   if (completedOrder) {
     const orderTime = new Date(completedOrder.timestamp).getTime();
-    // If no new user messages after completed order, then deal is complete
     if (lastUserMsgTime <= orderTime) {
       return { shouldFollowUp: false, reason: `Deal completed: Customer confirmed order #${completedOrder.id}` };
     }
@@ -1319,15 +1313,15 @@ Respond STRICTLY with JSON only in this exact format:
   }
 }
 
-export async function generateContextualFollowUp(phone: string, followUpPrompt?: string): Promise<string> {
-  const config = DB.getConfig();
+export async function generateContextualFollowUp(phone: string, followUpPrompt?: string, tenantId?: string): Promise<string> {
+  const config = await DB.getConfig(tenantId);
   const apiKey = getApiKey(config);
 
   if (!apiKey) {
     return (followUpPrompt && followUpPrompt.trim()) || "Hi! Just checking in to see if you have any questions or if you'd like to proceed?";
   }
 
-  const history = DB.getChats(phone);
+  const history = await DB.getChats(phone, tenantId);
   const recentHistory = history.filter((m: any) => m.role === 'user' || m.role === 'assistant').slice(-6).map((m: any) => ({ role: m.role, content: m.content }));
 
   let systemPrompt = `You are an expert Booking and Sales AI Assistant for ${config.businessName || 'our business'}.\nYour goal is to politely re-engage the customer based on their recent chat history. Keep it natural, friendly, and concise (1-3 sentences).`;
@@ -1353,15 +1347,15 @@ export async function generateContextualFollowUp(phone: string, followUpPrompt?:
   }
 }
 
-export async function generateScheduledFollowUp(phone: string, contextNote: string): Promise<string> {
-  const config = DB.getConfig();
+export async function generateScheduledFollowUp(phone: string, contextNote: string, tenantId?: string): Promise<string> {
+  const config = await DB.getConfig(tenantId);
   const apiKey = getApiKey(config);
 
   if (!apiKey) {
     return `Hi! Following up on what we discussed: ${contextNote}`;
   }
 
-  const history = DB.getChats(phone);
+  const history = await DB.getChats(phone, tenantId);
   const recentHistory = history.filter((m: any) => m.role === 'user' || m.role === 'assistant').slice(-5).map((m: any) => ({ role: m.role, content: m.content }));
 
   let systemPrompt = `You are an expert Booking and Sales AI Assistant. You previously promised the user you would follow up with them later. It is now time to send that follow-up.`;

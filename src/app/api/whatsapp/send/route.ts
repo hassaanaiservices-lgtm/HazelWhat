@@ -1,9 +1,20 @@
 import { NextResponse } from "next/server";
 import { WhatsAppManager } from "@/lib/whatsapp";
 import { DB } from "@/lib/db";
+import { cookies } from "next/headers";
 
 export async function POST(req: Request) {
   try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("hazel_session");
+    let tenantId: string | undefined;
+    if (sessionCookie && sessionCookie.value) {
+      try {
+        const session = JSON.parse(sessionCookie.value);
+        tenantId = session.role === 'admin' ? undefined : session.tenantId;
+      } catch (e) {}
+    }
+
     const { to, content, mediaBase64, mimetype, fileName, isVoiceNote } = await req.json();
 
     if (!to) {
@@ -13,21 +24,19 @@ export async function POST(req: Request) {
     let sentMsg;
 
     if (mediaBase64) {
-      // Decode base64 to buffer
       const base64Data = mediaBase64.replace(/^data:[a-zA-Z0-9/+-]+;base64,/, "");
       const buffer = Buffer.from(base64Data, "base64");
       
       sentMsg = await WhatsAppManager.sendMedia(to, buffer, mimetype, fileName, undefined, isVoiceNote);
       
-      // Save to database
       const displayContent = isVoiceNote ? "🎤 [Voice Note]" : `📎 [Attachment] ${fileName || ""}`;
-      DB.addChatMessage(to, { id: sentMsg?.key?.id, role: "assistant", content: displayContent });
+      await DB.addChatMessage(to, { id: sentMsg?.key?.id, role: "assistant", content: displayContent }, tenantId);
     } else {
       if (!content) {
         return NextResponse.json({ success: false, error: "Missing 'content'" }, { status: 400 });
       }
       sentMsg = await WhatsAppManager.sendMessage(to, content);
-      DB.addChatMessage(to, { id: sentMsg?.key?.id, role: "assistant", content });
+      await DB.addChatMessage(to, { id: sentMsg?.key?.id, role: "assistant", content }, tenantId);
     }
 
     return NextResponse.json({ success: true });

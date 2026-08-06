@@ -1,15 +1,28 @@
 import { NextResponse } from "next/server";
 import { DB, PromotionLog } from "@/lib/db";
 import { WhatsAppManager } from "@/lib/whatsapp";
+import { cookies } from "next/headers";
 import fs from "fs";
 import path from "path";
 
-// Helper for delaying between batches
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function getTenantIdFromSession(): Promise<string | undefined> {
+  try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("hazel_session");
+    if (sessionCookie && sessionCookie.value) {
+      const session = JSON.parse(sessionCookie.value);
+      return session.role === 'admin' ? undefined : session.tenantId;
+    }
+  } catch (e) {}
+  return undefined;
+}
 
 export async function GET() {
   try {
-    const logs = DB.getPromotionLogs();
+    const tenantId = await getTenantIdFromSession();
+    const logs = await DB.getPromotionLogs(tenantId);
     return NextResponse.json({ success: true, promotions: logs });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -18,6 +31,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const tenantId = await getTenantIdFromSession();
     const body = await req.json();
     const { message, audience, mediaBase64, mimetype, fileName } = body;
 
@@ -36,17 +50,18 @@ export async function POST(req: Request) {
     let targetPhones: string[] = [];
 
     if (audience === "all") {
-      const customers = DB.getAllCustomers();
-      const chatPhones = Object.keys(DB.getAllChats());
+      const customers = await DB.getAllCustomers(tenantId);
+      const chats = await DB.getAllChats(tenantId);
+      const chatPhones = Object.keys(chats);
       targetPhones = Array.from(new Set([...customers.map(c => c.phone), ...chatPhones]));
     } else if (audience === "booked") {
-      const appointments = DB.getAllAppointments();
+      const appointments = await DB.getAllAppointments(tenantId);
       targetPhones = Array.from(new Set(appointments.map(a => a.phone)));
     } else if (audience === "hot") {
-      const customers = DB.getAllCustomers();
+      const customers = await DB.getAllCustomers(tenantId);
       targetPhones = Array.from(new Set(customers.filter(c => c.leadStatus === "hot" || c.pipelineStage === "warm").map(c => c.phone)));
     } else if (audience === "cold") {
-      const customers = DB.getAllCustomers();
+      const customers = await DB.getAllCustomers(tenantId);
       targetPhones = Array.from(new Set(customers.filter(c => c.leadStatus === "cold" || c.pipelineStage === "cold").map(c => c.phone)));
     } else {
       return NextResponse.json({ success: false, error: "Invalid audience type" }, { status: 400 });
@@ -60,7 +75,6 @@ export async function POST(req: Request) {
     let failureCount = 0;
     const failures: { phone: string; error: string }[] = [];
 
-    // Rate Limiting: Process in batches of 20 with 2 seconds delay
     const BATCH_SIZE = 20;
     const BATCH_DELAY_MS = 2000;
     
@@ -69,8 +83,6 @@ export async function POST(req: Request) {
 
     if (mediaBase64) {
       buffer = Buffer.from(mediaBase64.split(",")[1] || mediaBase64, "base64");
-      
-      // Save file to public/uploads
       const uploadsDir = path.join(process.cwd(), "public", "uploads");
       if (!fs.existsSync(uploadsDir)) {
         fs.mkdirSync(uploadsDir, { recursive: true });
@@ -92,15 +104,14 @@ export async function POST(req: Request) {
             await WhatsAppManager.sendMessage(phone, message);
           }
           
-          // Log to DB so it appears in chat UI
-          DB.addChatMessage(phone, {
+          await DB.addChatMessage(phone, {
             id: Math.random().toString(36).substring(7),
             role: "assistant",
             content: message || '',
-            status: 1, // Sent
+            status: 1,
             mediaUrl,
             mediaType: mimetype
-          });
+          }, tenantId);
 
           successCount++;
         } catch (e: any) {
@@ -111,7 +122,6 @@ export async function POST(req: Request) {
 
       await Promise.all(batchPromises);
 
-      // Delay if there are more batches
       if (i + BATCH_SIZE < targetPhones.length) {
         await delay(BATCH_DELAY_MS);
       }
@@ -119,6 +129,7 @@ export async function POST(req: Request) {
 
     const log: PromotionLog = {
       id: Math.random().toString(36).substring(7),
+      tenantId,
       timestamp: new Date().toISOString(),
       audience,
       message: buffer ? `[Media Attached] ${message || ''}` : message,
@@ -126,7 +137,7 @@ export async function POST(req: Request) {
       failureCount
     };
 
-    DB.addPromotionLog(log);
+    await DB.addPromotionLog(log, tenantId);
 
     return NextResponse.json({ success: true, log, failures });
   } catch (error: any) {

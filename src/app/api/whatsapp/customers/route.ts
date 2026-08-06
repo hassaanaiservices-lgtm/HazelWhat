@@ -1,8 +1,19 @@
 import { NextResponse } from "next/server";
 import { DB } from "@/lib/db";
+import { cookies } from "next/headers";
 
 export async function POST(req: Request) {
   try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("hazel_session");
+    let tenantId: string | undefined;
+    if (sessionCookie && sessionCookie.value) {
+      try {
+        const session = JSON.parse(sessionCookie.value);
+        tenantId = session.role === 'admin' ? undefined : session.tenantId;
+      } catch (e) {}
+    }
+
     const { phone, aiEnabled, name, tags, pipelineStage, isLead, pipelineStageSetByUser } = await req.json();
 
     if (!phone) {
@@ -21,7 +32,7 @@ export async function POST(req: Request) {
     if (isLead !== undefined) updates.isLead = isLead;
     if (pipelineStageSetByUser !== undefined) updates.pipelineStageSetByUser = pipelineStageSetByUser;
 
-    DB.updateCustomer(phone, updates);
+    await DB.updateCustomer(phone, updates, tenantId);
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

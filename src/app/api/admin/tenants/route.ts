@@ -5,22 +5,8 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    let tenants = DB.getTenants();
-    const partners = DB.getPartners();
-
-    // Prioritize Supabase persistence whenever available to keep database in sync across restarts
-    try {
-      const { fetchTenantsFromSupabase } = await import("@/lib/supabase");
-      const supabaseTenants = await fetchTenantsFromSupabase();
-      if (supabaseTenants && supabaseTenants.length > 0) {
-        console.log(`[Tenants API] Loaded ${supabaseTenants.length} tenant(s) from Supabase persistence.`);
-        DB.saveTenants(supabaseTenants);
-        tenants = supabaseTenants;
-      }
-    } catch (e) {
-      console.error('[Tenants API] Error reading from Supabase:', e);
-    }
-
+    const tenants = await DB.getTenants();
+    const partners = await DB.getPartners();
     return NextResponse.json({ success: true, tenants, partners });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
@@ -31,7 +17,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     if (Array.isArray(body.tenants)) {
-      const existing = DB.getTenants() || [];
+      const existing = await DB.getTenants() || [];
       const mergedMap = new Map<string, any>();
       existing.forEach(t => mergedMap.set(t.id, t));
       body.tenants.forEach((t: any) => {
@@ -44,12 +30,12 @@ export async function POST(request: NextRequest) {
       await DB.saveTenantsAsync(mergedTenants);
     }
     if (Array.isArray(body.partners)) {
-      DB.savePartners(body.partners);
+      await DB.savePartners(body.partners);
     }
     return NextResponse.json({ 
       success: true, 
-      tenants: DB.getTenants(), 
-      partners: DB.getPartners() 
+      tenants: await DB.getTenants(), 
+      partners: await DB.getPartners() 
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

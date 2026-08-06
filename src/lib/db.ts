@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
+import { createClient } from '@supabase/supabase-js';
 import { Tenant, Partner } from './multitenant-store';
+import { ProductItem } from './scraper';
 
 export const DB_DIR = (function() {
   let dir = process.env.DATABASE_DIR || path.join(process.cwd(), '.data');
@@ -8,13 +10,8 @@ export const DB_DIR = (function() {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    // Test write permissions
-    const testFile = path.join(dir, '.write_test');
-    fs.writeFileSync(testFile, 'test');
-    fs.unlinkSync(testFile);
     return dir;
   } catch (err) {
-    console.error(`[DB] Directory ${dir} is not writable. Falling back to local .data. Error:`, err);
     const localDir = path.join(process.cwd(), '.data');
     if (!fs.existsSync(localDir)) {
       fs.mkdirSync(localDir, { recursive: true });
@@ -23,10 +20,14 @@ export const DB_DIR = (function() {
   }
 })();
 
-const DB_PATH = path.join(DB_DIR, 'db.json');
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+export const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 export interface ChatMessage {
   id?: string;
+  tenantId?: string;
   role: "system" | "user" | "assistant";
   content: string;
   timestamp: string;
@@ -34,8 +35,6 @@ export interface ChatMessage {
   mediaUrl?: string;
   mediaType?: string;
 }
-
-import { ProductItem } from './scraper';
 
 export interface FollowUpConfig {
   enabled: boolean;
@@ -96,6 +95,7 @@ export function formatProductsToCatalog(products: ProductItem[], currency: strin
 
 export interface Appointment {
   id: string;
+  tenantId?: string;
   phone: string;
   name: string;
   service: string;
@@ -107,6 +107,7 @@ export interface Appointment {
 
 export interface Customer {
   phone: string;
+  tenantId?: string;
   name: string;
   jid?: string;
   preferences?: string;
@@ -124,6 +125,7 @@ export interface Customer {
 
 export interface PromotionLog {
   id: string;
+  tenantId?: string;
   timestamp: string;
   audience: string;
   message: string;
@@ -133,6 +135,7 @@ export interface PromotionLog {
 
 export interface Order {
   id: string;
+  tenantId?: string;
   phone: string;
   customerName?: string;
   productName: string;
@@ -151,6 +154,7 @@ export interface Order {
 
 export interface ScheduledFollowUp {
   id: string;
+  tenantId?: string;
   phone: string;
   sendAt: string; // ISO Timestamp
   context: string;
@@ -181,6 +185,7 @@ export interface Phase2Settings {
 
 export interface RevivalCampaign {
   id: string;
+  tenantId?: string;
   name?: string;
   message: string;
   audience: string;
@@ -203,13 +208,9 @@ export interface RevivalCampaign {
   voiceBase64?: string;
   voiceMimetype?: string;
   messageType?: "text" | "media" | "voice";
-  
-  // Phase 2 Follow-up Settings & Lead progress tracking
   phase2Settings?: Phase2Settings;
   leadProgress?: Record<string, LeadRevivalProgress>;
-
   lastSentAt?: string;
-  // Optional legacy fields for backward compatibility
   delayMinSeconds?: number;
   delayMaxSeconds?: number;
   batchSize?: number;
@@ -249,349 +250,395 @@ const DEFAULT_CONFIG: Config = {
   ]
 };
 
-function initDb(): DbSchema {
-  if (!fs.existsSync(path.dirname(DB_PATH))) {
-    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  }
-  
-  if (!fs.existsSync(DB_PATH)) {
-    const defaultDb: DbSchema = { chats: {}, config: DEFAULT_CONFIG, appointments: [], customers: {}, promotions: [], orders: [], scheduledFollowUps: [], revivalCampaigns: [] };
-    fs.writeFileSync(DB_PATH, JSON.stringify(defaultDb, null, 2));
-    return defaultDb;
-  }
-
-  try {
-    const data = fs.readFileSync(DB_PATH, 'utf-8');
-    const parsed = JSON.parse(data);
-    return {
-      chats: parsed.chats || {},
-      config: parsed.config || DEFAULT_CONFIG,
-      appointments: parsed.appointments || [],
-      customers: parsed.customers || {},
-      promotions: parsed.promotions || [],
-      orders: parsed.orders || [],
-      scheduledFollowUps: parsed.scheduledFollowUps || [],
-      revivalCampaigns: parsed.revivalCampaigns || [],
-      tenants: parsed.tenants || [],
-      partners: parsed.partners || []
-    };
-  } catch (e) {
-    console.error("DB Corrupted, resetting to default");
-    return { chats: {}, config: DEFAULT_CONFIG, appointments: [], customers: {}, promotions: [], orders: [], scheduledFollowUps: [], revivalCampaigns: [], tenants: [], partners: [] };
-  }
-}
-
-function saveDb(data: DbSchema) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
-}
+const DEFAULT_TENANT_ID = 'admin';
 
 export class DB {
-  static getChats(phoneNumber: string): ChatMessage[] {
-    const db = initDb();
-    return db.chats[phoneNumber] || [];
-  }
-
-  static getAllChats(): Record<string, ChatMessage[]> {
-    return initDb().chats;
-  }
-
-  static addChatMessage(phoneNumber: string, message: Omit<ChatMessage, "timestamp"> & { timestamp?: string }) {
-    const db = initDb();
-    if (!db.chats[phoneNumber]) {
-      db.chats[phoneNumber] = [];
-    }
-    db.chats[phoneNumber].push({ 
-      ...message, 
-      timestamp: message.timestamp || new Date().toISOString() 
-    });
-    saveDb(db);
-  }
-
-  static getConfig(): Config {
-    return initDb().config;
-  }
-
-  static updateConfig(newConfig: Partial<Config>) {
-    const db = initDb();
-    db.config = { ...db.config, ...newConfig };
-    saveDb(db);
-  }
-
-  static updateMessageStatus(messageId: string, status: number) {
-    const db = initDb();
-    let updated = false;
-    for (const phone in db.chats) {
-      for (const msg of db.chats[phone]) {
-        if (msg.id === messageId) {
-          if ((msg.status || 0) < status) {
-            msg.status = status;
-            updated = true;
-          }
-        }
+  // --- CHATS ---
+  static async getChats(phoneNumber: string, tenantId?: string | null): Promise<ChatMessage[]> {
+    if (!supabase) return [];
+    try {
+      let query = supabase.from('chat_messages').select('*').eq('phone', phoneNumber);
+      if (tenantId && tenantId !== 'admin') {
+        query = query.eq('tenant_id', tenantId);
       }
+      const { data, error } = await query.order('timestamp', { ascending: true });
+      if (error || !data) return [];
+      return data.map((m: any) => ({
+        id: m.message_id || m.id,
+        tenantId: m.tenant_id,
+        role: m.role,
+        content: m.content || '',
+        timestamp: m.timestamp || m.created_at,
+        status: m.status || 1,
+        mediaUrl: m.media_url,
+        mediaType: m.media_type
+      }));
+    } catch (e) {
+      console.error('[DB/Supabase] getChats error:', e);
+      return [];
     }
-    if (updated) saveDb(db);
   }
 
-  static getUnreadMessageIds(phone: string): string[] {
-    const db = initDb();
-    const chats = db.chats[phone] || [];
-    return chats.filter(m => m.role === "user" && (m.status || 0) < 4).map(m => m.id as string).filter(Boolean);
-  }
-
-  static markMessagesAsReadInDb(phone: string, messageIds: string[]) {
-    const db = initDb();
-    let updated = false;
-    const chats = db.chats[phone] || [];
-    for (const msg of chats) {
-      if (messageIds.includes(msg.id as string) && (msg.status || 0) < 4) {
-        msg.status = 4;
-        updated = true;
+  static async getAllChats(tenantId?: string | null): Promise<Record<string, ChatMessage[]>> {
+    if (!supabase) return {};
+    try {
+      let query = supabase.from('chat_messages').select('*');
+      if (tenantId && tenantId !== 'admin') {
+        query = query.eq('tenant_id', tenantId);
       }
+      const { data, error } = await query.order('timestamp', { ascending: true });
+      if (error || !data) return {};
+
+      const result: Record<string, ChatMessage[]> = {};
+      data.forEach((m: any) => {
+        if (!result[m.phone]) result[m.phone] = [];
+        result[m.phone].push({
+          id: m.message_id || m.id,
+          tenantId: m.tenant_id,
+          role: m.role,
+          content: m.content || '',
+          timestamp: m.timestamp || m.created_at,
+          status: m.status || 1,
+          mediaUrl: m.media_url,
+          mediaType: m.media_type
+        });
+      });
+      return result;
+    } catch (e) {
+      console.error('[DB/Supabase] getAllChats error:', e);
+      return {};
     }
-    if (updated) saveDb(db);
   }
 
-  // Appointment & Customer Methods
-  static getCustomer(phone: string): Customer | undefined {
-    return initDb().customers[phone];
-  }
-
-  static updateCustomer(phone: string, data: Partial<Customer>) {
-    const db = initDb();
-    db.customers[phone] = { ...db.customers[phone], ...data, phone };
-    saveDb(db);
-  }
-
-  static getAppointmentsByDate(date: string): Appointment[] {
-    return initDb().appointments.filter(a => a.date === date && a.status === 'booked');
-  }
-
-  static getAppointmentsByPhone(phone: string): Appointment[] {
-    return initDb().appointments.filter(a => a.phone === phone);
-  }
-
-  static bookAppointment(phone: string, name: string, service: string, date: string, time: string, notes?: string): boolean {
-    const db = initDb();
-    if (!db.appointments) db.appointments = [];
-    const apptId = "APT-" + Math.random().toString(36).substring(2, 8).toUpperCase();
-    
-    // Check if appointment already exists for this date and time
-    const existing = db.appointments.find(a => a.date === date && a.time === time && a.status === 'booked');
-    if (existing) {
-      if (existing.phone === phone) {
-        if (notes) existing.notes = notes;
-        return true;
-      }
+  static async addChatMessage(phoneNumber: string, message: Omit<ChatMessage, "timestamp"> & { timestamp?: string; tenantId?: string }, tenantId?: string) {
+    if (!supabase) return;
+    try {
+      const resolvedTenantId = tenantId || message.tenantId || DEFAULT_TENANT_ID;
+      await supabase.from('chat_messages').insert({
+        message_id: message.id || Math.random().toString(36).substring(7),
+        tenant_id: resolvedTenantId,
+        phone: phoneNumber,
+        role: message.role,
+        content: message.content,
+        status: message.status || 1,
+        media_url: message.mediaUrl || null,
+        media_type: message.mediaType || null,
+        timestamp: message.timestamp || new Date().toISOString()
+      });
+    } catch (e) {
+      console.error('[DB/Supabase] addChatMessage error:', e);
     }
-    
-    const appt: Appointment = {
-      id: apptId,
-      phone,
-      name: name || phone,
-      service: service || "Discovery Call / Service",
-      date,
-      time,
-      status: "booked",
-      notes
-    };
-    db.appointments.push(appt);
-    
-    if (!db.customers[phone]) {
-      db.customers[phone] = { phone, name: name || phone };
-    }
+  }
 
-    // Sync to db.orders so it automatically appears in Incoming Orders & Projects
-    if (!db.orders) db.orders = [];
-    const apptTitle = `📅 Appointment: ${service || "Discovery Call"} (${date} @ ${time})`;
-    const existingOrder = db.orders.find(o => o.id === apptId || (o.phone === phone && o.productName === apptTitle));
-    if (!existingOrder) {
-      db.orders.push({
+  static async updateMessageStatus(messageId: string, status: number) {
+    if (!supabase) return;
+    try {
+      await supabase.from('chat_messages').update({ status }).eq('message_id', messageId);
+    } catch (e) {
+      console.error('[DB/Supabase] updateMessageStatus error:', e);
+    }
+  }
+
+  static async getUnreadMessageIds(phone: string, tenantId?: string | null): Promise<string[]> {
+    if (!supabase) return [];
+    try {
+      let query = supabase.from('chat_messages').select('message_id, status').eq('phone', phone).eq('role', 'user').lt('status', 4);
+      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
+      const { data } = await query;
+      return (data || []).map((m: any) => m.message_id).filter(Boolean);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  static async markMessagesAsReadInDb(phone: string, messageIds: string[], tenantId?: string | null) {
+    if (!supabase || messageIds.length === 0) return;
+    try {
+      let query = supabase.from('chat_messages').update({ status: 4 }).eq('phone', phone).in('message_id', messageIds);
+      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
+      await query;
+    } catch (e) {
+      console.error('[DB/Supabase] markMessagesAsReadInDb error:', e);
+    }
+  }
+
+  // --- CONFIG ---
+  static async getConfig(tenantId?: string | null): Promise<Config> {
+    if (!supabase) return DEFAULT_CONFIG;
+    try {
+      const resolvedTenantId = tenantId || DEFAULT_TENANT_ID;
+      const { data } = await supabase.from('tenant_configs').select('*').eq('tenant_id', resolvedTenantId).single();
+      if (!data) return DEFAULT_CONFIG;
+
+      return {
+        systemPrompt: data.system_prompt || DEFAULT_CONFIG.systemPrompt,
+        productInfo: data.product_info || DEFAULT_CONFIG.productInfo,
+        products: data.products || [],
+        keywordReplies: data.keyword_replies || [],
+        enabledFeatures: data.enabled_features || [],
+        globalAiEnabled: data.global_ai_enabled !== false,
+        storeUrl: data.store_url || '',
+        storeCurrency: data.store_currency || '$',
+        businessName: data.business_name || 'My Business',
+        timezone: data.timezone || 'UTC',
+        workingHours: data.working_hours || '9:00 AM - 5:00 PM',
+        botMode: data.bot_mode || 'both',
+        maxFollowUps: data.max_follow_ups || 7,
+        followUps: data.follow_ups || DEFAULT_CONFIG.followUps
+      };
+    } catch (e) {
+      return DEFAULT_CONFIG;
+    }
+  }
+
+  static async updateConfig(newConfig: Partial<Config>, tenantId?: string | null) {
+    if (!supabase) return;
+    try {
+      const resolvedTenantId = tenantId || DEFAULT_TENANT_ID;
+      const existing = await DB.getConfig(resolvedTenantId);
+      const updated = { ...existing, ...newConfig };
+
+      await supabase.from('tenant_configs').upsert({
+        tenant_id: resolvedTenantId,
+        system_prompt: updated.systemPrompt,
+        product_info: updated.productInfo,
+        products: updated.products || [],
+        keyword_replies: updated.keywordReplies || [],
+        enabled_features: updated.enabledFeatures || [],
+        global_ai_enabled: updated.globalAiEnabled !== false,
+        store_url: updated.storeUrl,
+        store_currency: updated.storeCurrency,
+        business_name: updated.businessName,
+        timezone: updated.timezone,
+        working_hours: updated.workingHours,
+        bot_mode: updated.botMode,
+        max_follow_ups: updated.maxFollowUps,
+        follow_ups: updated.followUps || []
+      }, { onConflict: 'tenant_id' });
+    } catch (e) {
+      console.error('[DB/Supabase] updateConfig error:', e);
+    }
+  }
+
+  // --- CUSTOMERS ---
+  static async getCustomer(phone: string, tenantId?: string | null): Promise<Customer | undefined> {
+    if (!supabase) return undefined;
+    try {
+      let query = supabase.from('customers').select('*').eq('phone', phone);
+      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
+      const { data } = await query.limit(1);
+      if (!data || data.length === 0) return undefined;
+      const c = data[0];
+      return {
+        phone: c.phone,
+        tenantId: c.tenant_id,
+        name: c.name || c.phone,
+        jid: c.jid,
+        preferences: c.preferences,
+        aiEnabled: c.ai_enabled !== false,
+        followUpLevel: c.follow_up_level || 0,
+        leadStatus: c.lead_status || 'none',
+        tags: c.tags || [],
+        pipelineStage: c.pipeline_stage || 'new',
+        isOptedOut: Boolean(c.is_opted_out),
+        optedOutAt: c.opted_out_at,
+        isLead: Boolean(c.is_lead),
+        pipelineStageSetByUser: Boolean(c.pipeline_stage_set_by_user),
+        leadCreatedAt: c.lead_created_at
+      };
+    } catch (e) {
+      return undefined;
+    }
+  }
+
+  static async updateCustomer(phone: string, data: Partial<Customer>, tenantId?: string | null) {
+    if (!supabase) return;
+    try {
+      const resolvedTenantId = tenantId || data.tenantId || DEFAULT_TENANT_ID;
+      const existing = await DB.getCustomer(phone, resolvedTenantId);
+      const merged = { ...existing, ...data, phone };
+
+      await supabase.from('customers').upsert({
+        tenant_id: resolvedTenantId,
+        phone: merged.phone,
+        name: merged.name || merged.phone,
+        jid: merged.jid || '',
+        preferences: merged.preferences || '',
+        ai_enabled: merged.aiEnabled !== false,
+        follow_up_level: merged.followUpLevel || 0,
+        lead_status: merged.leadStatus || 'none',
+        tags: merged.tags || [],
+        pipeline_stage: merged.pipelineStage || 'new',
+        is_opted_out: Boolean(merged.isOptedOut),
+        opted_out_at: merged.optedOutAt || null,
+        is_lead: Boolean(merged.isLead),
+        pipeline_stage_set_by_user: Boolean(merged.pipelineStageSetByUser),
+        lead_created_at: merged.leadCreatedAt || new Date().toISOString()
+      }, { onConflict: 'tenant_id,phone' });
+    } catch (e) {
+      console.error('[DB/Supabase] updateCustomer error:', e);
+    }
+  }
+
+  static async getAllCustomers(tenantId?: string | null): Promise<Customer[]> {
+    if (!supabase) return [];
+    try {
+      let query = supabase.from('customers').select('*');
+      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
+      const { data } = await query;
+      return (data || []).map((c: any) => ({
+        phone: c.phone,
+        tenantId: c.tenant_id,
+        name: c.name || c.phone,
+        jid: c.jid,
+        preferences: c.preferences,
+        aiEnabled: c.ai_enabled !== false,
+        followUpLevel: c.follow_up_level || 0,
+        leadStatus: c.lead_status || 'none',
+        tags: c.tags || [],
+        pipelineStage: c.pipeline_stage || 'new',
+        isOptedOut: Boolean(c.is_opted_out),
+        optedOutAt: c.opted_out_at,
+        isLead: Boolean(c.is_lead),
+        pipelineStageSetByUser: Boolean(c.pipeline_stage_set_by_user),
+        leadCreatedAt: c.lead_created_at
+      }));
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // --- APPOINTMENTS ---
+  static async getAllAppointments(tenantId?: string | null): Promise<Appointment[]> {
+    if (!supabase) return [];
+    try {
+      let query = supabase.from('appointments').select('*');
+      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
+      const { data } = await query;
+      return (data || []).map((a: any) => ({
+        id: a.id,
+        tenantId: a.tenant_id,
+        phone: a.phone,
+        name: a.name || a.phone,
+        service: a.service || 'Discovery Call',
+        date: a.date,
+        time: a.time,
+        status: a.status || 'booked',
+        notes: a.notes
+      }));
+    } catch (e) {
+      return [];
+    }
+  }
+
+  static async getAppointmentsByDate(date: string, tenantId?: string | null): Promise<Appointment[]> {
+    const all = await DB.getAllAppointments(tenantId);
+    return all.filter(a => a.date === date && a.status === 'booked');
+  }
+
+  static async getAppointmentsByPhone(phone: string, tenantId?: string | null): Promise<Appointment[]> {
+    const all = await DB.getAllAppointments(tenantId);
+    return all.filter(a => a.phone === phone);
+  }
+
+  static async bookAppointment(phone: string, name: string, service: string, date: string, time: string, notes?: string, tenantId?: string | null): Promise<boolean> {
+    if (!supabase) return false;
+    try {
+      const resolvedTenantId = tenantId || DEFAULT_TENANT_ID;
+      const apptId = "APT-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+
+      await supabase.from('appointments').insert({
         id: apptId,
+        tenant_id: resolvedTenantId,
         phone,
-        customerName: name || phone,
+        name: name || phone,
+        service: service || "Discovery Call / Service",
+        date,
+        time,
+        status: "booked",
+        notes
+      });
+
+      await DB.updateCustomer(phone, { name: name || phone }, resolvedTenantId);
+
+      const apptTitle = `📅 Appointment: ${service || "Discovery Call"} (${date} @ ${time})`;
+      await DB.addOrder(phone, {
         productName: apptTitle,
         contactNumber: phone,
         deliveryAddress: `Scheduled Date: ${date}, Time: ${time}`,
         price: "Service Booking",
-        timestamp: new Date().toISOString(),
-        status: "confirmed",
-        recoveryStage: 0,
-        notes: notes || `Appointment booked for ${service || 'Service Call'}. Client scheduled for ${date} at ${time}.`
-      });
-    }
+        notes: notes || `Appointment booked for ${service || 'Service Call'}. Client scheduled for ${date} at ${time}.`,
+        customerName: name || phone
+      }, resolvedTenantId);
 
-    saveDb(db);
-    return true;
-  }
-
-  static cancelAppointment(phone: string, date: string, time: string): boolean {
-    const db = initDb();
-    const appt = db.appointments.find(a => a.phone === phone && a.date === date && a.time === time && a.status === 'booked');
-    if (appt) {
-      appt.status = "cancelled";
-      if (db.orders) {
-        const orderIdx = db.orders.findIndex(o => o.id === appt.id || (o.phone === phone && o.productName.includes(appt.date)));
-        if (orderIdx !== -1) {
-          db.orders[orderIdx].status = "cancelled";
-        }
-      }
-      saveDb(db);
       return true;
-    }
-    return false;
-  }
-
-  static getPromotionLogs(): PromotionLog[] {
-    return initDb().promotions;
-  }
-
-  static addPromotionLog(log: PromotionLog) {
-    const db = initDb();
-    db.promotions.push(log);
-    saveDb(db);
-  }
-
-  static getAllAppointments(): Appointment[] {
-    return initDb().appointments;
-  }
-
-  static getAllCustomers(): Customer[] {
-    return Object.values(initDb().customers);
-  }
-
-  static syncAppointmentsFromChatHistory() {
-    try {
-      const db = initDb();
-      if (!db.chats) return;
-      let updated = false;
-
-      for (const [phone, messages] of Object.entries(db.chats)) {
-        if (!Array.isArray(messages)) continue;
-        for (const msg of messages) {
-          if (msg.role === 'assistant' && msg.content && typeof msg.content === 'string') {
-            const content = msg.content;
-            if (
-              content.includes("discovery call book ho gayi hai") ||
-              content.includes("call book ho gayi hai") ||
-              content.includes("appointment book ho gayi") ||
-              content.includes("booking confirm") ||
-              (content.includes("discovery call") && content.includes("book"))
-            ) {
-              const hasAppt = (db.appointments || []).some(a => a.phone === phone);
-              const hasOrder = (db.orders || []).some(o => o.phone === phone && o.productName.includes("Appointment"));
-
-              if (!hasAppt && !hasOrder) {
-                let dateStr = "Kal (6 August)";
-                let timeStr = "11:00 AM";
-
-                const dateMatch = content.match(/📅\s*\*\*(.*?)\*\*/) || content.match(/(Kal.*?\)|August.*?|\d{1,2}\s+[A-Za-z]+)/i);
-                if (dateMatch) dateStr = dateMatch[1].replace(/[*_]/g, '').trim();
-
-                const timeMatch = content.match(/⏰\s*\*\*(.*?)\*\*/) || content.match(/(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)?)/);
-                if (timeMatch) timeStr = timeMatch[1].replace(/[*_]/g, '').trim();
-
-                const customerName = db.customers[phone]?.name || "Customer";
-                const apptId = "APT-" + Math.random().toString(36).substring(2, 8).toUpperCase();
-
-                if (!db.appointments) db.appointments = [];
-                db.appointments.push({
-                  id: apptId,
-                  phone,
-                  name: customerName,
-                  service: "Discovery Call",
-                  date: dateStr,
-                  time: timeStr,
-                  status: "booked"
-                });
-
-                if (!db.orders) db.orders = [];
-                db.orders.push({
-                  id: apptId,
-                  phone,
-                  productName: `📅 Appointment: Discovery Call (${dateStr} @ ${timeStr})`,
-                  contactNumber: phone,
-                  deliveryAddress: `Scheduled Date: ${dateStr}, Time: ${timeStr}`,
-                  price: "Service Booking",
-                  timestamp: msg.timestamp || new Date().toISOString(),
-                  status: "confirmed",
-                  recoveryStage: 0
-                });
-
-                updated = true;
-              }
-            }
-          }
-        }
-      }
-
-      if (updated) {
-        saveDb(db);
-      }
     } catch (e) {
-      console.error("Error syncing past appointments from chat history:", e);
+      console.error('[DB/Supabase] bookAppointment error:', e);
+      return false;
     }
   }
 
-  // Orders Methods
-  static getOrders(): Order[] {
-    DB.syncAppointmentsFromChatHistory();
-    const db = initDb();
-    const orders = db.orders || [];
-    const appointments = db.appointments || [];
+  static async cancelAppointment(phone: string, date: string, time: string, tenantId?: string | null): Promise<boolean> {
+    if (!supabase) return false;
+    try {
+      let query = supabase.from('appointments').update({ status: 'cancelled' }).eq('phone', phone).eq('date', date).eq('time', time);
+      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
+      await query;
 
-    // Merge any appointments that are not already present in orders
-    const mappedAppts: Order[] = appointments
-      .filter(a => !orders.some(o => o.id === a.id || (o.phone === a.phone && o.productName.includes(a.date))))
-      .map(a => ({
-        id: a.id || "APT-" + Math.random().toString(36).substring(2, 8).toUpperCase(),
-        phone: a.phone,
-        productName: `📅 Appointment: ${a.service || "Discovery Call"} (${a.date} @ ${a.time})`,
-        contactNumber: a.phone,
-        deliveryAddress: `Scheduled Date: ${a.date}, Time: ${a.time}`,
-        price: "Service Booking",
-        timestamp: new Date().toISOString(),
-        status: a.status === "booked" ? "confirmed" : "cancelled"
+      let orderQuery = supabase.from('orders').update({ status: 'cancelled' }).eq('phone', phone).ilike('product_name', `%${date}%`);
+      if (tenantId && tenantId !== 'admin') orderQuery = orderQuery.eq('tenant_id', tenantId);
+      await orderQuery;
+
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // --- ORDERS ---
+  static async getOrders(tenantId?: string | null): Promise<Order[]> {
+    if (!supabase) return [];
+    try {
+      let query = supabase.from('orders').select('*').order('timestamp', { ascending: false });
+      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
+      const { data } = await query;
+      return (data || []).map((o: any) => ({
+        id: o.id,
+        tenantId: o.tenant_id,
+        phone: o.phone,
+        customerName: o.customer_name || o.phone,
+        productName: o.product_name,
+        productImageUrl: o.product_image_url,
+        size: o.size,
+        color: o.color,
+        deliveryAddress: o.delivery_address,
+        contactNumber: o.contact_number,
+        paymentMethod: o.payment_method,
+        price: o.price,
+        timestamp: o.timestamp || o.created_at,
+        status: o.status || 'pending',
+        recoveryStage: o.recovery_stage || 0,
+        notes: o.notes
       }));
-
-    return [...orders, ...mappedAppts];
+    } catch (e) {
+      return [];
+    }
   }
 
-  static addOrder(phone: string, data: { productName: string; productImageUrl?: string; size?: string; color?: string; deliveryAddress?: string; contactNumber?: string; paymentMethod?: string; price?: string; customerName?: string; notes?: string }): Order {
-    const db = initDb();
-    if (!db.orders) db.orders = [];
-
-    const custName = data.customerName || db.customers[phone]?.name || phone;
-
-    // Check if there is an existing pending order for this phone and product
-    const existingOrder = db.orders.find(o => o.phone === phone && o.productName === data.productName && o.status === "pending");
-    if (existingOrder) {
-      if (data.size) existingOrder.size = data.size;
-      if (data.color) existingOrder.color = data.color;
-      if (data.deliveryAddress) existingOrder.deliveryAddress = data.deliveryAddress;
-      if (data.contactNumber) existingOrder.contactNumber = data.contactNumber;
-      if (data.paymentMethod) existingOrder.paymentMethod = data.paymentMethod;
-      if (data.price) existingOrder.price = data.price;
-      if (data.productImageUrl) existingOrder.productImageUrl = data.productImageUrl;
-      if (data.notes) existingOrder.notes = data.notes;
-      if (custName) existingOrder.customerName = custName;
-      
-      existingOrder.timestamp = new Date().toISOString(); // Update timestamp so it jumps to top
-      existingOrder.recoveryStage = 0; // Reset recovery stage since customer interacted
-      saveDb(db);
-      return existingOrder;
-    }
-
+  static async addOrder(phone: string, data: { productName: string; productImageUrl?: string; size?: string; color?: string; deliveryAddress?: string; contactNumber?: string; paymentMethod?: string; price?: string; customerName?: string; notes?: string }, tenantId?: string | null): Promise<Order> {
+    const resolvedTenantId = tenantId || DEFAULT_TENANT_ID;
+    const ordId = "ORD-" + Math.random().toString(36).substring(2, 8).toUpperCase();
     const newOrder: Order = {
-      id: "ORD-" + Math.random().toString(36).substring(2, 8).toUpperCase(),
+      id: ordId,
+      tenantId: resolvedTenantId,
       phone,
-      customerName: custName,
+      customerName: data.customerName || phone,
       productName: data.productName,
       productImageUrl: data.productImageUrl,
       size: data.size,
       color: data.color,
       deliveryAddress: data.deliveryAddress,
-      contactNumber: data.contactNumber,
+      contactNumber: data.contactNumber || phone,
       paymentMethod: data.paymentMethod,
       price: data.price,
       timestamp: new Date().toISOString(),
@@ -599,110 +646,293 @@ export class DB {
       recoveryStage: 0,
       notes: data.notes
     };
-    db.orders.push(newOrder);
-    
-    if (!db.customers[phone]) {
-      db.customers[phone] = { phone, name: phone };
+
+    if (supabase) {
+      try {
+        await supabase.from('orders').insert({
+          id: newOrder.id,
+          tenant_id: resolvedTenantId,
+          phone,
+          customer_name: newOrder.customerName,
+          product_name: newOrder.productName,
+          product_image_url: newOrder.productImageUrl,
+          size: newOrder.size,
+          color: newOrder.color,
+          delivery_address: newOrder.deliveryAddress,
+          contact_number: newOrder.contactNumber,
+          payment_method: newOrder.paymentMethod,
+          price: newOrder.price,
+          status: newOrder.status,
+          recovery_stage: 0,
+          notes: newOrder.notes,
+          timestamp: newOrder.timestamp
+        });
+      } catch (e) {
+        console.error('[DB/Supabase] addOrder error:', e);
+      }
     }
-    saveDb(db);
     return newOrder;
   }
 
-  static updateOrder(orderId: string, updates: Partial<Order>) {
-    const db = initDb();
-    const idx = db.orders.findIndex(o => o.id === orderId);
-    if (idx !== -1) {
-      db.orders[idx] = { ...db.orders[idx], ...updates };
-      saveDb(db);
+  static async updateOrder(orderId: string, updates: Partial<Order>, tenantId?: string | null) {
+    if (!supabase) return;
+    try {
+      const payload: any = {};
+      if (updates.status) payload.status = updates.status;
+      if (updates.recoveryStage !== undefined) payload.recovery_stage = updates.recoveryStage;
+      if (updates.notes !== undefined) payload.notes = updates.notes;
+      if (updates.customerName) payload.customer_name = updates.customerName;
+
+      let query = supabase.from('orders').update(payload).eq('id', orderId);
+      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
+      await query;
+    } catch (e) {
+      console.error('[DB/Supabase] updateOrder error:', e);
     }
   }
 
-  // --- Scheduled Follow-up Methods ---
-  static addScheduledFollowUp(followUp: ScheduledFollowUp) {
-    const db = initDb();
-    db.scheduledFollowUps.push(followUp);
-    saveDb(db);
+  static async updateOrderStatus(id: string, status: Order["status"], tenantId?: string | null): Promise<boolean> {
+    await DB.updateOrder(id, { status }, tenantId);
+    return true;
   }
 
-  static getPendingFollowUps(): ScheduledFollowUp[] {
-    const db = initDb();
-    return db.scheduledFollowUps.filter(f => f.status === "pending");
-  }
-
-  static getAllScheduledFollowUps(): ScheduledFollowUp[] {
-    const db = initDb();
-    return db.scheduledFollowUps || [];
-  }
-
-  static updateFollowUpStatus(id: string, status: "pending" | "sent" | "cancelled" | "failed") {
-    const db = initDb();
-    const idx = db.scheduledFollowUps.findIndex(f => f.id === id);
-    if (idx !== -1) {
-      db.scheduledFollowUps[idx].status = status;
-      saveDb(db);
+  // --- SCHEDULED FOLLOW-UPS ---
+  static async addScheduledFollowUp(followUp: ScheduledFollowUp, tenantId?: string | null) {
+    if (!supabase) return;
+    try {
+      const resolvedTenantId = tenantId || followUp.tenantId || DEFAULT_TENANT_ID;
+      await supabase.from('scheduled_follow_ups').insert({
+        id: followUp.id || Math.random().toString(36).substring(2, 8),
+        tenant_id: resolvedTenantId,
+        phone: followUp.phone,
+        send_at: followUp.sendAt,
+        context: followUp.context || '',
+        status: followUp.status || 'pending',
+        created_at: followUp.createdAt || new Date().toISOString()
+      });
+    } catch (e) {
+      console.error('[DB/Supabase] addScheduledFollowUp error:', e);
     }
   }
 
-  static cancelPendingFollowUps(phone: string) {
-    const db = initDb();
-    let updated = false;
-    db.scheduledFollowUps.forEach(f => {
-      if (f.phone === phone && f.status === "pending") {
-        f.status = "cancelled";
-        updated = true;
-      }
-    });
-    if (updated) {
-      saveDb(db);
+  static async getPendingFollowUps(tenantId?: string | null): Promise<ScheduledFollowUp[]> {
+    if (!supabase) return [];
+    try {
+      let query = supabase.from('scheduled_follow_ups').select('*').eq('status', 'pending');
+      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
+      const { data } = await query;
+      return (data || []).map((f: any) => ({
+        id: f.id,
+        tenantId: f.tenant_id,
+        phone: f.phone,
+        sendAt: f.send_at,
+        context: f.context,
+        status: f.status,
+        createdAt: f.created_at
+      }));
+    } catch (e) {
+      return [];
     }
   }
 
-  static updateOrderStatus(id: string, status: Order["status"]): boolean {
-    const db = initDb();
-    if (!db.orders) return false;
-    const order = db.orders.find(o => o.id === id);
-    if (order) {
-      order.status = status;
-      saveDb(db);
-      return true;
-    }
-    return false;
-  }
-
-  // --- Revival Campaign Methods ---
-  static getRevivalCampaigns(): RevivalCampaign[] {
-    return initDb().revivalCampaigns || [];
-  }
-
-  static getActiveCampaign(): RevivalCampaign | null {
-    const db = initDb();
-    return (db.revivalCampaigns || []).find(c => c.status === "active") || null;
-  }
-
-  static addRevivalCampaign(campaign: RevivalCampaign) {
-    const db = initDb();
-    if (!db.revivalCampaigns) db.revivalCampaigns = [];
-    db.revivalCampaigns.push(campaign);
-    saveDb(db);
-  }
-
-  static updateRevivalCampaign(id: string, updates: Partial<RevivalCampaign>) {
-    const db = initDb();
-    const idx = (db.revivalCampaigns || []).findIndex(c => c.id === id);
-    if (idx !== -1) {
-      db.revivalCampaigns[idx] = { ...db.revivalCampaigns[idx], ...updates };
-      saveDb(db);
+  static async getAllScheduledFollowUps(tenantId?: string | null): Promise<ScheduledFollowUp[]> {
+    if (!supabase) return [];
+    try {
+      let query = supabase.from('scheduled_follow_ups').select('*');
+      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
+      const { data } = await query;
+      return (data || []).map((f: any) => ({
+        id: f.id,
+        tenantId: f.tenant_id,
+        phone: f.phone,
+        sendAt: f.send_at,
+        context: f.context,
+        status: f.status,
+        createdAt: f.created_at
+      }));
+    } catch (e) {
+      return [];
     }
   }
 
-  // --- Tenants & Partners Methods ---
-  static getTenants(): Tenant[] {
-    return initDb().tenants || [];
+  static async updateFollowUpStatus(id: string, status: "pending" | "sent" | "cancelled" | "failed", tenantId?: string | null) {
+    if (!supabase) return;
+    try {
+      let query = supabase.from('scheduled_follow_ups').update({ status }).eq('id', id);
+      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
+      await query;
+    } catch (e) {
+      console.error('[DB/Supabase] updateFollowUpStatus error:', e);
+    }
   }
 
-  static getTenantByUsername(username: string): Tenant | null {
-    const tenants = DB.getTenants();
+  static async cancelPendingFollowUps(phone: string, tenantId?: string | null) {
+    if (!supabase) return;
+    try {
+      let query = supabase.from('scheduled_follow_ups').update({ status: 'cancelled' }).eq('phone', phone).eq('status', 'pending');
+      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
+      await query;
+    } catch (e) {
+      console.error('[DB/Supabase] cancelPendingFollowUps error:', e);
+    }
+  }
+
+  // --- PROMOTIONS ---
+  static async getPromotionLogs(tenantId?: string | null): Promise<PromotionLog[]> {
+    if (!supabase) return [];
+    try {
+      let query = supabase.from('promotion_logs').select('*').order('timestamp', { ascending: false });
+      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
+      const { data } = await query;
+      return (data || []).map((p: any) => ({
+        id: p.id,
+        tenantId: p.tenant_id,
+        timestamp: p.timestamp,
+        audience: p.audience,
+        message: p.message,
+        successCount: p.success_count,
+        failureCount: p.failure_count
+      }));
+    } catch (e) {
+      return [];
+    }
+  }
+
+  static async addPromotionLog(log: PromotionLog, tenantId?: string | null) {
+    if (!supabase) return;
+    try {
+      const resolvedTenantId = tenantId || log.tenantId || DEFAULT_TENANT_ID;
+      await supabase.from('promotion_logs').insert({
+        id: log.id || Math.random().toString(36).substring(7),
+        tenant_id: resolvedTenantId,
+        timestamp: log.timestamp || new Date().toISOString(),
+        audience: log.audience,
+        message: log.message,
+        success_count: log.successCount,
+        failure_count: log.failureCount
+      });
+    } catch (e) {
+      console.error('[DB/Supabase] addPromotionLog error:', e);
+    }
+  }
+
+  // --- REVIVAL CAMPAIGNS ---
+  static async getRevivalCampaigns(tenantId?: string | null): Promise<RevivalCampaign[]> {
+    if (!supabase) return [];
+    try {
+      let query = supabase.from('revival_campaigns').select('*').order('created_at', { ascending: false });
+      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
+      const { data } = await query;
+      return (data || []).map((c: any) => ({
+        id: c.id,
+        tenantId: c.tenant_id,
+        name: c.name,
+        message: c.message,
+        audience: c.audience,
+        timeSlotStart: c.time_slot_start,
+        timeSlotEnd: c.time_slot_end,
+        delayMinutes: c.delay_minutes,
+        dailyCap: c.daily_cap,
+        status: c.status,
+        targetPhones: c.target_phones || [],
+        sentPhones: c.sent_phones || [],
+        failedPhones: c.failed_phones || [],
+        repliedPhones: c.replied_phones || [],
+        optedOutPhones: c.opted_out_phones || [],
+        sentToday: c.sent_today || 0,
+        lastSentDate: c.last_sent_date,
+        createdAt: c.created_at,
+        mediaBase64: c.media_base64,
+        mimetype: c.mimetype,
+        fileName: c.file_name,
+        voiceBase64: c.voice_base64,
+        voiceMimetype: c.voice_mimetype,
+        messageType: c.message_type,
+        phase2Settings: c.phase2_settings,
+        leadProgress: c.lead_progress,
+        lastSentAt: c.last_sent_at
+      }));
+    } catch (e) {
+      return [];
+    }
+  }
+
+  static async getActiveCampaign(tenantId?: string | null): Promise<RevivalCampaign | null> {
+    const campaigns = await DB.getRevivalCampaigns(tenantId);
+    return campaigns.find(c => c.status === 'active') || null;
+  }
+
+  static async addRevivalCampaign(campaign: RevivalCampaign, tenantId?: string | null) {
+    if (!supabase) return;
+    try {
+      const resolvedTenantId = tenantId || campaign.tenantId || DEFAULT_TENANT_ID;
+      await supabase.from('revival_campaigns').insert({
+        id: campaign.id,
+        tenant_id: resolvedTenantId,
+        name: campaign.name,
+        message: campaign.message,
+        audience: campaign.audience,
+        time_slot_start: campaign.timeSlotStart,
+        time_slot_end: campaign.timeSlotEnd,
+        delay_minutes: campaign.delayMinutes,
+        daily_cap: campaign.dailyCap,
+        status: campaign.status,
+        target_phones: campaign.targetPhones || [],
+        sent_phones: campaign.sentPhones || [],
+        failed_phones: campaign.failedPhones || [],
+        replied_phones: campaign.repliedPhones || [],
+        opted_out_phones: campaign.optedOutPhones || [],
+        sent_today: campaign.sentToday || 0,
+        last_sent_date: campaign.lastSentDate,
+        media_base64: campaign.mediaBase64,
+        mimetype: campaign.mimetype,
+        file_name: campaign.fileName,
+        voice_base64: campaign.voiceBase64,
+        voice_mimetype: campaign.voiceMimetype,
+        message_type: campaign.messageType,
+        phase2_settings: campaign.phase2Settings || {},
+        lead_progress: campaign.leadProgress || {},
+        created_at: campaign.createdAt || new Date().toISOString()
+      });
+    } catch (e) {
+      console.error('[DB/Supabase] addRevivalCampaign error:', e);
+    }
+  }
+
+  static async updateRevivalCampaign(id: string, updates: Partial<RevivalCampaign>, tenantId?: string | null) {
+    if (!supabase) return;
+    try {
+      const payload: any = {};
+      if (updates.status) payload.status = updates.status;
+      if (updates.sentToday !== undefined) payload.sent_today = updates.sentToday;
+      if (updates.lastSentDate) payload.last_sent_date = updates.lastSentDate;
+      if (updates.sentPhones) payload.sent_phones = updates.sentPhones;
+      if (updates.failedPhones) payload.failed_phones = updates.failedPhones;
+      if (updates.leadProgress) payload.lead_progress = updates.leadProgress;
+
+      let query = supabase.from('revival_campaigns').update(payload).eq('id', id);
+      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
+      await query;
+    } catch (e) {
+      console.error('[DB/Supabase] updateRevivalCampaign error:', e);
+    }
+  }
+
+  // --- TENANTS & PARTNERS ---
+  static async getTenants(): Promise<Tenant[]> {
+    if (!supabase) return [];
+    try {
+      const { fetchTenantsFromSupabase } = await import('./supabase');
+      const tenants = await fetchTenantsFromSupabase();
+      return tenants || [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  static async getTenantByUsername(username: string): Promise<Tenant | null> {
     if (!username) return null;
+    const tenants = await DB.getTenants();
     const cleanUsername = username.trim().toLowerCase();
     const normalizedUsername = cleanUsername.replace(/[\s\-_]/g, '');
 
@@ -710,7 +940,6 @@ export class DB {
       const u1 = t.clientUsername?.trim().toLowerCase() || '';
       const u2 = t.email?.trim().toLowerCase() || '';
       const u3 = t.clientNumber?.toString().trim() || '';
-      const u4 = t.name?.trim().toLowerCase() || '';
       const u5 = t.businessName?.trim().toLowerCase() || '';
 
       if (u1 === cleanUsername || u2 === cleanUsername || u3 === cleanUsername) return true;
@@ -720,52 +949,61 @@ export class DB {
     }) || null;
   }
 
-  static getTenantById(id: string): Tenant | null {
+  static async getTenantById(id: string): Promise<Tenant | null> {
     if (!id) return null;
-    const tenants = DB.getTenants();
+    const tenants = await DB.getTenants();
     return tenants.find(t => t.id === id) || null;
   }
 
-  static saveTenants(tenants: Tenant[]) {
-    const db = initDb();
-    db.tenants = tenants;
-    saveDb(db);
-
-    // Async sync to Supabase if configured
-    try {
-      import('./supabase').then(({ upsertTenantToSupabase }) => {
-        tenants.forEach(t => upsertTenantToSupabase(t));
-      }).catch(err => console.error('[DB] Supabase async sync error:', err));
-    } catch (e) {
-      // Ignore sync error in sync context
-    }
+  static async saveTenants(tenants: Tenant[]): Promise<boolean> {
+    return DB.saveTenantsAsync(tenants);
   }
 
   static async saveTenantsAsync(tenants: Tenant[]): Promise<boolean> {
-    const db = initDb();
-    db.tenants = tenants;
-    saveDb(db);
-
+    if (!supabase) return false;
     try {
-      const { upsertTenantToSupabase, isSupabaseConfigured } = await import('./supabase');
-      if (isSupabaseConfigured) {
-        const results = await Promise.all(tenants.map(t => upsertTenantToSupabase(t)));
-        console.log(`[DB] Supabase sync completed for ${tenants.length} tenants. Success: ${results.every(Boolean)}`);
-        return results.every(Boolean);
-      }
+      const { upsertTenantToSupabase } = await import('./supabase');
+      const results = await Promise.all(tenants.map(t => upsertTenantToSupabase(t)));
+      return results.every(Boolean);
     } catch (err) {
-      console.error('[DB] Supabase async sync error:', err);
+      console.error('[DB/Supabase] saveTenantsAsync error:', err);
+      return false;
     }
-    return true;
   }
 
-  static getPartners(): Partner[] {
-    return initDb().partners || [];
+  static async getPartners(): Promise<Partner[]> {
+    if (!supabase) return [];
+    try {
+      const { data } = await supabase.from('partners').select('*');
+      return (data || []).map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        email: p.email,
+        role: p.role || 'partner',
+        accessLevel: p.access_level || 'read_write',
+        clientsAssigned: p.clients_assigned || 0,
+        permissions: p.permissions || []
+      }));
+    } catch (e) {
+      return [];
+    }
   }
 
-  static savePartners(partners: Partner[]) {
-    const db = initDb();
-    db.partners = partners;
-    saveDb(db);
+  static async savePartners(partners: Partner[]) {
+    if (!supabase) return;
+    try {
+      const payloads = partners.map(p => ({
+        id: p.id,
+        name: p.name,
+        email: p.email,
+        role: p.role,
+        access_level: p.accessLevel,
+        clients_assigned: p.clientsAssigned,
+        permissions: p.permissions || []
+      }));
+      await supabase.from('partners').upsert(payloads);
+    } catch (e) {
+      console.error('[DB/Supabase] savePartners error:', e);
+    }
   }
 }

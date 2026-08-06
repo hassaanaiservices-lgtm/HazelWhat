@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { DB, RevivalCampaign } from "@/lib/db";
 import { WhatsAppManager } from "@/lib/whatsapp";
+import { cookies } from "next/headers";
 
-// Safety floor constants — these cannot be bypassed
 const SAFETY = {
   MIN_DELAY_MIN: 0.1,  // 6 seconds
   MAX_DELAY_MIN: 1440, // 24 hours
@@ -29,20 +29,32 @@ function validateTimeSlot(start: string, end: string): { start: string; end: str
   };
 }
 
-// GET — List all campaigns + active campaign status
+async function getTenantIdFromSession(): Promise<string | undefined> {
+  try {
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("hazel_session");
+    if (sessionCookie && sessionCookie.value) {
+      const session = JSON.parse(sessionCookie.value);
+      return session.role === 'admin' ? undefined : session.tenantId;
+    }
+  } catch (e) {}
+  return undefined;
+}
+
 export async function GET() {
   try {
-    const campaigns = DB.getRevivalCampaigns();
-    const active = DB.getActiveCampaign();
+    const tenantId = await getTenantIdFromSession();
+    const campaigns = await DB.getRevivalCampaigns(tenantId);
+    const active = await DB.getActiveCampaign(tenantId);
     return NextResponse.json({ success: true, campaigns, activeCampaign: active });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
-// POST — Create a new campaign
 export async function POST(req: Request) {
   try {
+    const tenantId = await getTenantIdFromSession();
     const body = await req.json();
     const { 
       name,
@@ -65,27 +77,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Message or Media/Voice content is required." }, { status: 400 });
     }
 
-    // Check if WhatsApp is connected
     const statusInfo = WhatsAppManager.getStatus();
     if (statusInfo.status !== "connected") {
       return NextResponse.json({ 
         success: false, 
-        error: "WhatsApp is NOT connected! Please connect your WhatsApp device from the dashboard (WhatsApp Connect) before launching a campaign." 
+        error: "WhatsApp is NOT connected! Please connect your WhatsApp device from the dashboard before launching a campaign." 
       }, { status: 400 });
     }
 
-    // Check no active campaign
-    const existing = DB.getActiveCampaign();
+    const existing = await DB.getActiveCampaign(tenantId);
     if (existing) {
       return NextResponse.json({ success: false, error: "A campaign is already active. Cancel or wait for it to complete." }, { status: 400 });
     }
 
-    // Resolve target phones
     let targetPhones: string[] = [];
-    const allCustomers = DB.getAllCustomers().filter(c => !c.isOptedOut);
+    const allCustomers = (await DB.getAllCustomers(tenantId)).filter(c => !c.isOptedOut);
 
     if (audience === "all") {
-      const chatPhones = Object.keys(DB.getAllChats());
+      const chats = await DB.getAllChats(tenantId);
+      const chatPhones = Object.keys(chats);
       targetPhones = Array.from(new Set([...allCustomers.map(c => c.phone), ...chatPhones]));
     } else if (audience === "cold") {
       targetPhones = allCustomers.filter(c => c.leadStatus === "cold" || c.pipelineStage === "cold").map(c => c.phone);
@@ -110,15 +120,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Invalid audience type." }, { status: 400 });
     }
 
-    // Filter out any explicitly opted-out phones
-    const optOutSet = new Set(DB.getAllCustomers().filter(c => c.isOptedOut).map(c => c.phone));
+    const optOutSet = new Set(allCustomers.filter(c => c.isOptedOut).map(c => c.phone));
     targetPhones = targetPhones.filter(phone => !optOutSet.has(phone));
 
     if (targetPhones.length === 0) {
       return NextResponse.json({ success: false, error: "No non-opted-out leads found for the selected audience." }, { status: 400 });
     }
 
-    // Enforce safety floors
     const safeDelayMinutes = clamp(delayMinutes || 5, SAFETY.MIN_DELAY_MIN, SAFETY.MAX_DELAY_MIN);
     const safeDailyCap = clamp(dailyCap || 80, SAFETY.MIN_DAILY_CAP, SAFETY.MAX_DAILY_CAP);
     const safeTimeSlot = validateTimeSlot(timeSlotStart || "09:00", timeSlotEnd || "21:00");
@@ -127,6 +135,7 @@ export async function POST(req: Request) {
 
     const campaign: RevivalCampaign = {
       id: "RV-" + Math.random().toString(36).substring(2, 8).toUpperCase(),
+      tenantId,
       name: name || `Revival ${new Date().toLocaleDateString()}`,
       message: message || "",
       audience: audience || "all",
@@ -157,14 +166,13 @@ export async function POST(req: Request) {
         messages: ["Checking in to see if you have any questions!"]
       },
       leadProgress: {},
-      // Legacy fields mapping
       delayMinSeconds: safeDelayMinutes * 60,
       delayMaxSeconds: safeDelayMinutes * 60,
       batchSize: 1,
       batchBreakMinutes: 0,
     };
 
-    DB.addRevivalCampaign(campaign);
+    await DB.addRevivalCampaign(campaign, tenantId);
 
     return NextResponse.json({ success: true, campaign: { ...campaign, mediaBase64: undefined, voiceBase64: undefined } });
   } catch (error: any) {
@@ -172,34 +180,32 @@ export async function POST(req: Request) {
   }
 }
 
-// PATCH — Pause or resume
 export async function PATCH(req: Request) {
   try {
+    const tenantId = await getTenantIdFromSession();
     const body = await req.json();
     const { action } = body;
 
-    const active = DB.getActiveCampaign();
+    const active = await DB.getActiveCampaign(tenantId);
     if (!active && action === "pause") {
       return NextResponse.json({ success: false, error: "No active campaign to pause." }, { status: 400 });
     }
 
     if (action === "pause" && active) {
-      DB.updateRevivalCampaign(active.id, { status: "paused" });
+      await DB.updateRevivalCampaign(active.id, { status: "paused" }, tenantId);
       return NextResponse.json({ success: true, message: "Campaign paused." });
     }
 
     if (action === "resume") {
-      // Find the most recent paused campaign
-      const campaigns = DB.getRevivalCampaigns();
+      const campaigns = await DB.getRevivalCampaigns(tenantId);
       const paused = campaigns.filter(c => c.status === "paused").pop();
       if (!paused) {
         return NextResponse.json({ success: false, error: "No paused campaign to resume." }, { status: 400 });
       }
-      // Don't resume if there's already an active campaign
-      if (DB.getActiveCampaign()) {
+      if (await DB.getActiveCampaign(tenantId)) {
         return NextResponse.json({ success: false, error: "Another campaign is already active." }, { status: 400 });
       }
-      DB.updateRevivalCampaign(paused.id, { status: "active" });
+      await DB.updateRevivalCampaign(paused.id, { status: "active" }, tenantId);
       return NextResponse.json({ success: true, message: "Campaign resumed." });
     }
 
@@ -209,21 +215,20 @@ export async function PATCH(req: Request) {
   }
 }
 
-// DELETE — Cancel the active campaign
 export async function DELETE() {
   try {
-    const active = DB.getActiveCampaign();
+    const tenantId = await getTenantIdFromSession();
+    const active = await DB.getActiveCampaign(tenantId);
     if (!active) {
-      // Also check for paused
-      const campaigns = DB.getRevivalCampaigns();
+      const campaigns = await DB.getRevivalCampaigns(tenantId);
       const paused = campaigns.filter(c => c.status === "paused").pop();
       if (paused) {
-        DB.updateRevivalCampaign(paused.id, { status: "cancelled" });
+        await DB.updateRevivalCampaign(paused.id, { status: "cancelled" }, tenantId);
         return NextResponse.json({ success: true, message: "Paused campaign cancelled." });
       }
       return NextResponse.json({ success: false, error: "No active campaign to cancel." }, { status: 400 });
     }
-    DB.updateRevivalCampaign(active.id, { status: "cancelled" });
+    await DB.updateRevivalCampaign(active.id, { status: "cancelled" }, tenantId);
     return NextResponse.json({ success: true, message: "Campaign cancelled." });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

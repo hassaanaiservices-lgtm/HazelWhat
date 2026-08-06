@@ -35,7 +35,7 @@ export class WhatsAppManager {
     // Run every 6 hours (21600000 ms)
     globalForBaileys.autoSyncInterval = setInterval(async () => {
       try {
-        const config = DB.getConfig();
+        const config = await DB.getConfig();
         if (config.storeUrl) {
           console.log("[Auto-Sync] Scraping store catalog from:", config.storeUrl);
           const { catalog } = await scrapeStore(config.storeUrl, config.storeCurrency || "$");
@@ -43,7 +43,7 @@ export class WhatsAppManager {
             // Keep the non-catalog part of productInfo and append the new catalog
             const parts = config.productInfo.split("--- E-COMMERCE CATALOG ---");
             const baseInfo = parts[0].trim();
-            DB.updateConfig({ productInfo: baseInfo + "\n\n" + catalog });
+            await DB.updateConfig({ productInfo: baseInfo + "\n\n" + catalog });
             console.log("[Auto-Sync] Successfully updated Knowledge Base with latest catalog.");
           }
         }
@@ -60,34 +60,34 @@ export class WhatsAppManager {
     // Run every 15 seconds for higher precision
     globalForBaileys.followUpInterval = setInterval(async () => {
       try {
-        const config = DB.getConfig();
+        const config = await DB.getConfig();
         const now = Date.now();
         const { generateContextualFollowUp, generateScheduledFollowUp } = await import('./ai-handler');
         
         // --- SYSTEM A: Proactive AI-Scheduled Follow-ups ---
-        const pendingSystemAFollowUps = DB.getPendingFollowUps();
+        const pendingSystemAFollowUps = await DB.getPendingFollowUps();
         for (const fu of pendingSystemAFollowUps) {
           const sendAtMs = new Date(fu.sendAt).getTime();
           if (now >= sendAtMs) {
             console.log(`[System A Follow-up] Triggering scheduled follow-up for ${fu.phone}`);
             
             try {
-              const aiMessage = await generateScheduledFollowUp(fu.phone, fu.context);
+              const aiMessage = await generateScheduledFollowUp(fu.phone, fu.context, fu.tenantId);
               const sentMsg = await this.sendMessage(fu.phone, aiMessage);
               
-              DB.addChatMessage(fu.phone, { id: sentMsg?.key?.id, role: "assistant", content: aiMessage });
-              DB.updateFollowUpStatus(fu.id, "sent");
+              await DB.addChatMessage(fu.phone, { id: sentMsg?.key?.id, role: "assistant", content: aiMessage }, fu.tenantId);
+              await DB.updateFollowUpStatus(fu.id, "sent", fu.tenantId);
             } catch (err) {
               console.error(`[System A Follow-up] Failed to send to ${fu.phone}:`, err);
-              DB.updateFollowUpStatus(fu.id, "failed");
+              await DB.updateFollowUpStatus(fu.id, "failed", fu.tenantId);
             }
           }
         }
 
         // Re-fetch in case statuses just changed to 'sent'
-        const stillPendingSystemA = DB.getPendingFollowUps();
-        const chats = DB.getAllChats();
-        const orders = DB.getOrders();
+        const stillPendingSystemA = await DB.getPendingFollowUps();
+        const chats = await DB.getAllChats();
+        const orders = await DB.getOrders();
         const pendingOrders = orders.filter(o => o.status === "pending");
         
         // --- SYSTEM C: Abandoned Order Recovery Engine ---
@@ -116,8 +116,8 @@ export class WhatsAppManager {
               const contextualMessage = await generateContextualFollowUp(phone, template);
               const sentMsg = await this.sendMessage(phone, contextualMessage);
               
-              DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage });
-              DB.updateOrder(order.id, { recoveryStage: 1 });
+              await DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage }, order.tenantId);
+              await DB.updateOrder(order.id, { recoveryStage: 1 }, order.tenantId);
             } catch (err) {
               console.error(`[System C Stage 1] Failed for ${phone}:`, err);
             }
@@ -127,11 +127,11 @@ export class WhatsAppManager {
             console.log(`[System C Recovery] Triggering Stage 2 for order ${order.id} (${phone})`);
             try {
               const template = `Hi! Just a quick heads-up: we have a lot of interest in the ${order.productName} today, and I can only hold your reservation for another hour before releasing it. Would you like to confirm your details to secure it?`;
-              const contextualMessage = await generateContextualFollowUp(phone, template);
+              const contextualMessage = await generateContextualFollowUp(phone, template, order.tenantId);
               const sentMsg = await this.sendMessage(phone, contextualMessage);
               
-              DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage });
-              DB.updateOrder(order.id, { recoveryStage: 2 });
+              await DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage }, order.tenantId);
+              await DB.updateOrder(order.id, { recoveryStage: 2 }, order.tenantId);
             } catch (err) {
               console.error(`[System C Stage 2] Failed for ${phone}:`, err);
             }
@@ -141,11 +141,11 @@ export class WhatsAppManager {
             console.log(`[System C Recovery] Triggering Stage 3 for order ${order.id} (${phone})`);
             try {
               const template = `Hey! I really want to help you get this outfit. If we finalize your order for the ${order.productName} today, I can throw in free shipping. Let me know if you want me to add that in! 🎁`;
-              const contextualMessage = await generateContextualFollowUp(phone, template);
+              const contextualMessage = await generateContextualFollowUp(phone, template, order.tenantId);
               const sentMsg = await this.sendMessage(phone, contextualMessage);
               
-              DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage });
-              DB.updateOrder(order.id, { recoveryStage: 3 });
+              await DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage }, order.tenantId);
+              await DB.updateOrder(order.id, { recoveryStage: 3 }, order.tenantId);
             } catch (err) {
               console.error(`[System C Stage 3] Failed for ${phone}:`, err);
             }
@@ -155,11 +155,11 @@ export class WhatsAppManager {
             console.log(`[System C Recovery] Triggering Stage 4 for order ${order.id} (${phone})`);
             try {
               const template = `Hi, since we haven't heard back, I've cancelled your pending order for the ${order.productName} and released the hold on the stock. If you decide to order it later, just send me a message here.`;
-              const contextualMessage = await generateContextualFollowUp(phone, template);
+              const contextualMessage = await generateContextualFollowUp(phone, template, order.tenantId);
               const sentMsg = await this.sendMessage(phone, contextualMessage);
               
-              DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage });
-              DB.updateOrder(order.id, { recoveryStage: 4, status: "cancelled" });
+              await DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage }, order.tenantId);
+              await DB.updateOrder(order.id, { recoveryStage: 4, status: "cancelled" }, order.tenantId);
             } catch (err) {
               console.error(`[System C Stage 4] Failed for ${phone}:`, err);
             }
@@ -178,7 +178,7 @@ export class WhatsAppManager {
           const lastMessage = messages[messages.length - 1];
           const elapsedMs = now - new Date(lastMessage.timestamp).getTime();
           const elapsedMinutes = (elapsedMs / (1000 * 60)).toFixed(2);
-          const customer = DB.getCustomer(phone);
+          const customer = await DB.getCustomer(phone);
           const followUpLevel = customer?.followUpLevel || 0;
           const nextFollowUp = config.followUps[followUpLevel];
           const requiredMinutes = nextFollowUp?.delayMinutes || 0;
@@ -218,13 +218,13 @@ export class WhatsAppManager {
           const totalFollowUpLevels = Math.min(config.followUps?.length || 7, maxConfigured);
           if (followUpLevel >= totalFollowUpLevels) {
             console.log(`  -> Skipping ${phone}: Max follow-up level (${totalFollowUpLevels}) reached.`);
-            if (customer?.leadStatus !== "cold") DB.updateCustomer(phone, { leadStatus: "cold" });
+            if (customer?.leadStatus !== "cold") await DB.updateCustomer(phone, { leadStatus: "cold" }, customer?.tenantId);
             continue;
           }
 
           if (!nextFollowUp || !nextFollowUp.enabled) {
             console.log(`  -> Skipping ${phone}: Follow-up level ${followUpLevel} is disabled or missing.`);
-            if (customer?.leadStatus !== "cold") DB.updateCustomer(phone, { leadStatus: "cold" });
+            if (customer?.leadStatus !== "cold") await DB.updateCustomer(phone, { leadStatus: "cold" }, customer?.tenantId);
             continue;
           }
 
@@ -234,19 +234,19 @@ export class WhatsAppManager {
             
             try {
               const { shouldSendFollowUp } = await import('./ai-handler');
-              const evaluation = await shouldSendFollowUp(phone);
+              const evaluation = await shouldSendFollowUp(phone, undefined, customer?.tenantId);
 
               if (!evaluation.shouldFollowUp) {
                 console.log(`  -> Skipping follow-up for ${phone}: AI determined follow-up is not needed (Reason: ${evaluation.reason}).`);
-                DB.updateCustomer(phone, { leadStatus: "cold", pipelineStage: "completed" });
+                await DB.updateCustomer(phone, { leadStatus: "cold", pipelineStage: "completed" }, customer?.tenantId);
                 continue;
               }
 
-              const contextualMessage = await generateContextualFollowUp(phone, nextFollowUp.message);
+              const contextualMessage = await generateContextualFollowUp(phone, nextFollowUp.message, customer?.tenantId);
               const sentMsg = await this.sendMessage(phone, contextualMessage);
               
-              DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage });
-              DB.updateCustomer(phone, { followUpLevel: followUpLevel + 1 });
+              await DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage }, customer?.tenantId);
+              await DB.updateCustomer(phone, { followUpLevel: followUpLevel + 1 }, customer?.tenantId);
             } catch (err) {
               console.error(`[System B Follow-up] Error sending to ${phone}:`, err);
             }
@@ -278,7 +278,7 @@ export class WhatsAppManager {
   }
 
   static async processRevivalCampaign() {
-    const campaign = DB.getActiveCampaign();
+    const campaign = await DB.getActiveCampaign();
     if (!campaign) return;
 
     // Check delay between individual messages
@@ -317,7 +317,7 @@ export class WhatsAppManager {
     let sentToday = campaign.sentToday || 0;
     if (campaign.lastSentDate !== today) {
       sentToday = 0;
-      DB.updateRevivalCampaign(campaign.id, { sentToday: 0, lastSentDate: today });
+      await DB.updateRevivalCampaign(campaign.id, { sentToday: 0, lastSentDate: today }, campaign.tenantId);
     }
 
     // Check daily cap
@@ -346,7 +346,7 @@ export class WhatsAppManager {
 
       for (const phone of (campaign.sentPhones || [])) {
         // Skip if lead opted out or replied
-        const customer = DB.getCustomer(phone);
+        const customer = await DB.getCustomer(phone, campaign.tenantId);
         if (customer?.isOptedOut || (customer?.tags && customer.tags.includes("revival-replied"))) {
           continue;
         }
@@ -380,7 +380,7 @@ export class WhatsAppManager {
       const p2Enabled = campaign.phase2Settings?.enabled;
       if (!p2Enabled || phase1Remaining.length === 0) {
         console.log(`[Revival] Campaign ${campaign.id} completed all phases!`);
-        DB.updateRevivalCampaign(campaign.id, { status: "completed" });
+        await DB.updateRevivalCampaign(campaign.id, { status: "completed" }, campaign.tenantId);
       }
       return;
     }
@@ -404,17 +404,17 @@ export class WhatsAppManager {
           await this.sendMessage(targetPhone, campaign.message || "Hello! We miss you!");
         }
 
-        DB.addChatMessage(targetPhone, {
+        await DB.addChatMessage(targetPhone, {
           id: "rv1-" + Math.random().toString(36).substring(2, 8),
           role: "assistant",
           content: campaign.message || (campaign.messageType === "voice" ? "[Voice Note]" : "[Media]"),
           status: 1,
-        });
+        }, campaign.tenantId);
 
-        const customer = DB.getCustomer(targetPhone);
+        const customer = await DB.getCustomer(targetPhone, campaign.tenantId);
         const existingTags = customer?.tags || [];
         if (!existingTags.includes("revival-sent")) {
-          DB.updateCustomer(targetPhone, { tags: [...existingTags, "revival-sent"] });
+          await DB.updateCustomer(targetPhone, { tags: [...existingTags, "revival-sent"] }, campaign.tenantId);
         }
 
         progressMap[targetPhone] = {
@@ -452,12 +452,12 @@ export class WhatsAppManager {
           await this.sendMessage(targetPhone, followUpText);
         }
 
-        DB.addChatMessage(targetPhone, {
+        await DB.addChatMessage(targetPhone, {
           id: "rv2-" + Math.random().toString(36).substring(2, 8),
           role: "assistant",
           content: followUpText || `[Follow-up ${currentCount}]`,
           status: 1,
-        });
+        }, campaign.tenantId);
 
         const isFinal = currentCount >= p2.maxFollowUps;
         progressMap[targetPhone] = {
@@ -479,14 +479,14 @@ export class WhatsAppManager {
 
     const updatedSentToday = sentToday + (sentSuccess ? 1 : 0);
 
-    DB.updateRevivalCampaign(campaign.id, {
+    await DB.updateRevivalCampaign(campaign.id, {
       sentPhones: currentSentPhones,
       failedPhones: currentFailedPhones,
       sentToday: updatedSentToday,
       lastSentDate: today,
       lastSentAt: new Date().toISOString(),
       leadProgress: progressMap,
-    });
+    }, campaign.tenantId);
 
     console.log(`[Revival] Progress updated. Total: ${currentSentPhones.length}/${campaign.targetPhones.length}, Today: ${updatedSentToday}/${campaign.dailyCap}`);
   }
@@ -724,13 +724,13 @@ export class WhatsAppManager {
                 
                 if (from) {
                   if (originalJid) {
-                    DB.updateCustomer(from, { jid: originalJid });
+                    await DB.updateCustomer(from, { jid: originalJid });
                   }
-                  const history = DB.getChats(from);
+                  const history = await DB.getChats(from);
                   const exists = history.some((chatMsg: any) => chatMsg.id === msg.key.id);
                   if (!exists) {
                     // Save the owner's manual message as 'assistant' so it appears on the dashboard
-                    DB.addChatMessage(from, { id: msg.key.id || undefined, role: "assistant", content });
+                    await DB.addChatMessage(from, { id: msg.key.id || undefined, role: "assistant", content });
                   }
                 }
               }
@@ -739,22 +739,22 @@ export class WhatsAppManager {
         }
       });
 
-      sock.ev.on("messages.update", (updates) => {
+      sock.ev.on("messages.update", async (updates) => {
         for (const { key, update } of updates) {
           if (key.id && update.status) {
-            DB.updateMessageStatus(key.id, update.status);
+            await DB.updateMessageStatus(key.id, update.status);
           }
         }
       });
 
-      sock.ev.on("messaging-history.set", ({ contacts, messages, isLatest }) => {
+      sock.ev.on("messaging-history.set", async ({ contacts, messages, isLatest }) => {
         // Sync contacts including Groups
         for (const contact of contacts) {
           if (contact.id && contact.id !== "status@broadcast" && !contact.id.endsWith("@newsletter")) {
             const phone = contact.id.replace("@s.whatsapp.net", "").replace("@lid", "");
             if (phone) {
               const isGroup = contact.id.endsWith("@g.us");
-              DB.updateCustomer(phone, { 
+              await DB.updateCustomer(phone, { 
                 name: contact.name || contact.notify || (isGroup ? `Group: ${phone.split('@')[0]}` : phone),
                 jid: contact.id
               });
@@ -785,16 +785,16 @@ export class WhatsAppManager {
                 
                 if (from) {
                   if (originalJid) {
-                    DB.updateCustomer(from, { jid: originalJid });
+                    await DB.updateCustomer(from, { jid: originalJid });
                   }
-                  const history = DB.getChats(from);
+                  const history = await DB.getChats(from);
                   const exists = history.some((chatMsg: any) => chatMsg.id === msg.key.id);
                   if (!exists) {
                     const timestampStr = msg.messageTimestamp 
                       ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
                       : new Date().toISOString();
                       
-                    DB.addChatMessage(from, { 
+                    await DB.addChatMessage(from, { 
                       id: msg.key.id || undefined, 
                       role: msg.key.fromMe ? "assistant" : "user", 
                       content,
@@ -808,13 +808,13 @@ export class WhatsAppManager {
         }
       });
 
-      sock.ev.on("contacts.upsert", (contacts) => {
+      sock.ev.on("contacts.upsert", async (contacts) => {
         for (const contact of contacts) {
           if (contact.id && contact.id !== "status@broadcast" && !contact.id.endsWith("@newsletter")) {
             const phone = contact.id.replace("@s.whatsapp.net", "").replace("@lid", "");
             if (phone) {
               const isGroup = contact.id.endsWith("@g.us");
-              DB.updateCustomer(phone, { 
+              await DB.updateCustomer(phone, { 
                 name: contact.name || contact.notify || (isGroup ? `Group: ${phone.split('@')[0]}` : phone),
                 jid: contact.id
               });
@@ -942,7 +942,7 @@ export class WhatsAppManager {
     }
   }
 
-  static resolveJid(to: string): string {
+  static async resolveJid(to: string): Promise<string> {
     if (to.includes("@")) {
       return to;
     }
@@ -963,7 +963,7 @@ export class WhatsAppManager {
       cleanPhone = cleanPhone.substring(2);
     }
 
-    const customer = DB.getCustomer(cleanPhone);
+    const customer = await DB.getCustomer(cleanPhone);
     if (customer && customer.jid) {
       return customer.jid;
     }
@@ -972,13 +972,13 @@ export class WhatsAppManager {
 
   static async sendTyping(to: string) {
     if (globalForBaileys.baileysSession.status !== "connected" || !globalForBaileys.baileysSession.sock) return;
-    const jid = this.resolveJid(to);
+    const jid = await this.resolveJid(to);
     await globalForBaileys.baileysSession.sock.sendPresenceUpdate('composing', jid);
   }
 
   static async sendMessage(to: string, text: string) {
     const sock = await this.ensureConnected();
-    const jid = this.resolveJid(to);
+    const jid = await this.resolveJid(to);
     await sock.sendPresenceUpdate('paused', jid);
     const sentMsg = await sock.sendMessage(jid, { text });
     return sentMsg;
@@ -986,7 +986,7 @@ export class WhatsAppManager {
 
   static async sendMedia(to: string, buffer: Buffer, mimetype: string, fileName?: string, caption?: string, isVoiceNote = false) {
     const sock = await this.ensureConnected();
-    const jid = this.resolveJid(to);
+    const jid = await this.resolveJid(to);
     
     let msgObj: any = {};
     if (isVoiceNote || mimetype.startsWith('audio/')) {
@@ -1009,7 +1009,7 @@ export class WhatsAppManager {
 
   static async markChatRead(phone: string, messageIds: string[]) {
     if (globalForBaileys.baileysSession.status !== "connected" || !globalForBaileys.baileysSession.sock || !messageIds.length) return;
-    const jid = this.resolveJid(phone);
+    const jid = await this.resolveJid(phone);
     const keys = messageIds.map(id => ({ remoteJid: jid, id, fromMe: false }));
     try {
       await globalForBaileys.baileysSession.sock.readMessages(keys);
@@ -1144,7 +1144,7 @@ export class WhatsAppManager {
     
     // Explicitly save the product card to the database so it appears on the dashboard
     const fromStr = jid.replace("@s.whatsapp.net", "");
-    DB.addChatMessage(fromStr, {
+    await DB.addChatMessage(fromStr, {
       role: "assistant",
       content: `[Product Card: ${product.title}]\nPrice: ${product.price}\nLink: ${product.link || "https://cutecoodle.com"}`
     });

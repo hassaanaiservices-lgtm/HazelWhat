@@ -26,9 +26,9 @@ export async function POST(request: NextRequest) {
 
       const cookieStore = await cookies();
       cookieStore.set("hazel_session", JSON.stringify(sessionData), {
-        httpOnly: false, // accessible to client for easy UI state
+        httpOnly: false,
         path: "/",
-        maxAge: remember !== false ? 60 * 60 * 24 * 30 : 60 * 60 * 24, // 30 days if remember me
+        maxAge: remember !== false ? 60 * 60 * 24 * 30 : 60 * 60 * 24,
         sameSite: "lax"
       });
 
@@ -39,22 +39,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 2. Check Client/Tenant Login
-    let tenant = DB.getTenantByUsername(username);
-
-    // If not found in local DB, attempt to restore from Supabase
-    if (!tenant) {
-      try {
-        const { fetchTenantsFromSupabase } = await import("@/lib/supabase");
-        const supabaseTenants = await fetchTenantsFromSupabase();
-        if (supabaseTenants && supabaseTenants.length > 0) {
-          DB.saveTenants(supabaseTenants);
-          tenant = DB.getTenantByUsername(username);
-        }
-      } catch (e) {
-        console.error("[Login API] Error querying Supabase:", e);
-      }
-    }
+    // 2. Check Client/Tenant Login against Supabase
+    const tenant = await DB.getTenantByUsername(username);
 
     if (!tenant) {
       return NextResponse.json({ success: false, error: "Invalid username or password" }, { status: 401 });

@@ -16,46 +16,20 @@ export async function GET(req: NextRequest) {
     const session = JSON.parse(sessionCookie.value);
     const tenantId = session.tenantId;
 
-    const allChats = DB.getAllChats() || {};
-    const rawCustomers = DB.getAllCustomers() || [];
-    const customerList = Array.isArray(rawCustomers) ? rawCustomers : Object.values(rawCustomers);
-
-    // Super Admin sees all chats
     if (session.role === 'admin') {
-      return NextResponse.json({ success: true, chats: allChats, customers: customerList });
+      const allChats = await DB.getAllChats('admin');
+      const allCustomers = await DB.getAllCustomers('admin');
+      return NextResponse.json({ success: true, chats: allChats, customers: allCustomers });
     }
 
-    // Client sees chats & customers tagged with their specific tenantId, or untagged chats
-    const filteredChats: Record<string, any[]> = {};
-    const filteredCustomers: any[] = [];
-
-    customerList.forEach((c: any) => {
-      if (c && (!c.tenantId || c.tenantId === tenantId)) {
-        filteredCustomers.push(c);
-        if (allChats[c.phone]) {
-          filteredChats[c.phone] = allChats[c.phone];
-        }
-      }
-    });
-
-    // Also include any chat where messages match tenantId or have no tenantId set
-    for (const [phone, chatList] of Object.entries(allChats)) {
-      if (Array.isArray(chatList)) {
-        const belongsToTenant = chatList.some((m: any) => !m.tenantId || m.tenantId === tenantId);
-        if (belongsToTenant && !filteredChats[phone]) {
-          filteredChats[phone] = chatList;
-        }
-      }
-    }
-
-    // Fail-safe fallback: If filtered chats is empty but database has chats, include all chats
-    const finalChats = Object.keys(filteredChats).length > 0 ? filteredChats : allChats;
-    const finalCustomers = filteredCustomers.length > 0 ? filteredCustomers : customerList;
+    // Tenant-isolated chat and customer fetching
+    const chats = await DB.getAllChats(tenantId);
+    const customers = await DB.getAllCustomers(tenantId);
 
     return NextResponse.json({ 
       success: true, 
-      chats: finalChats, 
-      customers: finalCustomers 
+      chats, 
+      customers 
     });
 
   } catch (err: any) {
