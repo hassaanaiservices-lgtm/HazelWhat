@@ -702,7 +702,9 @@ export async function handleWhatsAppMessage(msg: any) {
     const currentStage = existingCustomer?.pipelineStage || "new";
     
     let updatedTags = existingCustomer?.tags || [];
-    let nextStage: "cold" | "new" | "qualified" | "warm" | "completed" | undefined = currentStage === "completed" ? "completed" : currentStage;
+    // Whenever a user sends a new message, re-engage them into active pipeline & restart follow-up loop
+    let nextStage: "cold" | "new" | "qualified" | "warm" | "completed" | undefined = 
+      (currentStage === "completed" || existingCustomer?.leadStatus === "cold") ? "warm" : currentStage;
     
     // Check if customer was in revival flow
     const activeCampaign = DB.getActiveCampaign();
@@ -731,6 +733,7 @@ export async function handleWhatsAppMessage(msg: any) {
       followUpLevel: 0,
       leadStatus: "hot",
       pipelineStage: nextStage,
+      isOptedOut: false,
       tags: updatedTags,
       ...(msg.pushName ? { name: msg.pushName } : {})
     });
@@ -1249,11 +1252,11 @@ export async function shouldSendFollowUp(phone: string): Promise<{ shouldFollowU
   const appointments = DB.getAllAppointments().filter((a: any) => a.phone === phone);
 
   // Quick state checks:
-  if (customer?.leadStatus === "cold" || customer?.pipelineStage === "completed") {
-    return { shouldFollowUp: false, reason: `Customer status is ${customer?.leadStatus || customer?.pipelineStage}` };
+  if (customer?.isOptedOut) {
+    return { shouldFollowUp: false, reason: "Customer explicitly opted out." };
   }
 
-  // Check if latest order or appointment is completed, and if user sent new messages after it
+  // Check if latest order is completed/paid, and if user sent new messages after it
   const userMessages = history.filter((m: any) => m.role === 'user');
   const lastUserMsgTime = userMessages.length > 0 ? new Date(userMessages[userMessages.length - 1].timestamp).getTime() : 0;
 
@@ -1263,20 +1266,9 @@ export async function shouldSendFollowUp(phone: string): Promise<{ shouldFollowU
 
   if (completedOrder) {
     const orderTime = new Date(completedOrder.timestamp).getTime();
-    // If no user messages after completed order, then deal is complete
+    // If no new user messages after completed order, then deal is complete
     if (lastUserMsgTime <= orderTime) {
       return { shouldFollowUp: false, reason: `Deal completed: Customer confirmed order #${completedOrder.id}` };
-    }
-  }
-
-  const confirmedAppt = appointments
-    .filter((a: any) => a.status === "confirmed" || a.status === "completed")
-    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-
-  if (confirmedAppt) {
-    const apptTime = new Date(confirmedAppt.date).getTime();
-    if (lastUserMsgTime <= apptTime) {
-      return { shouldFollowUp: false, reason: `Deal completed: Customer has ${confirmedAppt.status} appointment on ${confirmedAppt.date}` };
     }
   }
 
@@ -1294,17 +1286,15 @@ export async function shouldSendFollowUp(phone: string): Promise<{ shouldFollowU
   }
 
   const systemPrompt = `You are an AI Sales & Booking Intelligence Controller evaluating WhatsApp conversation state.
-Determine whether an automated follow-up message SHOULD be sent to this customer, or if the deal/booking/inquiry is already CLOSED, COMPLETED, RESOLVED, or DECLINED.
+Determine whether an automated follow-up message SHOULD be sent to this customer, or if the deal/booking/inquiry is CLOSED due to an order placement or explicit refusal.
 
 Rule to SKIP follow-up (return shouldFollowUp: false):
-1. The deal, booking, order, or appointment was successfully completed, confirmed, or finalized in the conversation.
-2. The user explicitly stated they are not interested, asked to stop/cancel, or declined.
-3. The user's query or issue was completely answered and resolved with clear closure (e.g., "Thanks that's all", "All set", "Got it, thank you").
+1. The user placed an order or completed payment for a product/service.
+2. The user explicitly stated they are NOT interested, asked to stop messaging, or refused/declined.
 
 Rule to SEND follow-up (return shouldFollowUp: true):
-1. The user stopped replying mid-way through a booking, consultation, or purchasing process.
-2. The bot asked a question or offered a service/product, and the user hasn't replied yet.
-3. The conversation was left pending without closure.
+1. The user expressed interest, asked a question, inquired about products/services, or asked to book/re-book a call/appointment, and has gone quiet without placing an order or explicitly declining.
+2. The conversation was left pending mid-way without a finalized order or clear refusal.
 
 Respond STRICTLY with JSON only in this exact format:
 {"shouldFollowUp": boolean, "reason": "brief 1-sentence explanation"}`;

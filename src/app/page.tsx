@@ -58,6 +58,8 @@ export default function DashboardPage() {
   const [kbSaveSuccess, setKbSaveSuccess] = useState(false);
   const [savingKeywords, setSavingKeywords] = useState(false);
   const [keywordsSaveSuccess, setKeywordsSaveSuccess] = useState(false);
+  const [savingFollowUps, setSavingFollowUps] = useState(false);
+  const [followUpsSaveSuccess, setFollowUpsSaveSuccess] = useState(false);
   const [isAutopilotSaving, setIsAutopilotSaving] = useState(false);
   const [apiKeyStatus, setApiKeyStatus] = useState<string>("Not Checked");
   const [apiKeyError, setApiKeyError] = useState<string>("");
@@ -1232,6 +1234,29 @@ export default function DashboardPage() {
       setSavingKeywords(false);
     }
   };
+
+  const saveFollowUpSettings = async () => {
+    setSavingFollowUps(true);
+    setFollowUpsSaveSuccess(false);
+    try {
+      await fetch("/api/whatsapp/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          followUps: config.followUps,
+          maxFollowUps: config.maxFollowUps
+        })
+      });
+      setFollowUpsSaveSuccess(true);
+      setTimeout(() => setFollowUpsSaveSuccess(false), 3000);
+    } catch (e) {
+      console.error("Error saving Follow-up settings:", e);
+    } finally {
+      setSavingFollowUps(false);
+    }
+  };
+
+
 
   const saveConfig = async () => {
     setSavingConfig(true);
@@ -3304,6 +3329,181 @@ export default function DashboardPage() {
                     </>
                   )}
                 </button>
+              </div>
+
+              {/* Follow-Up Automation & Sequences Section */}
+              <div className="pt-6 border-t border-slate-100 space-y-6">
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-purple-600" />
+                      <span>Follow-Up Automation & Sequences</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium mt-1">
+                      Configure automated check-ins for leads who go quiet. Set interval gaps (hours & days) and maximum follow-up count.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200/80">
+                      <label className="text-xs font-extrabold text-slate-700">Max Follow-ups:</label>
+                      <select
+                        value={config.maxFollowUps || config.followUps?.length || 7}
+                        onChange={(e) => {
+                          const count = parseInt(e.target.value) || 7;
+                          setConfig({ ...config, maxFollowUps: count });
+                        }}
+                        className="px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg font-bold text-slate-800 focus:ring-2 focus:ring-purple-500 outline-none cursor-pointer"
+                      >
+                        {[1, 2, 3, 4, 5, 6, 7].map((num) => (
+                          <option key={num} value={num}>{num} {num === 1 ? 'Time' : 'Times'}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <button 
+                      onClick={saveFollowUpSettings}
+                      disabled={savingFollowUps}
+                      className={`px-6 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-purple-500/20 active:scale-95 ${
+                        followUpsSaveSuccess
+                          ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                          : "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white"
+                      }`}
+                    >
+                      {savingFollowUps ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Saving Follow-ups...</span>
+                        </>
+                      ) : followUpsSaveSuccess ? (
+                        <>
+                          <CheckCircle2 className="h-4 w-4 animate-bounce text-yellow-300" />
+                          <span>Follow-ups Saved!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4" />
+                          <span>Save Follow-up Settings</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {(() => {
+                    const defaultFUs = [
+                      { enabled: true, delayMinutes: 60, delayValue: 1, unit: 'hours' as const, message: '' },
+                      { enabled: true, delayMinutes: 1440, delayValue: 1, unit: 'days' as const, message: '' },
+                      { enabled: true, delayMinutes: 2880, delayValue: 2, unit: 'days' as const, message: '' },
+                      { enabled: true, delayMinutes: 4320, delayValue: 3, unit: 'days' as const, message: '' },
+                      { enabled: true, delayMinutes: 7200, delayValue: 5, unit: 'days' as const, message: '' },
+                      { enabled: true, delayMinutes: 10080, delayValue: 7, unit: 'days' as const, message: '' },
+                      { enabled: true, delayMinutes: 14400, delayValue: 10, unit: 'days' as const, message: '' },
+                    ];
+                    const currentFUs = config.followUps || [];
+                    const maxCount = config.maxFollowUps || currentFUs.length || 7;
+                    const fullFUs = defaultFUs.slice(0, maxCount).map((df, i) => ({ ...df, ...(currentFUs[i] || {}) }));
+
+                    const computeMinutes = (val: number, unit: string) => {
+                      if (unit === 'hours') return val * 60;
+                      if (unit === 'days') return val * 1440;
+                      if (unit === 'months') return val * 43200;
+                      return val; // minutes
+                    };
+
+                    const getValAndUnit = (fu: any, df: any) => {
+                      if (fu.unit && fu.delayValue !== undefined) {
+                        return { unit: fu.unit, val: fu.delayValue };
+                      }
+                      const mins = fu.delayMinutes || df.delayMinutes;
+                      if (mins >= 43200 && mins % 43200 === 0) return { unit: 'months', val: mins / 43200 };
+                      if (mins >= 1440 && mins % 1440 === 0) return { unit: 'days', val: mins / 1440 };
+                      if (mins >= 60 && mins % 60 === 0) return { unit: 'hours', val: mins / 60 };
+                      return { unit: 'minutes', val: mins };
+                    };
+
+                    return fullFUs.map((fu: any, idx: number) => {
+                      const { unit: currentUnit, val: currentValue } = getValAndUnit(fu, defaultFUs[idx]);
+
+                      return (
+                        <div key={idx} className={`p-5 rounded-2xl border transition-all ${fu.enabled ? 'bg-white border-purple-200 shadow-sm' : 'bg-slate-50/80 border-slate-200/80'}`}>
+                          <div className="flex items-center justify-between flex-wrap gap-3 mb-2">
+                            <h4 className="font-bold text-slate-800 flex items-center gap-2 text-xs">
+                              <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs text-white ${fu.enabled ? 'bg-purple-600' : 'bg-slate-300'}`}>{idx + 1}</span>
+                              Follow-up #{idx + 1}
+                            </h4>
+                            
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-2">
+                                <label className="text-xs font-bold text-slate-500">Wait Gap:</label>
+                                <input 
+                                  type="number"
+                                  min="1"
+                                  value={currentValue}
+                                  onChange={(e) => {
+                                    const val = Math.max(1, parseInt(e.target.value) || 1);
+                                    const newMinutes = computeMinutes(val, currentUnit);
+                                    const newFUs = [...(config.followUps || defaultFUs)];
+                                    newFUs[idx] = { ...newFUs[idx], delayValue: val, unit: currentUnit, delayMinutes: newMinutes };
+                                    setConfig({ ...config, followUps: newFUs });
+                                  }}
+                                  className="w-16 px-3 py-1.5 text-xs bg-white border border-slate-200/80 rounded-lg focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold"
+                                />
+                                <select
+                                  value={currentUnit}
+                                  onChange={(e) => {
+                                    const unit = e.target.value as any;
+                                    const newMinutes = computeMinutes(currentValue, unit);
+                                    const newFUs = [...(config.followUps || defaultFUs)];
+                                    newFUs[idx] = { ...newFUs[idx], delayValue: currentValue, unit, delayMinutes: newMinutes };
+                                    setConfig({ ...config, followUps: newFUs });
+                                  }}
+                                  className="px-2.5 py-1.5 text-xs bg-white border border-slate-200/80 rounded-lg focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold text-slate-700 cursor-pointer"
+                                >
+                                  <option value="minutes">Minutes</option>
+                                  <option value="hours">Hours</option>
+                                  <option value="days">Days</option>
+                                  <option value="months">Months</option>
+                                </select>
+                              </div>
+                              <div 
+                                onClick={() => {
+                                  const newFUs = [...(config.followUps || defaultFUs)];
+                                  newFUs[idx] = { ...newFUs[idx], enabled: !fu.enabled };
+                                  setConfig({ ...config, followUps: newFUs });
+                                }}
+                                className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${fu.enabled ? 'bg-purple-600' : 'bg-slate-300'}`}
+                              >
+                                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${fu.enabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                              </div>
+                            </div>
+                          </div>
+
+                          {fu.enabled && (
+                            <div className="mt-3 border-t border-slate-100 pt-3 space-y-2">
+                              <input
+                                type="text"
+                                value={fu.message || ""}
+                                onChange={(e) => {
+                                  const newFUs = [...(config.followUps || defaultFUs)];
+                                  newFUs[idx] = { ...newFUs[idx], message: e.target.value };
+                                  setConfig({ ...config, followUps: newFUs });
+                                }}
+                                placeholder={`Optional custom instruction/template for Follow-up #${idx + 1}...`}
+                                className="w-full p-2.5 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 outline-none font-medium text-slate-800"
+                              />
+                              <div className="flex items-center gap-2 text-xs font-semibold text-purple-700 bg-purple-50/70 p-2.5 rounded-xl border border-purple-100/80">
+                                <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                                <span>AI dynamically generates personalized follow-up messages based on recent chat context. Automatically pauses if lead places an order or opts out.</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
               </div>
 
             </div>

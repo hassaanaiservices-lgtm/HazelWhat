@@ -58,6 +58,7 @@ export interface Config {
   timezone?: string;
   workingHours?: string;
   botMode?: "orders" | "appointments" | "both";
+  maxFollowUps?: number;
   followUps?: FollowUpConfig[];
   anthropicApiKey?: string;
   openRouterApiKey?: string;

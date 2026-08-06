@@ -213,8 +213,9 @@ export class WhatsAppManager {
             continue;
           }
 
-          // If all follow-ups sent, stop and mark as cold lead
-          const totalFollowUpLevels = config.followUps?.length || 7;
+          // If max follow-ups reached based on config, skip
+          const maxConfigured = config.maxFollowUps !== undefined ? config.maxFollowUps : (config.followUps?.length || 7);
+          const totalFollowUpLevels = Math.min(config.followUps?.length || 7, maxConfigured);
           if (followUpLevel >= totalFollowUpLevels) {
             console.log(`  -> Skipping ${phone}: Max follow-up level (${totalFollowUpLevels}) reached.`);
             if (customer?.leadStatus !== "cold") DB.updateCustomer(phone, { leadStatus: "cold" });
