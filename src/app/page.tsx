@@ -655,20 +655,40 @@ export default function DashboardPage() {
     }
   };
 
+  const isContactActiveLead = (c: any): boolean => {
+    if (!c || !c.phone) return false;
+    if (c.isLead === true) return true;
+    if (c.isLead === false) return false;
+
+    // Check if chat history has at least one user message
+    const userChat = chats[c.phone];
+    if (Array.isArray(userChat) && userChat.some((m: any) => m.role === 'user')) return true;
+
+    // Check if customer has orders or bookings
+    const hasOrder = Array.isArray(orders) && orders.some((o: any) => o.phone === c.phone);
+    if (hasOrder) return true;
+
+    // Check if explicitly set stage by user or has revival/lead tags
+    if (c.pipelineStageSetByUser && c.pipelineStage) return true;
+    if (c.tags && Array.isArray(c.tags) && c.tags.some((t: string) => t.includes('lead') || t.includes('revival') || t.includes('booked') || t.includes('replied'))) return true;
+
+    return false;
+  };
+
   const getSelectedLeadsCount = (aud = revivalAudience) => {
     if (aud === "custom") {
       return customPhones.length;
     }
     const customerList = Object.values(customers);
-    const chatPhones = Object.keys(chats);
+    const activeLeadList = customerList.filter(c => isContactActiveLead(c));
     if (aud === "all") {
-      return new Set([...customerList.map(c => c.phone), ...chatPhones]).size;
+      return activeLeadList.length;
     } else if (aud === "cold") {
-      return customerList.filter(c => c.leadStatus === "cold" || c.pipelineStage === "cold").length;
+      return activeLeadList.filter(c => c.leadStatus === "cold" || c.pipelineStage === "cold").length;
     } else if (aud === "hot") {
-      return customerList.filter(c => c.leadStatus === "hot" || c.pipelineStage === "warm").length;
+      return activeLeadList.filter(c => c.leadStatus === "hot" || c.pipelineStage === "warm").length;
     } else if (aud === "new") {
-      return customerList.filter(c => !c.pipelineStage || c.pipelineStage === "new").length;
+      return activeLeadList.filter(c => !c.pipelineStage || c.pipelineStage === "new").length;
     }
     return 0;
   };
@@ -4866,7 +4886,7 @@ export default function DashboardPage() {
               )}
             </div>
             <div className="flex items-center gap-2 text-xs font-bold text-slate-400 self-end md:self-center">
-              Total: {Object.keys(customers).length} Contacts
+              Total: {Object.values(customers).filter(c => isContactActiveLead(c)).length} Active Leads
             </div>
           </div>
 
@@ -4887,12 +4907,17 @@ export default function DashboardPage() {
                   if (c.leadStatus === "cold") return "cold";
                   const hasOrder = orders.some((o: any) => o.phone === c.phone && (o.status === "confirmed" || o.status === "delivered"));
                   if (hasOrder) return "completed";
+                  const hasAppt = orders.some((o: any) => o.phone === c.phone && (o.productName?.includes('Appointment') || o.productName?.includes('Call')));
+                  if (hasAppt) return "qualified";
                   if (c.leadStatus === "hot") return "warm";
-                  if (c.name && c.name !== c.phone) return "qualified";
+                  const userChat = chats[c.phone];
+                  if (Array.isArray(userChat) && userChat.length > 2) return "warm";
                   return "new";
                 };
 
-                const filteredCustomers = Object.values(customers).filter(c => {
+                const activeLeads = Object.values(customers).filter(c => isContactActiveLead(c));
+
+                const filteredCustomers = activeLeads.filter(c => {
                   if (!searchQuery) return true;
                   const searchLower = searchQuery.toLowerCase();
                   const nameMatch = c.name?.toLowerCase().includes(searchLower);
@@ -5038,9 +5063,9 @@ export default function DashboardPage() {
           ) : (
             /* ORIGINAL LIST TABLE VIEW */
             <div className="dash-card overflow-hidden min-h-[500px]">
-              {Object.keys(customers).length === 0 ? (
+              {Object.values(customers).filter(c => isContactActiveLead(c)).length === 0 ? (
                 <div className="text-center p-12 text-slate-400 font-bold text-xs">
-                  No contacts found.
+                  No active leads found.
                 </div>
               ) : (
                 <table className="w-full text-left border-collapse">
@@ -5054,6 +5079,7 @@ export default function DashboardPage() {
                   </thead>
                   <tbody>
                     {Object.values(customers)
+                      .filter(c => isContactActiveLead(c))
                       .filter(c => {
                         if (!searchQuery) return true;
                         const searchLower = searchQuery.toLowerCase();
@@ -5068,8 +5094,11 @@ export default function DashboardPage() {
                           if (c.leadStatus === "cold") return "cold";
                           const hasOrder = orders.some((o: any) => o.phone === c.phone && (o.status === "confirmed" || o.status === "delivered"));
                           if (hasOrder) return "completed";
+                          const hasAppt = orders.some((o: any) => o.phone === c.phone && (o.productName?.includes('Appointment') || o.productName?.includes('Call')));
+                          if (hasAppt) return "qualified";
                           if (c.leadStatus === "hot") return "warm";
-                          if (c.name && c.name !== c.phone) return "qualified";
+                          const userChat = chats[c.phone];
+                          if (Array.isArray(userChat) && userChat.length > 2) return "warm";
                           return "new";
                         };
                         const stage = getCustomerStage(customer);

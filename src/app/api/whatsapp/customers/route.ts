@@ -3,7 +3,7 @@ import { DB } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
-    const { phone, aiEnabled, name, tags, pipelineStage } = await req.json();
+    const { phone, aiEnabled, name, tags, pipelineStage, isLead, pipelineStageSetByUser } = await req.json();
 
     if (!phone) {
       return NextResponse.json({ success: false, error: "Phone number required" }, { status: 400 });
@@ -13,7 +13,13 @@ export async function POST(req: Request) {
     if (aiEnabled !== undefined) updates.aiEnabled = aiEnabled;
     if (name !== undefined) updates.name = name;
     if (tags !== undefined) updates.tags = tags;
-    if (pipelineStage !== undefined) updates.pipelineStage = pipelineStage;
+    if (pipelineStage !== undefined) {
+      updates.pipelineStage = pipelineStage;
+      updates.isLead = true;
+      updates.pipelineStageSetByUser = true;
+    }
+    if (isLead !== undefined) updates.isLead = isLead;
+    if (pipelineStageSetByUser !== undefined) updates.pipelineStageSetByUser = pipelineStageSetByUser;
 
     DB.updateCustomer(phone, updates);
     return NextResponse.json({ success: true });

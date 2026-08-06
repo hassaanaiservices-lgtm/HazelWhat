@@ -730,6 +730,8 @@ export async function handleWhatsAppMessage(msg: any) {
 
     DB.updateCustomer(from, { 
       jid: msg.key.remoteJid,
+      isLead: true,
+      leadCreatedAt: existingCustomer?.leadCreatedAt || new Date().toISOString(),
       followUpLevel: 0,
       leadStatus: "hot",
       pipelineStage: nextStage,

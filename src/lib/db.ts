@@ -117,6 +117,9 @@ export interface Customer {
   pipelineStage?: "new" | "qualified" | "warm" | "cold" | "completed";
   isOptedOut?: boolean;
   optedOutAt?: string;
+  isLead?: boolean;
+  pipelineStageSetByUser?: boolean;
+  leadCreatedAt?: string;
 }
 
 export interface PromotionLog {
