@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { NextRequest } from "next/server";
 
 export interface SessionUser {
@@ -10,39 +9,70 @@ export interface SessionUser {
   email?: string;
 }
 
+function parseCookieValue(value: string | undefined): any | null {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
 export async function getSessionFromCookies(request?: NextRequest): Promise<SessionUser | null> {
   try {
-    const cookieStore = await cookies();
-
-    // 1. Check client session first
-    const clientCookie = cookieStore.get("hazel_client_session");
-    if (clientCookie && clientCookie.value) {
-      const session = JSON.parse(clientCookie.value);
-      if (session.role === "client" && session.tenantId) {
-        return session;
+    // PRIMARY: Read directly from NextRequest cookies (reliable in all Next.js route handlers)
+    if (request?.cookies) {
+      const clientCookieVal = request.cookies.get("hazel_client_session")?.value;
+      const clientSession = parseCookieValue(clientCookieVal);
+      if (clientSession?.role === "client" && clientSession?.tenantId) {
+        return clientSession as SessionUser;
       }
-    }
 
-    // 2. Check admin session
-    const adminCookie = cookieStore.get("hazel_admin_session");
-    if (adminCookie && adminCookie.value) {
-      const session = JSON.parse(adminCookie.value);
-      if (session.role === "admin") {
-        const queryTenantId = request?.nextUrl?.searchParams?.get("tenantId");
+      const adminCookieVal = request.cookies.get("hazel_admin_session")?.value;
+      const adminSession = parseCookieValue(adminCookieVal);
+      if (adminSession?.role === "admin") {
+        const queryTenantId = request.nextUrl?.searchParams?.get("tenantId");
         return {
-          ...session,
-          tenantId: queryTenantId || session.tenantId || "admin"
-        };
+          ...adminSession,
+          tenantId: queryTenantId || adminSession.tenantId || "admin"
+        } as SessionUser;
+      }
+
+      // Old unified cookie fallback
+      const oldCookieVal = request.cookies.get("hazel_session")?.value;
+      const oldSession = parseCookieValue(oldCookieVal);
+      if (oldSession?.tenantId) {
+        return oldSession as SessionUser;
       }
     }
 
-    // 3. Fallback check for old unified session cookie
-    const oldCookie = cookieStore.get("hazel_session");
-    if (oldCookie && oldCookie.value) {
-      const session = JSON.parse(oldCookie.value);
-      if (session.tenantId) {
-        return session;
+    // FALLBACK: Use next/headers cookies() for server components / when no request object
+    try {
+      const { cookies } = await import("next/headers");
+      const cookieStore = await cookies();
+
+      const clientCookieVal = cookieStore.get("hazel_client_session")?.value;
+      const clientSession = parseCookieValue(clientCookieVal);
+      if (clientSession?.role === "client" && clientSession?.tenantId) {
+        return clientSession as SessionUser;
       }
+
+      const adminCookieVal = cookieStore.get("hazel_admin_session")?.value;
+      const adminSession = parseCookieValue(adminCookieVal);
+      if (adminSession?.role === "admin") {
+        return {
+          ...adminSession,
+          tenantId: adminSession.tenantId || "admin"
+        } as SessionUser;
+      }
+
+      const oldCookieVal = cookieStore.get("hazel_session")?.value;
+      const oldSession = parseCookieValue(oldCookieVal);
+      if (oldSession?.tenantId) {
+        return oldSession as SessionUser;
+      }
+    } catch (innerErr) {
+      // next/headers not available in this context — that's fine
     }
   } catch (e) {
     console.error("[Session Helper] Error reading session cookie:", e);

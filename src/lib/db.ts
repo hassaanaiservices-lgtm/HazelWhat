@@ -284,10 +284,16 @@ export class DB {
     try {
       let query = supabase.from('chat_messages').select('*');
       if (tenantId && tenantId !== 'admin') {
-        query = query.or(`tenant_id.eq.${tenantId},tenant_id.eq.admin`);
+        // Include messages stored under this tenant OR under the legacy 'admin' bucket
+        query = query.in('tenant_id', [tenantId, 'admin']);
       }
+      // If tenantId is null or 'admin', fetch everything (admin view)
       const { data, error } = await query.order('timestamp', { ascending: true });
-      if (error || !data) return {};
+      if (error) {
+        console.error('[DB/Supabase] getAllChats query error:', error);
+        return {};
+      }
+      if (!data) return {};
 
       const result: Record<string, ChatMessage[]> = {};
       data.forEach((m: any) => {
@@ -309,6 +315,7 @@ export class DB {
       return {};
     }
   }
+
 
   static async addChatMessage(phoneNumber: string, message: Omit<ChatMessage, "timestamp"> & { timestamp?: string; tenantId?: string }, tenantId?: string) {
     if (!supabase) return;
