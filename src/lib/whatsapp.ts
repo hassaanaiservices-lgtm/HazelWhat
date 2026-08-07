@@ -1,10 +1,11 @@
-import { makeWASocket, useMultiFileAuthState, DisconnectReason, WAMessageStatus, downloadMediaMessage, generateWAMessageFromContent, prepareWAMessageMedia, fetchLatestBaileysVersion, Browsers, DEFAULT_CONNECTION_CONFIG } from "@whiskeysockets/baileys";
+import { makeWASocket, DisconnectReason, WAMessageStatus, downloadMediaMessage, generateWAMessageFromContent, prepareWAMessageMedia, fetchLatestBaileysVersion, Browsers, DEFAULT_CONNECTION_CONFIG } from "@whiskeysockets/baileys";
 import { DB, DB_DIR } from "./db";
 import { Boom } from "@hapi/boom";
 import QRCode from "qrcode";
 import pino from "pino";
 import path from "path";
 import fs from "fs";
+import { useSupabaseAuthState } from "./whatsapp-auth";
 import { scrapeStore } from "./scraper";
 const AUTH_FOLDER = path.join(DB_DIR, ".baileys_auth");
 
@@ -150,7 +151,7 @@ export class WhatsAppManager {
           else if (currentStage < 3 && elapsedMinutes >= 1440) {
             console.log(`[System C Recovery] Triggering Stage 3 for order ${order.id} (${phone})`);
             try {
-              const template = `Hey! I really want to help you get this outfit. If we finalize your order for the ${order.productName} today, I can throw in free shipping. Let me know if you want me to add that in! 🎁`;
+              const template = `Hey! I really want to help you get this outfit. If we finalize your order for the ${order.productName} today, I can throw in free shipping. Let me know if you want me to add that in! ðŸŽ`;
               const contextualMessage = await generateContextualFollowUp(phone, template, order.tenantId);
               const sentMsg = await this.sendMessage(phone, contextualMessage);
               
@@ -579,12 +580,7 @@ export class WhatsAppManager {
     globalForBaileys.baileysSession.status = "connecting";
 
     const initPromise = (async () => {
-      const authFolder = AUTH_FOLDER;
-      if (!fs.existsSync(authFolder)) {
-        fs.mkdirSync(authFolder, { recursive: true });
-      }
-
-      const { state, saveCreds } = await useMultiFileAuthState(authFolder);
+      const { state, saveCreds } = await useSupabaseAuthState("default");
       const logger = pino({ level: "silent" });
 
       // Fetch the latest WA version with a timeout, falling back to DEFAULT_CONNECTION_CONFIG
@@ -646,7 +642,7 @@ export class WhatsAppManager {
             return;
           }
 
-          const credsFile = path.join(authFolder, "creds.json");
+          const credsFile = path.join(AUTH_FOLDER, "creds.json");
           const hasCreds = fs.existsSync(credsFile);
 
           const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
@@ -667,9 +663,9 @@ export class WhatsAppManager {
               globalForBaileys.baileysSession.status = "disconnected";
               globalForBaileys.baileysSession.qrCode = null;
               globalForBaileys.reconnectAttempts = 0;
-              if (fs.existsSync(authFolder)) {
+              if (fs.existsSync(AUTH_FOLDER)) {
                 try {
-                  fs.rmSync(authFolder, { recursive: true, force: true });
+                  fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
                 } catch (e) {
                   console.error("Failed to delete auth folder:", e);
                 }
@@ -1173,3 +1169,4 @@ if (globalForBaileys.baileysSession) {
   WhatsAppManager.startRevivalSync();
   WhatsAppManager.startSessionWatchdog();
 }
+
