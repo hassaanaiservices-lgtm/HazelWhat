@@ -25,7 +25,7 @@ export interface Tenant {
   businessName: string; // Business Name
   phoneNumber: string; // Client Phone Number
   email: string;
-  status: 'active' | 'suspended' | 'blocked';
+  status: 'active' | 'draft' | 'suspended' | 'blocked';
   installationFee: number;
   monthlySubscriptionFee: number;
   currency: 'PKR' | 'USD' | 'EUR' | 'GBP' | 'AED' | 'SAR';

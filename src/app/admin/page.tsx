@@ -67,7 +67,9 @@ import {
   QrCode,
   Smartphone,
   Calendar,
-  RefreshCw
+  RefreshCw,
+  Rocket,
+  FileEdit
 } from 'lucide-react';
 import { 
   initialTenants, 
@@ -213,6 +215,9 @@ export default function VoiceSaaSApp() {
   // Save Animation State
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
+  // Go Live Toast Notification State
+  const [showGoLiveToast, setShowGoLiveToast] = useState(false);
+
   // New Client Modal State
   const [showAddTenant, setShowAddTenant] = useState(false);
   const [newClientForm, setNewClientForm] = useState({
@@ -224,6 +229,7 @@ export default function VoiceSaaSApp() {
     installationFee: 50000,
     monthlySubscriptionFee: 15000,
     currency: 'PKR' as 'PKR' | 'USD' | 'EUR' | 'GBP' | 'AED' | 'SAR',
+    status: 'draft' as 'active' | 'draft',
   });
 
   // Team Admin Modal State
@@ -379,7 +385,7 @@ export default function VoiceSaaSApp() {
       businessName: newClientForm.businessName || 'Business Name LLC',
       phoneNumber: newClientForm.phoneNumber || '+92 300 0000000',
       email: newClientForm.email || 'client@business.com',
-      status: 'active',
+      status: newClientForm.status || 'draft',
       installationFee: Number(newClientForm.installationFee),
       monthlySubscriptionFee: Number(newClientForm.monthlySubscriptionFee),
       currency: newClientForm.currency || 'PKR',
@@ -435,6 +441,7 @@ export default function VoiceSaaSApp() {
       installationFee: 50000,
       monthlySubscriptionFee: 15000,
       currency: 'PKR',
+      status: 'draft',
     });
   };
 
@@ -493,6 +500,22 @@ export default function VoiceSaaSApp() {
       return t;
     });
     persistTenants(updated);
+  };
+
+  const handlePublishTenantLive = (tenantId: string) => {
+    const updated = tenants.map(t => {
+      if (t.id === tenantId) {
+        return { 
+          ...t, 
+          status: 'active' as const,
+          troubleshoot: { ...t.troubleshoot, serviceBlocked: false } 
+        };
+      }
+      return t;
+    });
+    persistTenants(updated);
+    setShowGoLiveToast(true);
+    setTimeout(() => setShowGoLiveToast(false), 4000);
   };
 
   const handleUpdateTenantConfig = (updated: Partial<Tenant>) => {
@@ -1255,22 +1278,35 @@ export default function VoiceSaaSApp() {
                                   </span>
                                 </td>
                                 <td className="p-4">
-                                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                    t.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                                  <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                                    t.status === 'active' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                                    t.status === 'draft' ? 'bg-amber-100 text-amber-900 border border-amber-300' :
+                                    'bg-rose-100 text-rose-800 border border-rose-200'
                                   }`}>
-                                    {t.status}
+                                    {t.status === 'draft' ? '📝 DRAFT' : t.status === 'active' ? '🟢 ACTIVE' : `🔴 ${t.status?.toUpperCase()}`}
                                   </span>
                                 </td>
                                 <td className="p-4">
                                   <div className="flex items-center space-x-2">
+                                    {t.status === 'draft' && (
+                                      <button
+                                        onClick={() => handlePublishTenantLive(t.id)}
+                                        title="Publish Live with 1-Click"
+                                        className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-black transition shadow-md shadow-emerald-600/20 flex items-center space-x-1 cursor-pointer animate-pulse"
+                                      >
+                                        <Rocket className="w-3.5 h-3.5" />
+                                        <span>Go Live</span>
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() => {
                                         setSelectedTenantId(t.id);
                                         setClientSubTab('setup');
                                       }}
-                                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold transition shadow-sm cursor-pointer"
+                                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold transition shadow-sm cursor-pointer flex items-center space-x-1"
                                     >
-                                      Manage Setup
+                                      <FileEdit className="w-3.5 h-3.5" />
+                                      <span>Manage Setup</span>
                                     </button>
                                     <button
                                       onClick={() => toggleTenantStatus(t.id)}
@@ -1337,16 +1373,42 @@ export default function VoiceSaaSApp() {
                           <h2 className="text-lg font-bold text-slate-900">
                             Client #{selectedTenant.clientNumber}: {selectedTenant.name}
                           </h2>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                            selectedTenant.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                            selectedTenant.status === 'active' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                            selectedTenant.status === 'draft' ? 'bg-amber-100 text-amber-900 border border-amber-300' :
+                            'bg-rose-100 text-rose-800 border border-rose-200'
                           }`}>
-                            {selectedTenant.status}
+                            {selectedTenant.status === 'draft' ? '📝 DRAFT' : selectedTenant.status === 'active' ? '🟢 ACTIVE' : `🔴 ${selectedTenant.status?.toUpperCase()}`}
                           </span>
                         </div>
                         <p className="text-xs font-medium text-slate-500 mt-1">
                           Business: <span className="font-bold text-slate-800">{selectedTenant.businessName}</span> • Phone: <span className="font-mono text-slate-900">{selectedTenant.phoneNumber}</span> • Assigned: <span className="font-mono text-purple-600">{selectedTenant.omnivoiceNumber || 'N/A'}</span>
                         </p>
                       </div>
+                    </div>
+
+                    <div className="flex items-center space-x-3">
+                      {/* 1-CLICK GO LIVE BUTTON */}
+                      {selectedTenant.status === 'draft' && (
+                        <button
+                          onClick={() => handlePublishTenantLive(selectedTenant.id)}
+                          className="px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center space-x-2 cursor-pointer animate-pulse"
+                        >
+                          <Rocket className="w-4 h-4" />
+                          <span>1-Click Onboard & Go Live</span>
+                        </button>
+                      )}
+
+                      {/* Status Selector Dropdown */}
+                      <select
+                        value={selectedTenant.status || 'draft'}
+                        onChange={e => handleUpdateTenantConfig({ status: e.target.value as any })}
+                        className="px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-extrabold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                      >
+                        <option value="draft">📝 Draft Mode</option>
+                        <option value="active">🟢 Live Active</option>
+                        <option value="suspended">🔴 Suspended</option>
+                      </select>
                     </div>
 
                     {/* SMART DYNAMIC SAVE BUTTON */}
@@ -2188,6 +2250,33 @@ export default function VoiceSaaSApp() {
                 </select>
               </div>
 
+              <div>
+                <label className="text-xs font-bold text-slate-600 uppercase mb-1.5 block">Initial Onboarding Mode</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setNewClientForm({ ...newClientForm, status: 'draft' })}
+                    className={`p-3 rounded-xl text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-2 ${
+                      newClientForm.status === 'draft' ? 'bg-amber-50 text-amber-900 border-amber-300 shadow-sm ring-2 ring-amber-500/20' : 'bg-slate-50 text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    <span>📝 Save as Draft</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewClientForm({ ...newClientForm, status: 'active' })}
+                    className={`p-3 rounded-xl text-xs font-bold border transition cursor-pointer flex items-center justify-center gap-2 ${
+                      newClientForm.status === 'active' ? 'bg-emerald-50 text-emerald-900 border-emerald-300 shadow-sm ring-2 ring-emerald-500/20' : 'bg-slate-50 text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    <span>🟢 Publish Active</span>
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 font-medium mt-1">
+                  Draft mode allows setting up prompts & knowledge base before launching live with 1 click.
+                </p>
+              </div>
+
               <div className="flex justify-end space-x-3 pt-4">
                 <button
                   type="button"
@@ -2318,6 +2407,17 @@ export default function VoiceSaaSApp() {
             >
               Done
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ================= TOAST: GO LIVE SUCCESS ================= */}
+      {showGoLiveToast && (
+        <div className="fixed bottom-6 right-6 bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-6 py-4 rounded-2xl shadow-2xl z-50 flex items-center space-x-3 animate-in fade-in slide-in-from-bottom-4">
+          <Rocket className="w-6 h-6 text-emerald-200 animate-bounce" />
+          <div>
+            <h4 className="font-extrabold text-sm tracking-tight">Client Published Live! 🚀</h4>
+            <p className="text-xs text-emerald-100 font-medium">Status switched to Active. Client portal & WhatsApp AI bot are now live.</p>
           </div>
         </div>
       )}
