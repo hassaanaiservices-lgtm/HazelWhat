@@ -55,6 +55,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Invalid username or password" }, { status: 401 });
     }
 
+    if (tenant.status === "draft") {
+      return NextResponse.json({ 
+        success: false, 
+        error: "Your client account is currently in Draft mode. Please wait for Super Admin to launch your setup live." 
+      }, { status: 403 });
+    }
+
     if (tenant.status === "suspended" || tenant.status === "blocked") {
       return NextResponse.json({ 
         success: false, 

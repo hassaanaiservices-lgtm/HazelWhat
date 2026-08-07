@@ -877,8 +877,8 @@ export default function LandingPage() {
             </form>
 
             <div className="text-center pt-2 border-t border-white/5">
-              <Link href="/login" className="text-xs text-purple-400 hover:underline">
-                Open Full Screen Login Page →
+              <Link href="/login?portal=client" className="text-xs text-purple-400 hover:underline">
+                Open Dedicated Client Portal Sign In Page →
               </Link>
             </div>
 

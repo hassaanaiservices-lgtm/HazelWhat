@@ -35,6 +35,10 @@ export async function GET() {
       return NextResponse.json({ authenticated: false, error: "Tenant not found" }, { status: 404 });
     }
 
+    if (tenant.status !== "active") {
+      return NextResponse.json({ authenticated: false, error: "Account inactive or suspended" }, { status: 403 });
+    }
+
     return NextResponse.json({
       authenticated: true,
       user: {
