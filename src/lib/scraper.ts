@@ -16,7 +16,7 @@ export async function scrapeStore(targetUrl: string, currency: string = "$"): Pr
     targetUrl = 'https://' + targetUrl;
   }
   
-  let origin;
+  let origin: string;
   try {
     origin = new URL(targetUrl).origin;
   } catch (e) {
@@ -43,7 +43,7 @@ export async function scrapeStore(targetUrl: string, currency: string = "$"): Pr
 
         for (const [type, products] of Object.entries(groupedProducts)) {
           catalogText += `\n### CATEGORY: ${type.toUpperCase()} ###\n`;
-          products.forEach((p, i) => {
+          products.forEach((p) => {
             const title = p.title;
             
             let priceStr = "N/A";
@@ -75,7 +75,7 @@ export async function scrapeStore(targetUrl: string, currency: string = "$"): Pr
             const cleanBodyHtml = p.body_html ? p.body_html.replace(/<[^>]*>?/gm, '').trim().substring(0, 200) : "";
 
             items.push({
-              id: p.id ? String(p.id) : `prod-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+              id: p.id ? String(p.id) : `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
               title,
               price: price.startsWith(currency) ? price : `${currency}${price}`,
               image: image !== "N/A" ? image : "",
@@ -117,7 +117,7 @@ export async function scrapeStore(targetUrl: string, currency: string = "$"): Pr
 
         for (const [category, products] of Object.entries(groupedProducts)) {
           catalogText += `\n### CATEGORY: ${category.toUpperCase()} ###\n`;
-          products.forEach((p, i) => {
+          products.forEach((p) => {
             const title = p.name;
             const priceVal = p.prices?.price ? (parseInt(p.prices.price) / (10 ** (p.prices.currency_minor_unit || 2))).toFixed(2) : "N/A";
             const symbol = p.prices?.currency_symbol || currency;
@@ -127,7 +127,7 @@ export async function scrapeStore(targetUrl: string, currency: string = "$"): Pr
             const desc = p.description ? p.description.replace(/<[^>]*>?/gm, '').trim().substring(0, 200) : "";
 
             items.push({
-              id: p.id ? String(p.id) : `woo-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+              id: p.id ? String(p.id) : `woo-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
               title,
               price: fullPrice,
               image: image !== "N/A" ? image : "",
@@ -149,7 +149,214 @@ export async function scrapeStore(targetUrl: string, currency: string = "$"): Pr
     console.log("WooCommerce check failed");
   }
 
-  // 3. Fallback Generic Cheerio Scraper
+  // 3. Try Sitemap Crawling (Blinkco / Next.js / Custom Stores)
+  try {
+    let productUrls: string[] = [];
+    const sitemapEndpoints = [
+      `${origin}/sitemap-products/1.xml`,
+      `${origin}/sitemap.xml`,
+      `${origin}/sitemap_index.xml`,
+      `${origin}/api/sitemap`
+    ];
+
+    for (const smUrl of sitemapEndpoints) {
+      try {
+        const res = await fetch(smUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) });
+        if (res.ok) {
+          const text = await res.text();
+          const $ = cheerio.load(text, { xmlMode: true });
+          
+          const subSitemaps: string[] = [];
+          $('sitemap loc').each((_, el) => {
+            const loc = $(el).text().trim();
+            if (loc) subSitemaps.push(loc);
+          });
+          
+          for (const sub of subSitemaps) {
+            if (sub.includes('product') || sub.includes('item') || sub.includes('menu')) {
+              try {
+                const subRes = await fetch(sub, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) });
+                if (subRes.ok) {
+                  const subText = await subRes.text();
+                  const $sub = cheerio.load(subText, { xmlMode: true });
+                  $sub('url loc').each((_, el) => {
+                    const loc = $sub(el).text().trim();
+                    if (loc.includes('/product/') || loc.includes('/item/') || loc.includes('/menu/')) {
+                      productUrls.push(loc);
+                    }
+                  });
+                }
+              } catch (e) {}
+            }
+          }
+
+          $('url loc').each((_, el) => {
+            const loc = $(el).text().trim();
+            if (loc.includes('/product/') || loc.includes('/item/') || loc.includes('/menu/')) {
+              productUrls.push(loc);
+            }
+          });
+
+          if (productUrls.length > 0) break;
+        }
+      } catch (e) {}
+    }
+
+    productUrls = [...new Set(productUrls)];
+
+    if (productUrls.length > 0) {
+      const urlsToFetch = productUrls.slice(0, 80);
+      const batchSize = 10;
+      
+      for (let i = 0; i < urlsToFetch.length; i += batchSize) {
+        const batch = urlsToFetch.slice(i, i + batchSize);
+        await Promise.all(batch.map(async (pUrl) => {
+          try {
+            const res = await fetch(pUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(6000) });
+            if (!res.ok) return;
+            const html = await res.text();
+            const $ = cheerio.load(html);
+
+            // A. Next.js __NEXT_DATA__
+            const nextDataEl = $('#__NEXT_DATA__');
+            if (nextDataEl.length > 0) {
+              try {
+                const parsed = JSON.parse(nextDataEl.html() || '{}');
+                const prefetched = parsed.props?.pageProps?.prefetchedItem?.data?.[0];
+                if (prefetched) {
+                  const title = prefetched.name;
+                  const basePrice = parseFloat(prefetched.base_price || prefetched.price || 0);
+                  const category = prefetched.sub_category_name || prefetched.category_name || "Menu";
+                  const desc = prefetched.desc || "";
+                  const image = prefetched.img_url || "";
+
+                  const variations: { title: string; price: string }[] = [];
+                  if (prefetched.dish_options && Array.isArray(prefetched.dish_options)) {
+                    prefetched.dish_options.forEach((opt: any) => {
+                      if (opt.dish_sub_options && Array.isArray(opt.dish_sub_options)) {
+                        opt.dish_sub_options.forEach((subOpt: any) => {
+                          const subPrice = parseFloat(subOpt.price || 0);
+                          variations.push({
+                            title: subOpt.name,
+                            price: subPrice > 0 ? `PKR ${subPrice.toFixed(0)}` : (basePrice > 0 ? `PKR ${basePrice.toFixed(0)}` : "N/A")
+                          });
+                        });
+                      }
+                    });
+                  }
+
+                  let priceDisplay = basePrice > 0 ? `PKR ${basePrice.toFixed(0)}` : "N/A";
+                  if (priceDisplay === "N/A" && variations.length > 0 && variations[0].price !== "N/A") {
+                    priceDisplay = variations[0].price;
+                  }
+
+                  items.push({
+                    id: String(prefetched.id || Date.now()),
+                    title,
+                    price: priceDisplay,
+                    image,
+                    link: pUrl,
+                    category,
+                    description: desc,
+                    variations: variations.length > 0 ? variations : undefined
+                  });
+                  return;
+                }
+              } catch (e) {}
+            }
+
+            // B. JSON-LD Schema.org
+            let jsonLdFound = false;
+            $('script[type="application/ld+json"]').each((_, el) => {
+              try {
+                const ldData = JSON.parse($(el).html() || '{}');
+                if (ldData['@type'] === 'Product' || ldData['@type'] === 'MenuItem') {
+                  const title = ldData.name;
+                  const image = Array.isArray(ldData.image) ? ldData.image[0] : (ldData.image || "");
+                  const desc = ldData.description || "";
+                  let price = "N/A";
+                  if (ldData.offers) {
+                    const priceVal = ldData.offers.price || ldData.offers.lowPrice;
+                    const priceCurr = ldData.offers.priceCurrency || currency;
+                    if (priceVal) price = `${priceCurr} ${priceVal}`;
+                  }
+                  if (title) {
+                    items.push({
+                      id: `ld-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                      title,
+                      price,
+                      image,
+                      link: pUrl,
+                      category: "Menu",
+                      description: desc
+                    });
+                    jsonLdFound = true;
+                  }
+                }
+              } catch (e) {}
+            });
+
+            if (jsonLdFound) return;
+
+            // C. HTML OpenGraph / Headings fallback
+            const title = $('h1').text().trim() || $('meta[property="og:title"]').attr('content') || $('title').text().trim();
+            const image = $('meta[property="og:image"]').attr('content') || $('img').first().attr('src') || "";
+            const desc = $('meta[name="description"]').attr('content') || $('meta[property="og:description"]').attr('content') || "";
+            
+            let price = "N/A";
+            const bodyText = $('body').text();
+            const priceMatch = bodyText.match(/(?:Rs\.?|PKR|\$)\s*([\d,]+)/i);
+            if (priceMatch) {
+              price = priceMatch[0];
+            }
+
+            if (title) {
+              items.push({
+                id: `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                title,
+                price,
+                image,
+                link: pUrl,
+                category: "Menu",
+                description: desc
+              });
+            }
+          } catch (e) {}
+        }));
+      }
+
+      if (items.length > 0) {
+        const groupedProducts: Record<string, ProductItem[]> = {};
+        items.forEach((item) => {
+          const cat = item.category || "Menu";
+          if (!groupedProducts[cat]) groupedProducts[cat] = [];
+          groupedProducts[cat].push(item);
+        });
+
+        for (const [cat, prods] of Object.entries(groupedProducts)) {
+          catalogText += `\n### CATEGORY: ${cat.toUpperCase()} ###\n`;
+          prods.forEach((p) => {
+            let varText = "";
+            if (p.variations && p.variations.length > 0) {
+              varText = "\n  Variations:";
+              p.variations.forEach(v => {
+                varText += `\n    - ${v.title}: ${v.price}`;
+              });
+            }
+            catalogText += `- ${p.title} (${p.price})\n  Image: ${p.image || "N/A"}\n  Link: ${p.link}${varText}\n\n`;
+            productCount++;
+          });
+        }
+        
+        catalogText += `(Extracted ${productCount} products via Sitemap & Page Scraper)\n`;
+        return { catalog: catalogText, productCount, items };
+      }
+    }
+  } catch (e) {
+    console.log("Sitemap scraper failed");
+  }
+
+  // 4. Fallback Generic Cheerio Scraper
   const genericRes = await fetch(targetUrl, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -202,4 +409,3 @@ export async function scrapeStore(targetUrl: string, currency: string = "$"): Pr
     throw new Error("Failed to fetch website HTML");
   }
 }
-
