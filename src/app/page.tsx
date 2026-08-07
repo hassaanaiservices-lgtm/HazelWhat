@@ -1790,8 +1790,11 @@ export default function DashboardPage() {
         {/* Growth Section */}
         <div className="px-6 mb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Growth</div>
         <div className="flex flex-col gap-1 px-4 mb-6">
-          <button onClick={() => setActiveTab('promotions')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${(activeTab === 'promotions' || activeTab === 'leads-revival') ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
-            <RefreshCw className={`h-4 w-4 ${(activeTab === 'promotions' || activeTab === 'leads-revival') ? 'text-purple-600' : 'text-slate-400'}`} /> Follow Ups
+          <button onClick={() => setActiveTab('promotions')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'promotions' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+            <Clock className={`h-4 w-4 ${activeTab === 'promotions' ? 'text-purple-600' : 'text-slate-400'}`} /> Follow Ups
+          </button>
+          <button onClick={() => setActiveTab('leads-revival')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'leads-revival' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+            <RefreshCw className={`h-4 w-4 ${activeTab === 'leads-revival' ? 'text-purple-600' : 'text-slate-400'}`} /> Leads Revival
           </button>
         </div>
 
@@ -3539,13 +3542,147 @@ export default function DashboardPage() {
         </div>
       )}
 
-        {/* Follow Ups Tab - DashMark Theme */}
-        {(activeTab === 'leads-revival' || activeTab === 'promotions') && (
+        {/* Follow Ups Tab (Formerly Promotions slot) - DashMark Theme */}
+        {activeTab === 'promotions' && (
+          <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
+            <div className="p-8 md:p-10 max-w-[1400px] mx-auto w-full space-y-8">
+              <div className="flex justify-between items-center flex-wrap gap-4">
+                <div>
+                  <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
+                    <Clock className="h-7 w-7 text-purple-600" /> Follow Ups
+                  </h2>
+                  <p className="text-xs text-slate-500 font-medium mt-1">Configure automated follow-up sequence rules & intervals for un-replied leads.</p>
+                </div>
+                <button 
+                  onClick={saveConfig}
+                  disabled={savingConfig}
+                  className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold py-2.5 px-6 rounded-xl transition-all shadow-md shadow-purple-500/20 flex items-center gap-2 text-xs cursor-pointer"
+                >
+                  {savingConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Settings
+                </button>
+              </div>
+
+              <div className="dash-card p-8 space-y-6">
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">Automated Follow-up Sequence Rules</h3>
+                  <p className="text-xs text-slate-500 font-medium mt-1">Sends automated follow-up reminders to un-replied leads every N hours or days. Smart AI automatically skips follow-ups if the customer completes the booking or order.</p>
+                </div>
+                
+                <div className="space-y-4 pt-2">
+                  {(() => {
+                    const defaultFUs = [
+                      { enabled: true, delayMinutes: 60, delayValue: 1, unit: 'hours' as const },
+                      { enabled: true, delayMinutes: 1440, delayValue: 1, unit: 'days' as const },
+                      { enabled: true, delayMinutes: 2880, delayValue: 2, unit: 'days' as const },
+                      { enabled: true, delayMinutes: 4320, delayValue: 3, unit: 'days' as const },
+                      { enabled: true, delayMinutes: 7200, delayValue: 5, unit: 'days' as const },
+                      { enabled: true, delayMinutes: 10080, delayValue: 7, unit: 'days' as const },
+                      { enabled: true, delayMinutes: 14400, delayValue: 10, unit: 'days' as const },
+                    ];
+                    const currentFUs = config.followUps || [];
+                    const fullFUs = defaultFUs.map((df, i) => ({ ...df, ...(currentFUs[i] || {}) }));
+
+                    const computeMinutes = (val: number, unit: string) => {
+                      if (unit === 'hours') return val * 60;
+                      if (unit === 'days') return val * 1440;
+                      if (unit === 'months') return val * 43200;
+                      return val;
+                    };
+
+                    const getValAndUnit = (fu: any, df: any) => {
+                      if (fu.unit && fu.delayValue !== undefined) {
+                        return { unit: fu.unit, val: fu.delayValue };
+                      }
+                      const mins = fu.delayMinutes || df.delayMinutes;
+                      if (mins >= 43200 && mins % 43200 === 0) return { unit: 'months', val: mins / 43200 };
+                      if (mins >= 1440 && mins % 1440 === 0) return { unit: 'days', val: mins / 1440 };
+                      if (mins >= 60 && mins % 60 === 0) return { unit: 'hours', val: mins / 60 };
+                      return { unit: 'minutes', val: mins };
+                    };
+
+                    return fullFUs.map((fu: any, idx: number) => {
+                      const { unit: currentUnit, val: currentValue } = getValAndUnit(fu, defaultFUs[idx]);
+
+                      return (
+                        <div key={idx} className={`p-5 rounded-2xl border transition-all ${fu.enabled ? 'bg-white border-purple-200 shadow-sm' : 'bg-slate-50/80 border-slate-200/80'}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-bold text-slate-800 flex items-center gap-2 text-xs">
+                              <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs text-white ${fu.enabled ? 'bg-purple-600' : 'bg-slate-300'}`}>{idx + 1}</span>
+                              Follow-up {idx + 1}
+                            </h4>
+                            
+                            <div className="flex items-center gap-4">
+                              <div className="flex items-center gap-2">
+                                <label className="text-xs font-bold text-slate-500">Wait</label>
+                                <input 
+                                  type="number"
+                                  min="1"
+                                  value={currentValue}
+                                  onChange={(e) => {
+                                    const val = Math.max(1, parseInt(e.target.value) || 1);
+                                    const newMinutes = computeMinutes(val, currentUnit);
+                                    const newFUs = [...fullFUs];
+                                    newFUs[idx] = { ...newFUs[idx], delayValue: val, unit: currentUnit, delayMinutes: newMinutes };
+                                    setConfig({ ...config, followUps: newFUs });
+                                  }}
+                                  className="w-16 px-3 py-1.5 text-xs bg-white border border-slate-200/80 rounded-lg focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold"
+                                />
+                                <select
+                                  value={currentUnit}
+                                  onChange={(e) => {
+                                    const unit = e.target.value;
+                                    const newMinutes = computeMinutes(currentValue, unit);
+                                    const newFUs = [...fullFUs];
+                                    newFUs[idx] = { ...newFUs[idx], delayValue: currentValue, unit, delayMinutes: newMinutes };
+                                    setConfig({ ...config, followUps: newFUs });
+                                  }}
+                                  className="px-2.5 py-1.5 text-xs bg-white border border-slate-200/80 rounded-lg focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold text-slate-700 cursor-pointer"
+                                >
+                                  <option value="minutes">Minutes</option>
+                                  <option value="hours">Hours</option>
+                                  <option value="days">Days</option>
+                                  <option value="months">Months</option>
+                                </select>
+                              </div>
+                              <div 
+                                onClick={() => {
+                                  const newFUs = [...fullFUs];
+                                  newFUs[idx] = { ...newFUs[idx], enabled: !fu.enabled };
+                                  setConfig({ ...config, followUps: newFUs });
+                                }}
+                                className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${fu.enabled ? 'bg-purple-600' : 'bg-slate-300'}`}
+                              >
+                                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${fu.enabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                              </div>
+                            </div>
+                          </div>
+
+                          {fu.enabled && (
+                            <div className="mt-3 border-t border-slate-100 pt-3">
+                              <div className="flex items-center gap-2 text-xs font-semibold text-purple-700 bg-purple-50/70 p-3 rounded-xl border border-purple-100/80">
+                                <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                                <span>AI dynamically generates context-aware follow-up messages based on recent chat history. Smart intelligence automatically skips follow-ups if the deal or booking is already completed.</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Leads Revival Tab - DashMark Theme */}
+        {activeTab === 'leads-revival' && (
           <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
             <div className="p-8 md:p-10 max-w-[1400px] mx-auto w-full space-y-8">
             <div className="flex justify-between items-center mb-2">
               <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
-                <RefreshCw className={`h-7 w-7 text-purple-600 ${activeRevivalCampaign?.status === 'active' ? 'animate-spin' : ''}`} style={{ animationDuration: '4s' }} /> Follow Ups
+                <RefreshCw className={`h-7 w-7 text-purple-600 ${activeRevivalCampaign?.status === 'active' ? 'animate-spin' : ''}`} style={{ animationDuration: '4s' }} /> Leads Revival
               </h2>
               {activeRevivalCampaign && (
                 <div className={`px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5 ${
