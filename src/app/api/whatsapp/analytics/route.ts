@@ -1,18 +1,13 @@
 import { NextResponse } from 'next/server';
 import { DB } from '@/lib/db';
-import { cookies } from "next/headers";
+import { getSessionFromCookies } from "@/lib/auth-session";
 
-export async function GET() {
+export async function GET(req: any) {
+
   try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("hazel_session");
-    let tenantId: string | undefined;
-    if (sessionCookie && sessionCookie.value) {
-      try {
-        const session = JSON.parse(sessionCookie.value);
-        tenantId = session.role === 'admin' ? undefined : session.tenantId;
-      } catch (e) {}
-    }
+    const session = await getSessionFromCookies(req);
+    const tenantId = session?.tenantId;
+
 
     const config = await DB.getConfig(tenantId);
     const chats = await DB.getAllChats(tenantId);

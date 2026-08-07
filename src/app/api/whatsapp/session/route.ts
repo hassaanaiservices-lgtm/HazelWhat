@@ -1,28 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WhatsAppManager } from "@/lib/whatsapp";
 import { handleWhatsAppMessage } from "@/lib/ai-handler";
+import { getSessionFromCookies } from "@/lib/auth-session";
 import { DB_DIR } from "@/lib/db";
-
 import path from "path";
 import fs from "fs";
 
-import { cookies } from "next/headers";
-
-async function getTenantIdFromSession(): Promise<string | undefined> {
+export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("hazel_session");
-    if (sessionCookie && sessionCookie.value) {
-      const session = JSON.parse(sessionCookie.value);
-      return session.role === 'admin' ? undefined : session.tenantId;
-    }
-  } catch (e) {}
-  return undefined;
-}
-
-export async function GET() {
-  try {
-    const tenantId = await getTenantIdFromSession();
+    const session = await getSessionFromCookies(request);
+    const tenantId = session?.tenantId;
     if (tenantId) {
       WhatsAppManager.setActiveTenantId(tenantId);
     }
@@ -36,14 +23,12 @@ export async function GET() {
       
       if (fs.existsSync(credsFile)) {
         console.log("[Session Route] Saved credentials found. Auto-connecting WhatsApp...");
-        // Start session asynchronously
         WhatsAppManager.startSession(async (msg) => {
           await handleWhatsAppMessage(msg, tenantId);
         }).catch(err => {
           console.error("[Session Route] Auto-connect failed:", err);
         });
         
-        // Update status representation to show connecting
         status = {
           status: "connecting",
           qrCode: null,
@@ -60,19 +45,15 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
-    const tenantId = await getTenantIdFromSession();
+    const session = await getSessionFromCookies(request);
+    const tenantId = session?.tenantId;
     if (tenantId) {
       WhatsAppManager.setActiveTenantId(tenantId);
     }
 
-    // Soft reset: close existing socket and delete local credentials
-    // without calling logout() (which would deregister the device on
-    // WhatsApp servers and cause "Couldn't link device" errors).
     await WhatsAppManager.softReset();
-    
-    // Start session and pass the AI handler for incoming messages
     await WhatsAppManager.startSession(async (msg) => {
       await handleWhatsAppMessage(msg, tenantId);
     });

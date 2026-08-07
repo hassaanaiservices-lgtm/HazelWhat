@@ -1,24 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DB } from "@/lib/db";
-import { cookies } from "next/headers";
+import { getSessionFromCookies } from "@/lib/auth-session";
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("hazel_session");
-
-    if (!sessionCookie || !sessionCookie.value) {
+    const session = await getSessionFromCookies(req);
+    if (!session) {
       return NextResponse.json({ success: false, error: "Unauthenticated" }, { status: 401 });
     }
 
-    const session = JSON.parse(sessionCookie.value);
     const tenantId = session.tenantId;
 
     if (session.role === 'admin') {
-      const allChats = await DB.getAllChats('admin');
-      const allCustomers = await DB.getAllCustomers('admin');
+      const queryTenantId = req.nextUrl.searchParams.get('tenantId');
+      const targetTenantId = queryTenantId && queryTenantId !== 'admin' ? queryTenantId : undefined;
+      const allChats = await DB.getAllChats(targetTenantId);
+      const allCustomers = await DB.getAllCustomers(targetTenantId);
       return NextResponse.json({ success: true, chats: allChats, customers: allCustomers });
     }
 
@@ -26,13 +25,15 @@ export async function GET(req: NextRequest) {
     let chats = await DB.getAllChats(tenantId);
     let customers = await DB.getAllCustomers(tenantId);
 
-    // Fallback: If no chats exist under tenantId, check admin chats so legacy messages created before isolation are not lost
+    // Fallback: If no chats exist under tenantId, check all chats to see if legacy messages exist for this tenant's customers or admin
     if (Object.keys(chats).length === 0) {
-      const fallbackChats = await DB.getAllChats('admin');
-      const fallbackCustomers = await DB.getAllCustomers('admin');
+      const fallbackChats = await DB.getAllChats(null);
+      const fallbackCustomers = await DB.getAllCustomers(tenantId);
       if (Object.keys(fallbackChats).length > 0) {
         chats = fallbackChats;
-        customers = fallbackCustomers;
+        if (customers.length === 0) {
+          customers = fallbackCustomers;
+        }
       }
     }
 

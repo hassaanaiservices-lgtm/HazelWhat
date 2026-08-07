@@ -741,12 +741,10 @@ export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
     }
 
     await DB.updateCustomer(from, { 
-      jid: msg.key.remoteJid,
       isLead: true,
       leadCreatedAt: existingCustomer?.leadCreatedAt || new Date().toISOString(),
       followUpLevel: 0,
       leadStatus: "hot",
-      pipelineStage: nextStage,
       isOptedOut: false,
       tags: updatedTags,
       ...(msg.pushName ? { name: msg.pushName } : {})
@@ -762,6 +760,7 @@ export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
       return;
     }
 
+
     const matchedKeyword = config.keywordReplies?.find(k => 
       k.keyword.trim() !== "" && lowerContent.includes(k.keyword.toLowerCase())
     );
@@ -773,51 +772,42 @@ export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
       return;
     }
 
-    console.log("=== AI HANDLER VERSION 6 (Unified callLLM) ===");
+    console.log(`=== AI HANDLER (Tenant: ${resolvedTenantId}) ===`);
 
     const apiKey = getApiKey(config);
 
-    debugLog(`=== Incoming Message from ${from} ===`);
+    debugLog(`=== Incoming Message from ${from} (Tenant: ${resolvedTenantId}) ===`);
     debugLog(`Content: "${content}"`);
-    debugLog(`Unified Key source: config.apiKey=${config.apiKey ? "yes" : "no"}, process.env.DEEPSEEK_API_KEY=${process.env.DEEPSEEK_API_KEY ? "yes" : "no"}, process.env.API_KEY=${process.env.API_KEY ? "yes" : "no"}`);
 
     if (!apiKey) {
       console.error("[AI Handler] No API key is configured.");
       const fallback = "I'm currently experiencing a high volume of requests. A human agent will be with you shortly!";
       const sentMsg = await WhatsAppManager.sendMessage(from, fallback);
       await DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: fallback }, resolvedTenantId);
-      
-      const diagnostics = `[DIAGNOSTIC - KEY ERROR] The bot could not respond because no API keys were loaded.\n- config.apiKey: ${config.apiKey ? "Present" : "Empty"}\n- process.env.DEEPSEEK_API_KEY: ${process.env.DEEPSEEK_API_KEY ? "Present" : "Empty"}\n- process.env.API_KEY: ${process.env.API_KEY ? "Present" : "Empty"}\n- process.env.OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? "Present" : "Empty"}\n- process.env.ANTHROPIC_API_KEY: ${process.env.ANTHROPIC_API_KEY ? "Present" : "Empty"}\n- process.env.OPENROUTER_API_KEY: ${process.env.OPENROUTER_API_KEY ? "Present" : "Empty"}\n- process.env["Api key"]: ${process.env["Api key"] ? "Present" : "Empty"}`;
-      await DB.addChatMessage(from, { role: "assistant", content: diagnostics }, resolvedTenantId);
       return;
     }
 
     let aiReply = "I'm sorry, I didn't quite catch that. Could you rephrase?";
     
-    // Resolve active Tenant from multi-tenant database by phone matching or active status
-    const tenants = (await DB.getTenants()) || [];
-    const cleanFromDigits = (from || "").replace(/[^\d]/g, "");
-    let activeTenant = tenants.find(t => {
-      if (!t.phoneNumber) return false;
-      const tDigits = t.phoneNumber.replace(/[^\d]/g, "");
-      return tDigits.length > 5 && (cleanFromDigits.includes(tDigits) || tDigits.includes(cleanFromDigits));
-    });
-
+    // Fetch active Tenant record from DB by resolvedTenantId
+    let activeTenant = await DB.getTenantById(resolvedTenantId);
     if (!activeTenant) {
-      activeTenant = tenants.find(t => t.status === 'active') || tenants[0];
+      const tenants = (await DB.getTenants()) || [];
+      activeTenant = tenants.find(t => t.id === resolvedTenantId) || tenants[0];
     }
     
-    const activeSystemPrompt = activeTenant?.systemPrompt?.trim() || config.systemPrompt;
-    const activeKnowledgeBase = activeTenant?.knowledgeBase?.trim() || config.productInfo;
+    const activeSystemPrompt = (activeTenant?.systemPrompt && activeTenant.systemPrompt.trim() !== '') ? activeTenant.systemPrompt.trim() : config.systemPrompt;
+    const activeKnowledgeBase = (activeTenant?.knowledgeBase && activeTenant.knowledgeBase.trim() !== '') ? activeTenant.knowledgeBase.trim() : config.productInfo;
     const activeProductKB = activeTenant?.productKnowledgeBase?.trim() || "";
     const activeProducts = (activeTenant?.products && activeTenant.products.length > 0) ? activeTenant.products : (config.products || []);
     const activeCurrency = activeTenant?.currency || config.storeCurrency || "PKR";
+    const activeBusinessName = activeTenant?.businessName || activeTenant?.name || config.businessName || "our store";
 
     const structuredCatalog = activeProducts.length > 0 ? formatProductsToCatalog(activeProducts, activeCurrency) : "";
     const activeProductCatalog = [structuredCatalog, activeKnowledgeBase, activeProductKB].filter(Boolean).join("\n\n");
     let fullSystemPrompt = `${activeSystemPrompt}\n\nToday's Date: ${new Date().toISOString().split('T')[0]}\n\nProduct Information & Catalog:\n${activeProductCatalog}`;
 
-    const customerTags = existingCustomer?.tags || [];
+    const customerTags = customer?.tags || [];
     const hasRevivalTag = customerTags.includes("revival-sent") || customerTags.includes("revival-replied");
     if (hasRevivalTag) {
       fullSystemPrompt += `\n\n=== DEAD LEAD REVIVAL PIPELINE FUNNEL STRATEGY ===
@@ -855,7 +845,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
 9. PROACTIVE FOLLOW-UPS: Whenever you tell the user you will follow up or check back later, you MUST call the schedule_followup tool to actually schedule it. Never just say it without calling the tool.
 10. CUSTOMER CRM PROFILES: You have access to the update_customer_profile tool. Whenever a user shares their name, or shows strong buying interest (such as asking for catalog, pricing, or stock details), you MUST call update_customer_profile to record their name, add relevant product interest tags, and move them to the appropriate stage ('qualified' when they give basic details, 'warm' when showing purchase intent).
 11. VOICE NOTE & AUDIO INSTRUCTIONS: You have full audio & voice note capability. When a user sends a voice note (marked with 🎤 [Voice Note]), the transcript of what they spoke is provided. You MUST ALWAYS answer their question or request directly and naturally! NEVER say "I am not able to listen to voice notes", "I cannot hear audio", or refuse to process voice messages.
-12. 4-LANGUAGE MASTER INSTRUCTIONS: You fluently support Pashto (پښتو), Urdu (اردو / Roman Urdu), Punjabi (پنجابی / Roman Punjabi), and English. Automatically detect the user's language or spoken voice note, and ALWAYS respond in the exact same language with natural vocabulary! Example (Urdu/Roman Urdu): "AOA! Shukriya contact karne ka. Hum Cute Coodle hain, aapko kis item ke baaray mein jan'na hai?". Keep your responses concise, warm, and natural.`;
+12. 4-LANGUAGE MASTER INSTRUCTIONS: You fluently support Pashto (پښتو), Urdu (اردو / Roman Urdu), Punjabi (پنجابی / Roman Punjabi), and English. Automatically detect the user's language or spoken voice note, and ALWAYS respond in the exact same language with natural vocabulary! Example (Urdu/Roman Urdu): "AOA! Shukriya contact karne ka. Hum ${activeBusinessName} hain, aapko kis item ke baaray mein jan'na hai?". Keep your responses concise, warm, and natural.`;
 
     if (config.enabledFeatures && config.enabledFeatures.length > 0) {
       fullSystemPrompt += "\n\n=== ADVANCED FEATURES ENABLED ===\n";

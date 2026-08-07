@@ -1,23 +1,18 @@
 import { NextResponse } from "next/server";
 import { DB, PromotionLog } from "@/lib/db";
 import { WhatsAppManager } from "@/lib/whatsapp";
-import { cookies } from "next/headers";
+import { getSessionFromCookies } from "@/lib/auth-session";
 import fs from "fs";
 import path from "path";
 
+
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function getTenantIdFromSession(): Promise<string | undefined> {
-  try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("hazel_session");
-    if (sessionCookie && sessionCookie.value) {
-      const session = JSON.parse(sessionCookie.value);
-      return session.role === 'admin' ? undefined : session.tenantId;
-    }
-  } catch (e) {}
-  return undefined;
+async function getTenantIdFromSession(req?: any): Promise<string | undefined> {
+  const session = await getSessionFromCookies(req);
+  return session?.tenantId;
 }
+
 
 export async function GET() {
   try {

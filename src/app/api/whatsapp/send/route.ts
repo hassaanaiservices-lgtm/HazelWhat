@@ -1,19 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { WhatsAppManager } from "@/lib/whatsapp";
 import { DB } from "@/lib/db";
-import { cookies } from "next/headers";
+import { getSessionFromCookies } from "@/lib/auth-session";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("hazel_session");
-    let tenantId: string | undefined;
-    if (sessionCookie && sessionCookie.value) {
-      try {
-        const session = JSON.parse(sessionCookie.value);
-        tenantId = session.role === 'admin' ? undefined : session.tenantId;
-      } catch (e) {}
-    }
+    const session = await getSessionFromCookies(req);
+    const tenantId = session?.tenantId;
 
     const { to, content, mediaBase64, mimetype, fileName, isVoiceNote } = await req.json();
 

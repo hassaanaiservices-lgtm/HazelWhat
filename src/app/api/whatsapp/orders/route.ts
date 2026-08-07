@@ -1,20 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { DB } from '@/lib/db';
 import { WhatsAppManager } from '@/lib/whatsapp';
-import { cookies } from "next/headers";
+import { getSessionFromCookies } from "@/lib/auth-session";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("hazel_session");
-    let tenantId: string | undefined;
-    if (sessionCookie && sessionCookie.value) {
-      try {
-        const session = JSON.parse(sessionCookie.value);
-        tenantId = session.role === 'admin' ? undefined : session.tenantId;
-      } catch (e) {}
-    }
-
+    const session = await getSessionFromCookies(req);
+    const tenantId = session?.tenantId;
     const orders = await DB.getOrders(tenantId);
     return NextResponse.json(orders);
   } catch (err: any) {
@@ -22,17 +14,10 @@ export async function GET() {
   }
 }
 
-export async function PATCH(req: Request) {
+export async function PATCH(req: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("hazel_session");
-    let tenantId: string | undefined;
-    if (sessionCookie && sessionCookie.value) {
-      try {
-        const session = JSON.parse(sessionCookie.value);
-        tenantId = session.role === 'admin' ? undefined : session.tenantId;
-      } catch (e) {}
-    }
+    const session = await getSessionFromCookies(req);
+    const tenantId = session?.tenantId;
 
     const { id, status, notes, customerName } = await req.json();
     if (!id) {
@@ -66,17 +51,10 @@ export async function PATCH(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("hazel_session");
-    let tenantId: string | undefined;
-    if (sessionCookie && sessionCookie.value) {
-      try {
-        const session = JSON.parse(sessionCookie.value);
-        tenantId = session.role === 'admin' ? undefined : session.tenantId;
-      } catch (e) {}
-    }
+    const session = await getSessionFromCookies(req);
+    const tenantId = session?.tenantId;
 
     const { id, phone } = await req.json();
     if (!id || !phone) {
@@ -85,7 +63,7 @@ export async function POST(req: Request) {
 
     const { generateContextualFollowUp } = await import('@/lib/ai-handler');
     const prompt = "Summarize key discussion points, client requests, budget, appointment goals, or order specifications from our recent conversation in 2-3 bullet points.";
-    const summary = await generateContextualFollowUp(phone, prompt);
+    const summary = await generateContextualFollowUp(phone, prompt, tenantId);
 
     await DB.updateOrder(id, { notes: summary }, tenantId);
     return NextResponse.json({ success: true, notes: summary });

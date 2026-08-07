@@ -1061,7 +1061,7 @@ export class WhatsAppManager {
           name: "cta_url",
           buttonParamsJson: JSON.stringify({
             display_text: "View Product",
-            url: p.link || "https://cutecoodle.com"
+            url: p.link || "#"
           })
         },
         {
@@ -1131,7 +1131,7 @@ export class WhatsAppManager {
     }
   }
 
-  static async sendProductCard(to: string, product: { title: string; price: string; image: string; link: string; id?: string; description?: string }) {
+  static async sendProductCard(to: string, product: { title: string; price: string; image: string; link: string; id?: string; description?: string }, tenantId?: string) {
     if (globalForBaileys.baileysSession.status !== "connected" || !globalForBaileys.baileysSession.sock) {
       throw new Error("WhatsApp not connected");
     }
@@ -1141,7 +1141,12 @@ export class WhatsAppManager {
     if (product.price && product.price !== "N/A" && product.price !== "Hidden" && product.price !== "None") {
       caption += `\nPrice: ${product.price}`;
     }
-    caption += `\n\n${product.description ? product.description + '\n\n' : ''}View Product: ${product.link || "https://cutecoodle.com"}`;
+    if (product.description) {
+      caption += `\n\n${product.description}`;
+    }
+    if (product.link) {
+      caption += `\n\nView Product: ${product.link}`;
+    }
     
     if (product.image && product.image !== "N/A") {
       await globalForBaileys.baileysSession.sock.sendMessage(jid, { 
@@ -1156,9 +1161,10 @@ export class WhatsAppManager {
     const fromStr = jid.replace("@s.whatsapp.net", "");
     await DB.addChatMessage(fromStr, {
       role: "assistant",
-      content: `[Product Card: ${product.title}]\nPrice: ${product.price}\nLink: ${product.link || "https://cutecoodle.com"}`
-    });
+      content: `[Product Card: ${product.title}]\nPrice: ${product.price}${product.link ? '\nLink: ' + product.link : ''}`
+    }, tenantId);
   }
+
 }
 
 // Ensure intervals are hot-reloaded with the new logic in Next.js dev mode

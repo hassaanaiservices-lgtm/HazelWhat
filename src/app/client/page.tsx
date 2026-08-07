@@ -278,7 +278,7 @@ export default function DashboardPage() {
   const [creatingCampaign, setCreatingCampaign] = useState(false);
 
   // Campaign Form State
-  const [revivalMessage, setRevivalMessage] = useState("Hi {Name}! We noticed you had an inquiry with us regarding {Product}. We'd love to help you get started ΓÇö do you have any questions?");
+  const [revivalMessage, setRevivalMessage] = useState("Hi {Name}! We noticed you had an inquiry with us regarding {Product}. We'd love to help you get started — do you have any questions?");
   const [revivalAudience, setRevivalAudience] = useState("all");
   const [revivalTimeStart, setRevivalTimeStart] = useState("09:00");
   const [revivalTimeEnd, setRevivalTimeEnd] = useState("21:00");
@@ -505,9 +505,9 @@ export default function DashboardPage() {
           const data = await res.json();
           if (data.success && data.count >= 1) {
             setPhones(data.phones);
-            alert(`Γ£à Loaded ${data.count} phone numbers from "${file.name}"`);
+            alert(`✅ Loaded ${data.count} phone numbers from "${file.name}"`);
           } else if (data.error) {
-            alert(`Γ¥î Failed to parse PDF file: ${data.error}`);
+            alert(`❌ Failed to parse PDF file: ${data.error}`);
           } else {
             alert(`No valid phone numbers found in "${file.name}". Please ensure the file contains valid 10 to 15 digit phone numbers.`);
           }
@@ -524,7 +524,7 @@ export default function DashboardPage() {
         const phones = parsePhones(text);
         if (phones.length >= 1) {
           setPhones(phones);
-          alert(`Γ£à Loaded ${phones.length} phone numbers from "${file.name}"`);
+          alert(`✅ Loaded ${phones.length} phone numbers from "${file.name}"`);
         } else {
           alert(`No valid phone numbers found in "${file.name}".`);
         }
@@ -760,7 +760,23 @@ export default function DashboardPage() {
     fetchChats();
     fetchPromotions();
     fetchOrders();
-  }, []);
+    fetchAnalytics();
+    fetchRevivalCampaigns();
+
+    // Real-time polling interval (every 4 seconds) for live chats, orders, and multi-device config sync
+    const pollInterval = setInterval(() => {
+      fetchChats();
+      fetchOrders();
+      fetchSession();
+      // Only fetch config if user is not currently saving
+      if (!savingConfig && !savingKB && !savingKeywords && !savingFollowUps) {
+        fetchConfig();
+      }
+    }, 4000);
+
+    return () => clearInterval(pollInterval);
+  }, [savingConfig, savingKB, savingKeywords, savingFollowUps]);
+
 
   const fetchOrders = async () => {
     try {
@@ -863,15 +879,26 @@ export default function DashboardPage() {
     try {
       const res = await fetch("/api/whatsapp/config");
       const data = await res.json();
-      if (data.success) {
-        setConfig(data.config);
-        // Validate the unified API key
+      if (data.success && data.config) {
+        setConfig((prev: any) => {
+          const activeTag = typeof document !== 'undefined' ? document.activeElement?.tagName : '';
+          const activeId = typeof document !== 'undefined' ? (document.activeElement as HTMLElement)?.id : '';
+          if (activeTag === 'TEXTAREA' || activeTag === 'INPUT') {
+            return {
+              ...data.config,
+              systemPrompt: activeId === 'systemPromptInput' ? prev.systemPrompt : data.config.systemPrompt,
+              productInfo: activeId === 'productInfoInput' ? prev.productInfo : data.config.productInfo
+            };
+          }
+          return data.config;
+        });
         validateApiKey(data.config.apiKey || data.config.anthropicApiKey || data.config.openRouterApiKey);
       }
     } catch (e) {
       console.error(e);
     }
   };
+
 
   const fetchChats = async () => {
     try {
@@ -1118,7 +1145,7 @@ export default function DashboardPage() {
       const chatHistory = prev[selectedChat] || [];
       return {
         ...prev,
-        [selectedChat]: [...chatHistory, { role: "assistant", content: `≡ƒôÄ [Attachment] ${file.name}`, timestamp: new Date().toISOString() }]
+        [selectedChat]: [...chatHistory, { role: "assistant", content: `📎 [Attachment] ${file.name}`, timestamp: new Date().toISOString() }]
       };
     });
 
@@ -1167,7 +1194,7 @@ export default function DashboardPage() {
             const chatHistory = prev[selectedChat] || [];
             return {
               ...prev,
-              [selectedChat]: [...chatHistory, { role: "assistant", content: `≡ƒÄñ [Voice Note]`, timestamp: new Date().toISOString() }]
+              [selectedChat]: [...chatHistory, { role: "assistant", content: `🎤 [Voice Note]`, timestamp: new Date().toISOString() }]
             };
           });
           try {
@@ -1553,7 +1580,7 @@ export default function DashboardPage() {
 
   const launchRevivalCampaign = async () => {
     if (status !== "connected") {
-      alert("ΓÜá∩╕Å WhatsApp is NOT connected!\n\nPlease pair/connect your WhatsApp account first from the dashboard before launching a campaign.");
+      alert("⚠️ WhatsApp is NOT connected!\n\nPlease pair/connect your WhatsApp account first from the dashboard before launching a campaign.");
       setActiveTab("settings");
       return;
     }
@@ -1642,7 +1669,7 @@ export default function DashboardPage() {
 
   const sendPromotion = async () => {
     if (status !== "connected") {
-      alert("ΓÜá∩╕Å WhatsApp is NOT connected!\n\nPlease pair/connect your WhatsApp device first from the dashboard before sending a broadcast.");
+      alert("⚠️ WhatsApp is NOT connected!\n\nPlease pair/connect your WhatsApp device first from the dashboard before sending a broadcast.");
       setActiveTab("settings");
       return;
     }
@@ -1715,11 +1742,11 @@ export default function DashboardPage() {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="bg-yellow-400 text-slate-900 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">≡ƒöö New Order</span>
+              <span className="bg-yellow-400 text-slate-900 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">🔔 New Order</span>
               <span className="text-purple-200 text-xs">{newOrderBanner.time}</span>
             </div>
             <h4 className="text-sm font-extrabold text-white truncate mt-1">{newOrderBanner.productName}</h4>
-            <p className="text-xs text-purple-100 truncate">Customer: <span className="font-bold text-white">{newOrderBanner.customerName}</span> {newOrderBanner.amount && `ΓÇó ${newOrderBanner.amount}`}</p>
+            <p className="text-xs text-purple-100 truncate">Customer: <span className="font-bold text-white">{newOrderBanner.customerName}</span> {newOrderBanner.amount && `• ${newOrderBanner.amount}`}</p>
           </div>
           <div className="flex flex-col gap-1.5">
             <button 
@@ -2064,13 +2091,13 @@ export default function DashboardPage() {
                   <div>
                     <div className="text-xs font-semibold text-slate-400 mb-1 truncate max-w-[130px]">{topProd1Name}</div>
                     <div className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
-                      <span className="text-purple-600 text-sm">Γåæ</span> {topProd1Count} orders
+                      <span className="text-purple-600 text-sm">↑</span> {topProd1Count} orders
                     </div>
                   </div>
                   <div>
                     <div className="text-xs font-semibold text-slate-400 mb-1 truncate max-w-[130px]">{topProd2Name}</div>
                     <div className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
-                      <span className="text-emerald-500 text-sm">Γåæ</span> {topProd2Count} orders
+                      <span className="text-emerald-500 text-sm">↑</span> {topProd2Count} orders
                     </div>
                   </div>
                 </div>
@@ -2083,7 +2110,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="bg-purple-50 text-purple-700 text-[10px] font-bold px-2 py-1 rounded-full flex items-center gap-1 border border-purple-200/60">
-                    <span className="text-xs leading-none">Γåæ</span> Live
+                    <span className="text-xs leading-none">↑</span> Live
                   </div>
                 </div>
 
@@ -2422,7 +2449,7 @@ export default function DashboardPage() {
           {!selectedChat ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-4">
               <div className="h-20 w-20 bg-purple-50 rounded-full flex items-center justify-center border border-purple-100 text-purple-600 text-3xl shadow-sm">
-                ≡ƒÆ¼
+                💬
               </div>
               <h2 className="text-xl font-bold text-slate-800 tracking-tight">Client Messaging Panel</h2>
               <p className="text-xs text-slate-400 font-medium">Select a contact from the list to start messaging.</p>
@@ -2673,7 +2700,7 @@ export default function DashboardPage() {
                   <div className="w-full space-y-3 bg-slate-50 p-6 rounded-2xl border border-slate-100">
                     <p className="text-sm text-slate-600 font-bold">1. Open WhatsApp -&gt; Settings -&gt; Linked Devices</p>
                     <p className="text-sm text-slate-600 font-bold">2. Tap Link a Device &amp; point phone to this screen.</p>
-                    <p className="text-xs text-slate-400 font-medium mt-2">ΓÜá∩╕Å Scan while the timer is green or amber ΓÇö the QR auto-refreshes every 20 seconds.</p>
+                    <p className="text-xs text-slate-400 font-medium mt-2">⚠️ Scan while the timer is green or amber — the QR auto-refreshes every 20 seconds.</p>
                   </div>
 
                   {/* LINK WITH PHONE NUMBER INSTEAD BUTTON */}
@@ -2763,7 +2790,7 @@ export default function DashboardPage() {
                         <p className="text-2xl font-mono font-black text-purple-900 tracking-widest bg-white py-2 px-4 rounded-xl border border-purple-300 inline-block shadow-sm">
                           {waPairingCode}
                         </p>
-                        <p className="text-[10px] text-purple-700">Open WhatsApp ΓåÆ Linked Devices ΓåÆ Link with phone number instead</p>
+                        <p className="text-[10px] text-purple-700">Open WhatsApp → Linked Devices → Link with phone number instead</p>
                       </div>
                     )}
                   </form>
@@ -3853,7 +3880,7 @@ export default function DashboardPage() {
                           onClick={() => setRevivalMessageType("voice")}
                           className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${revivalMessageType === "voice" ? "bg-purple-600 text-white shadow-sm font-extrabold" : "text-slate-600 hover:text-slate-900"}`}
                         >
-                          ≡ƒÄñ Voice Note
+                          🎤 Voice Note
                         </button>
                       </div>
                     </div>
@@ -3886,7 +3913,7 @@ export default function DashboardPage() {
                           </button>
                           {revivalMediaName && (
                             <div className="flex items-center gap-2 bg-white text-purple-700 px-3.5 py-2 rounded-xl text-xs font-extrabold border border-purple-200 shadow-sm">
-                              <span className="truncate max-w-[220px]">≡ƒôÄ {revivalMediaName}</span>
+                              <span className="truncate max-w-[220px]">📎 {revivalMediaName}</span>
                               <button type="button" onClick={removeRevivalMedia} className="text-purple-900 hover:text-rose-500 transition cursor-pointer">
                                 <X className="w-4 h-4" />
                               </button>
@@ -3956,7 +3983,7 @@ export default function DashboardPage() {
                           <div className="space-y-3 pt-3 border-t border-purple-200/60">
                             <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-purple-200 shadow-sm">
                               <span className="text-xs font-extrabold text-purple-900 truncate max-w-[320px]">
-                                ≡ƒÄñ {revivalVoiceName}
+                                🎤 {revivalVoiceName}
                               </span>
                               <button 
                                 type="button" 
@@ -4097,7 +4124,7 @@ export default function DashboardPage() {
                               <div className="space-y-3 pt-3 border-t border-purple-200/60">
                                 <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-purple-200 shadow-sm">
                                   <span className="text-xs font-extrabold text-purple-900 truncate max-w-[320px]">
-                                    ≡ƒÄñ {p2VoiceName}
+                                    🎤 {p2VoiceName}
                                   </span>
                                   <button 
                                     type="button" 
@@ -4139,7 +4166,7 @@ export default function DashboardPage() {
                               </button>
                               {p2MediaName && (
                                 <div className="flex items-center gap-2 bg-purple-50 text-purple-700 px-3.5 py-2 rounded-xl text-xs font-extrabold border border-purple-200">
-                                  <span className="truncate max-w-[220px]">≡ƒôÄ {p2MediaName}</span>
+                                  <span className="truncate max-w-[220px]">📎 {p2MediaName}</span>
                                   <button type="button" onClick={removeP2Media} className="text-purple-900 hover:text-rose-500 transition cursor-pointer">
                                     <X className="w-4 h-4" />
                                   </button>
@@ -4405,7 +4432,7 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="bg-slate-800/50 p-3 rounded-xl text-[11px] text-slate-300 font-medium leading-relaxed">
-                          ≡ƒ¢í∩╕Å <strong>Safety Autopilot:</strong> Messages are sent individually with a gap of {revivalDelayMinutes} minutes. No batch limits are used, providing a steady, natural pacing pattern.
+                          🛡️ <strong>Safety Autopilot:</strong> Messages are sent individually with a gap of {revivalDelayMinutes} minutes. No batch limits are used, providing a steady, natural pacing pattern.
                         </div>
                       </div>
                     );
@@ -4492,15 +4519,15 @@ export default function DashboardPage() {
                   title="Play sample sweet order alert sound"
                 >
                   <BellRing className="h-4 w-4 text-yellow-300 animate-pulse" />
-                  <span>Test Sweet Sound ≡ƒöö</span>
+                  <span>Test Sweet Sound 🔔</span>
                 </button>
               </div>
             </div>
             <div className="flex gap-2 mb-2 flex-wrap">
               {[
                 { id: 'all', label: 'All Items' },
-                { id: 'orders', label: '≡ƒ¢Æ Orders' },
-                { id: 'appointments', label: '≡ƒôà Appointments' },
+                { id: 'orders', label: '🛒 Orders' },
+                { id: 'appointments', label: '📅 Appointments' },
                 { id: 'pending', label: 'Pending' },
                 { id: 'confirmed', label: 'Confirmed' },
                 { id: 'cancelled', label: 'Cancelled' }
@@ -4522,8 +4549,8 @@ export default function DashboardPage() {
             <div className="dash-card p-8 min-h-[500px]">
               {orders.filter(o => {
                 if (orderFilter === 'all') return true;
-                if (orderFilter === 'orders') return !o.productName.includes('Appointment') && !o.productName.startsWith('≡ƒôà');
-                if (orderFilter === 'appointments') return o.productName.includes('Appointment') || o.productName.startsWith('≡ƒôà');
+                if (orderFilter === 'orders') return !o.productName.includes('Appointment') && !o.productName.startsWith('📅');
+                if (orderFilter === 'appointments') return o.productName.includes('Appointment') || o.productName.startsWith('📅');
                 return o.status === orderFilter;
               }).length === 0 ? (
                 <div className="text-center p-12 bg-slate-50/80 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 font-bold text-xs">
@@ -4533,11 +4560,11 @@ export default function DashboardPage() {
                 <div className="grid gap-4">
                   {orders.filter(o => {
                     if (orderFilter === 'all') return true;
-                    if (orderFilter === 'orders') return !o.productName.includes('Appointment') && !o.productName.startsWith('≡ƒôà');
-                    if (orderFilter === 'appointments') return o.productName.includes('Appointment') || o.productName.startsWith('≡ƒôà');
+                    if (orderFilter === 'orders') return !o.productName.includes('Appointment') && !o.productName.startsWith('📅');
+                    if (orderFilter === 'appointments') return o.productName.includes('Appointment') || o.productName.startsWith('📅');
                     return o.status === orderFilter;
                   }).reverse().map((order) => {
-                    const isAppointment = order.productName.includes('Appointment') || order.productName.startsWith('≡ƒôà');
+                    const isAppointment = order.productName.includes('Appointment') || order.productName.startsWith('📅');
                     const clientName = customers[order.phone]?.name || order.customerName || order.phone || "Verified Client";
                     const isEditingThis = editingNotesId === order.id;
 
@@ -4555,7 +4582,7 @@ export default function DashboardPage() {
                                 : 'bg-purple-50 text-purple-700 border border-purple-200/80'
                             }`}>
                               {isAppointment ? <Calendar className="w-3 h-3 text-indigo-600" /> : <ShoppingCart className="w-3 h-3 text-purple-600" />}
-                              {isAppointment ? '≡ƒôà APPOINTMENT / CALL' : '≡ƒ¢Æ PRODUCT ORDER'}
+                              {isAppointment ? '📅 APPOINTMENT / CALL' : '🛒 PRODUCT ORDER'}
                             </span>
 
                             <span className={`text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 ${
@@ -4922,7 +4949,7 @@ export default function DashboardPage() {
                                         }}
                                         className="text-slate-400 hover:text-rose-500 text-[9px] ml-1 cursor-pointer"
                                       >
-                                        ├ù
+                                        ×
                                       </button>
                                     </span>
                                   ))}
@@ -5075,7 +5102,7 @@ export default function DashboardPage() {
                                       }}
                                       className="text-slate-400 hover:text-rose-500 text-[9px] ml-1 cursor-pointer"
                                     >
-                                      ├ù
+                                      ×
                                     </button>
                                   </span>
                                 ))}

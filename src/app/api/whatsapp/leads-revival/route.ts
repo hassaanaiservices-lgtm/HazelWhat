@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { DB, RevivalCampaign } from "@/lib/db";
 import { WhatsAppManager } from "@/lib/whatsapp";
+import { getSessionFromCookies } from "@/lib/auth-session";
 import { cookies } from "next/headers";
 
 const SAFETY = {
@@ -29,17 +30,11 @@ function validateTimeSlot(start: string, end: string): { start: string; end: str
   };
 }
 
-async function getTenantIdFromSession(): Promise<string | undefined> {
-  try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("hazel_session");
-    if (sessionCookie && sessionCookie.value) {
-      const session = JSON.parse(sessionCookie.value);
-      return session.role === 'admin' ? undefined : session.tenantId;
-    }
-  } catch (e) {}
-  return undefined;
+async function getTenantIdFromSession(req?: any): Promise<string | undefined> {
+  const session = await getSessionFromCookies(req);
+  return session?.tenantId;
 }
+
 
 export async function GET() {
   try {

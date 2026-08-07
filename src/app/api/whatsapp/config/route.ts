@@ -1,41 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { DB } from "@/lib/db";
 import { WhatsAppManager } from "@/lib/whatsapp";
+import { getSessionFromCookies } from "@/lib/auth-session";
 
 export const dynamic = 'force-dynamic';
 
-async function getTenantIdFromSession(request?: NextRequest): Promise<string | undefined> {
-  try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("hazel_session");
-    if (sessionCookie && sessionCookie.value) {
-      const session = JSON.parse(sessionCookie.value);
-      if (session.role === 'client' && session.tenantId) {
-        return session.tenantId;
-      }
-      if (session.role === 'admin') {
-        const queryTenantId = request?.nextUrl?.searchParams?.get('tenantId');
-        if (queryTenantId) return queryTenantId;
-        const activeManagerTenant = WhatsAppManager.getActiveTenantId();
-        if (activeManagerTenant && activeManagerTenant !== 'admin') return activeManagerTenant;
-        const tenants = await DB.getTenants();
-        if (tenants && tenants.length > 0) return tenants[0].id;
-        return session.tenantId || 'admin';
-      }
-      return session.tenantId;
-    }
-  } catch (e) {}
-  return undefined;
-}
-
 export async function GET(request: NextRequest) {
   try {
-    const tenantId = await getTenantIdFromSession(request);
-    let config = await DB.getConfig(tenantId);
+    const session = await getSessionFromCookies(request);
+    const tenantId = session?.tenantId;
 
+    let config = await DB.getConfig(tenantId);
     const resolvedTenantId = tenantId || 'admin';
     const tenant = await DB.getTenantById(resolvedTenantId);
+    
     if (tenant) {
       config = {
         ...config,
@@ -48,7 +26,7 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    return NextResponse.json({ success: true, config });
+    return NextResponse.json({ success: true, config, tenantId: resolvedTenantId });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
@@ -57,7 +35,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const tenantId = await getTenantIdFromSession(request);
+    const session = await getSessionFromCookies(request);
+    const tenantId = session?.tenantId;
 
     await DB.updateConfig(body, tenantId);
 
@@ -72,6 +51,7 @@ export async function POST(request: NextRequest) {
           tenant.productKnowledgeBase = kbVal;
         }
         if (body.products !== undefined) tenant.products = body.products;
+        if (body.businessName !== undefined) tenant.businessName = body.businessName;
         await DB.saveTenants([tenant]);
       }
     }
@@ -90,7 +70,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, config: updatedConfig });
+    return NextResponse.json({ success: true, config: updatedConfig, tenantId });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
