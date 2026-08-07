@@ -48,7 +48,10 @@ export async function GET(request: NextRequest) {
 
       let tenant = (await DB.getTenantById(session.tenantId)) || (await DB.getTenantByUsername(session.username || session.clientUsername || ""));
       if (!tenant) {
-        return NextResponse.json({ authenticated: false, error: "Tenant not found" }, { status: 404 });
+        console.error(`[Auth] Tenant not found for session:`, session);
+        const res = NextResponse.json({ authenticated: false, error: "Tenant not found or invalid session" }, { status: 401 });
+        res.cookies.delete('hazel_client_session');
+        return res;
       }
       if (tenant.status !== "active") {
         return NextResponse.json({ authenticated: false, error: "Account inactive or suspended" }, { status: 403 });
