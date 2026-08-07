@@ -1057,4 +1057,48 @@ export class DB {
       console.error('[DB/Supabase] savePartners error:', e);
     }
   }
+
+  // --- API HEALTH ALERTS ---
+  static apiAlertsMemory: Array<{ id: string; service: string; type: string; message: string; timestamp: string }> = [];
+
+  static async recordApiAlert(service: 'Deepgram' | 'Conversational LLM' | string, type: 'invalid_key' | 'quota_exceeded' | 'balance_low' | 'error' | string, message: string) {
+    const alert = {
+      id: `alert-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      service,
+      type,
+      message,
+      timestamp: new Date().toISOString()
+    };
+    DB.apiAlertsMemory = [alert, ...DB.apiAlertsMemory].slice(0, 20);
+    if (supabase) {
+      try {
+        await supabase.from('api_health_alerts').insert({
+          id: alert.id,
+          service: alert.service,
+          type: alert.type,
+          message: alert.message,
+          timestamp: alert.timestamp
+        });
+      } catch (e) {}
+    }
+    console.warn(`[API Health Alert Recorded] [${service}] (${type}): ${message}`);
+  }
+
+  static async getApiAlerts(): Promise<Array<{ id: string; service: string; type: string; message: string; timestamp: string }>> {
+    if (supabase) {
+      try {
+        const { data } = await supabase.from('api_health_alerts').select('*').order('timestamp', { ascending: false }).limit(20);
+        if (data && data.length > 0) {
+          return data.map((d: any) => ({
+            id: d.id || `alert-${d.timestamp}`,
+            service: d.service,
+            type: d.type || d.alert_type || 'error',
+            message: d.message,
+            timestamp: d.timestamp || d.created_at || new Date().toISOString()
+          }));
+        }
+      } catch (e) {}
+    }
+    return DB.apiAlertsMemory;
+  }
 }

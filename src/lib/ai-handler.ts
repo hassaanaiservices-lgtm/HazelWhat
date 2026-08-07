@@ -1174,6 +1174,13 @@ Keep their history in mind and treat them like a valued returning customer.`;
       console.error(`[AI Handler] Unified LLM API ERROR CAUGHT:`, errorDetail);
       debugLog(`FAILURE: Unified LLM API call failed. Error: ${errorDetail}`);
       
+      const isQuota = errorDetail.toLowerCase().includes("quota") || errorDetail.toLowerCase().includes("balance") || errorDetail.includes("402") || errorDetail.toLowerCase().includes("insufficient");
+      const isAuth = errorDetail.includes("401") || errorDetail.toLowerCase().includes("unauthorized") || errorDetail.toLowerCase().includes("invalid api key");
+      
+      const alertType = isQuota ? 'quota_exceeded' : isAuth ? 'invalid_key' : 'error';
+      const alertMsg = isQuota ? 'Conversational LLM Quota Exceeded / Out of Balance.' : isAuth ? 'Conversational LLM API Key is Invalid or Unauthorized.' : `LLM API Error: ${errorDetail}`;
+      await DB.recordApiAlert('Conversational LLM', alertType, alertMsg);
+
       aiReply = "I'm currently experiencing a high volume of requests and having some technical difficulties. A human agent will be with you shortly, or you can try again later!";
       const diagnostics = `[DIAGNOSTIC - API ERROR] Unified LLM call failed.\n- Key Type: ${detectKeyType(apiKey)}\n- Last Error: ${errorDetail}`;
       await DB.addChatMessage(from, { role: "assistant", content: diagnostics }, resolvedTenantId);

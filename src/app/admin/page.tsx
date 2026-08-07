@@ -66,7 +66,8 @@ import {
   ArrowLeft,
   QrCode,
   Smartphone,
-  Calendar
+  Calendar,
+  RefreshCw
 } from 'lucide-react';
 import { 
   initialTenants, 
@@ -230,6 +231,23 @@ export default function VoiceSaaSApp() {
   // Save Success Pop-up Modal State
   const [showSaveSuccessModal, setShowSaveSuccessModal] = useState(false);
 
+  // API Health & Balance Alert State
+  const [apiHealth, setApiHealth] = useState<any>(null);
+
+  const fetchApiHealth = async () => {
+    try {
+      const res = await fetch('/api/admin/api-health');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setApiHealth(data);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch API health:', e);
+    }
+  };
+
   const selectedTenant = tenants.find(t => t.id === selectedTenantId) || tenants[0] || defaultFallbackTenant;
 
   const fetchTenants = async () => {
@@ -283,6 +301,7 @@ export default function VoiceSaaSApp() {
 
   useEffect(() => {
     fetchTenants();
+    fetchApiHealth();
   }, []);
 
   const persistTenants = async (newTenants: Tenant[], newPartners?: Partner[]) => {
@@ -798,6 +817,50 @@ export default function VoiceSaaSApp() {
         {/* Main Content Area */}
         <main className="p-8 space-y-8 max-w-7xl mx-auto w-full">
           
+          {/* API Health & Balance Alert Banner */}
+          {apiHealth && (apiHealth.deepgram?.ok === false || apiHealth.llm?.ok === false || (apiHealth.alerts && apiHealth.alerts.length > 0)) && (
+            <div className="bg-gradient-to-r from-rose-600 via-red-600 to-amber-600 text-white p-5 rounded-3xl shadow-xl space-y-3 animate-in fade-in">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-white/20 rounded-2xl backdrop-blur-md">
+                    <ShieldAlert className="w-6 h-6 text-white animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-base tracking-tight">API Key Error / Low Balance Alert</h3>
+                    <p className="text-xs text-rose-100 font-medium">Backend shared API keys require attention to keep WhatsApp AI services running.</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={fetchApiHealth}
+                  className="px-3.5 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer backdrop-blur-md"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Re-check API Health
+                </button>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-white/20 text-xs font-semibold">
+                {apiHealth.deepgram?.ok === false && (
+                  <div className="flex items-center gap-2 bg-black/25 px-3 py-2 rounded-xl">
+                    <span className="font-extrabold text-amber-300">🎙 Deepgram Voice Engine:</span>
+                    <span>{apiHealth.deepgram?.message}</span>
+                  </div>
+                )}
+                {apiHealth.llm?.ok === false && (
+                  <div className="flex items-center gap-2 bg-black/25 px-3 py-2 rounded-xl">
+                    <span className="font-extrabold text-amber-300">🤖 Conversational LLM:</span>
+                    <span>{apiHealth.llm?.message}</span>
+                  </div>
+                )}
+                {apiHealth.alerts && apiHealth.alerts.slice(0, 3).map((a: any, idx: number) => (
+                  <div key={idx} className="flex items-center justify-between bg-black/15 px-3 py-1.5 rounded-lg text-[11px]">
+                    <span>[{a.service}] {a.message}</span>
+                    <span className="opacity-80 font-mono text-[10px]">{new Date(a.timestamp).toLocaleTimeString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Greeting Banner */}
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -1463,11 +1526,17 @@ export default function VoiceSaaSApp() {
 
                   {/* 🔑 API KEYS EDITABLE CARD */}
                   <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-base font-bold text-slate-900 flex items-center space-x-2">
-                        <Key className="w-5 h-5 text-purple-600" />
-                        <span>API Keys & Voice Engines</span>
-                      </h3>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <h3 className="text-base font-bold text-slate-900 flex items-center space-x-2">
+                          <Key className="w-5 h-5 text-purple-600" />
+                          <span>API Keys & Voice Engines</span>
+                          <span className="bg-emerald-100 text-emerald-700 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full">Backend Shared Keys Active</span>
+                        </h3>
+                        <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                          All client accounts share backend environment API keys automatically. If any key runs out of balance or fails, an instant warning will pop up in the Admin Panel.
+                        </p>
+                      </div>
                       <button
                         onClick={() => setShowApiKeys(!showApiKeys)}
                         className="text-xs font-semibold text-purple-600 hover:text-purple-700 flex items-center space-x-1 cursor-pointer"
