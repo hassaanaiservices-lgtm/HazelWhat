@@ -1,21 +1,27 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { DB } from "@/lib/db";
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("hazel_session");
+    const { searchParams } = new URL(request.url);
+    const portal = searchParams.get('portal');
 
-    if (!sessionCookie || !sessionCookie.value) {
-      return NextResponse.json({ authenticated: false }, { status: 401 });
-    }
+    // ========== ADMIN SESSION CHECK ==========
+    if (portal === 'admin') {
+      const adminCookie = cookieStore.get("hazel_admin_session");
+      if (!adminCookie || !adminCookie.value) {
+        return NextResponse.json({ authenticated: false }, { status: 401 });
+      }
 
-    const session = JSON.parse(sessionCookie.value);
+      const session = JSON.parse(adminCookie.value);
+      if (session.role !== 'admin') {
+        return NextResponse.json({ authenticated: false }, { status: 401 });
+      }
 
-    if (session.role === "admin") {
       const tenants = await DB.getTenants();
       const defaultTenant = tenants[0] || null;
       return NextResponse.json({
@@ -28,30 +34,98 @@ export async function GET() {
       });
     }
 
-    // Fetch fresh tenant data for client directly from Supabase / DB store
-    let tenant = (await DB.getTenantById(session.tenantId)) || (await DB.getTenantByUsername(session.username || session.clientUsername || ""));
+    // ========== CLIENT SESSION CHECK ==========
+    if (portal === 'client') {
+      const clientCookie = cookieStore.get("hazel_client_session");
+      if (!clientCookie || !clientCookie.value) {
+        return NextResponse.json({ authenticated: false }, { status: 401 });
+      }
 
-    if (!tenant) {
-      return NextResponse.json({ authenticated: false, error: "Tenant not found" }, { status: 404 });
+      const session = JSON.parse(clientCookie.value);
+      if (session.role !== 'client') {
+        return NextResponse.json({ authenticated: false }, { status: 401 });
+      }
+
+      let tenant = (await DB.getTenantById(session.tenantId)) || (await DB.getTenantByUsername(session.username || session.clientUsername || ""));
+      if (!tenant) {
+        return NextResponse.json({ authenticated: false, error: "Tenant not found" }, { status: 404 });
+      }
+      if (tenant.status !== "active") {
+        return NextResponse.json({ authenticated: false, error: "Account inactive or suspended" }, { status: 403 });
+      }
+
+      return NextResponse.json({
+        authenticated: true,
+        user: {
+          ...session,
+          name: tenant.name,
+          businessName: tenant.businessName,
+          email: tenant.email,
+          status: tenant.status,
+          allocatedMinutes: tenant.allocatedMinutes,
+          usedMinutes: tenant.usedMinutes,
+        },
+        tenant
+      });
     }
 
-    if (tenant.status !== "active") {
-      return NextResponse.json({ authenticated: false, error: "Account inactive or suspended" }, { status: 403 });
+    // ========== NO PORTAL SPECIFIED — check both (for landing page navbar etc.) ==========
+    // Check admin session first
+    const adminCookie = cookieStore.get("hazel_admin_session");
+    if (adminCookie && adminCookie.value) {
+      try {
+        const session = JSON.parse(adminCookie.value);
+        if (session.role === 'admin') {
+          const tenants = await DB.getTenants();
+          const defaultTenant = tenants[0] || null;
+          return NextResponse.json({
+            authenticated: true,
+            user: {
+              ...session,
+              businessName: defaultTenant?.businessName || defaultTenant?.name || "HazelWhat Workspace"
+            },
+            tenant: defaultTenant
+          });
+        }
+      } catch (e) {}
     }
 
-    return NextResponse.json({
-      authenticated: true,
-      user: {
-        ...session,
-        name: tenant.name,
-        businessName: tenant.businessName,
-        email: tenant.email,
-        status: tenant.status,
-        allocatedMinutes: tenant.allocatedMinutes,
-        usedMinutes: tenant.usedMinutes,
-      },
-      tenant
-    });
+    // Then check client session
+    const clientCookie = cookieStore.get("hazel_client_session");
+    if (clientCookie && clientCookie.value) {
+      try {
+        const session = JSON.parse(clientCookie.value);
+        if (session.role === 'client') {
+          let tenant = (await DB.getTenantById(session.tenantId)) || (await DB.getTenantByUsername(session.username || session.clientUsername || ""));
+          if (tenant && tenant.status === "active") {
+            return NextResponse.json({
+              authenticated: true,
+              user: {
+                ...session,
+                name: tenant.name,
+                businessName: tenant.businessName,
+                email: tenant.email,
+                status: tenant.status,
+                allocatedMinutes: tenant.allocatedMinutes,
+                usedMinutes: tenant.usedMinutes,
+              },
+              tenant
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
+    // Also check old unified cookie for backward compat
+    const oldCookie = cookieStore.get("hazel_session");
+    if (oldCookie && oldCookie.value) {
+      try {
+        const session = JSON.parse(oldCookie.value);
+        return NextResponse.json({ authenticated: true, user: session });
+      } catch (e) {}
+    }
+
+    return NextResponse.json({ authenticated: false }, { status: 401 });
 
   } catch (err: any) {
     return NextResponse.json({ authenticated: false, error: err.message }, { status: 500 });

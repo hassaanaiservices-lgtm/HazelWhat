@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useState, useRef } from "react";
 import { MessageCircle, QrCode, Loader2, CheckCircle2, ShieldCheck, Zap, X, Save, MessageSquare, Settings, Plus, Trash2, Search, MoreVertical, Phone, Video, Paperclip, Smile, Mic, CheckCheck, User, Check, Send, StopCircle, Inbox, Bot, Network, BookOpen, Users, AlertCircle, ShoppingCart, Activity, Eye, EyeOff, RefreshCw, Pause, Play, Smartphone, Square, Package, Edit3, Upload, ExternalLink, Image as ImageIcon, Tag, Globe, Sparkles, Volume2, VolumeX, BellRing, Bell, LogOut, FileText, Calendar, MapPin, Clock } from "lucide-react";
@@ -8,7 +8,7 @@ export default function DashboardPage() {
   useEffect(() => {
     async function checkAuth() {
       try {
-        const res = await fetch('/api/auth/me');
+        const res = await fetch('/api/auth/me?portal=client');
         if (!res.ok) {
           window.location.href = '/login';
           return;
@@ -1905,7 +1905,7 @@ export default function DashboardPage() {
                 <button
                   onClick={async () => {
                     try {
-                      await fetch('/api/auth/logout', { method: 'POST' });
+                      await fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ portal: 'client' }) });
                       window.location.href = '/login';
                     } catch (e) {
                       window.location.href = '/login';

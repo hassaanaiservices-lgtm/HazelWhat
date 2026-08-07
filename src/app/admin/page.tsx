@@ -144,9 +144,9 @@ export default function VoiceSaaSApp() {
 
   const handleAdminLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ portal: 'admin' }) });
     } catch (e) {}
-    window.location.href = '/login';
+    window.location.href = '/login?portal=admin';
   };
 
   // Sync tab from URL query on initial load & popstate (browser back/forward)

@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       };
 
       const cookieStore = await cookies();
-      cookieStore.set("hazel_session", JSON.stringify(sessionData), {
+      cookieStore.set("hazel_admin_session", JSON.stringify(sessionData), {
         httpOnly: false,
         path: "/",
         maxAge: remember !== false ? 60 * 60 * 24 * 30 : 60 * 60 * 24,
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     };
 
     const cookieStore = await cookies();
-      cookieStore.set("hazel_session", JSON.stringify(sessionData), {
+      cookieStore.set("hazel_client_session", JSON.stringify(sessionData), {
         httpOnly: false,
         path: "/",
         maxAge: remember !== false ? 60 * 60 * 24 * 30 : 60 * 60 * 24,

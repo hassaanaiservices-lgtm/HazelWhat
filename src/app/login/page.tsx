@@ -53,7 +53,8 @@ export default function LoginPage() {
   useEffect(() => {
     async function checkAuth() {
       try {
-        const res = await fetch('/api/auth/me');
+        // Check based on which portal tab is active
+        const res = await fetch(`/api/auth/me?portal=${portal}`);
         if (res.ok) {
           const data = await res.json();
           if (data.authenticated && data.user) {
@@ -75,7 +76,7 @@ export default function LoginPage() {
       }
     }
     checkAuth();
-  }, [router]);
+  }, [router, portal]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

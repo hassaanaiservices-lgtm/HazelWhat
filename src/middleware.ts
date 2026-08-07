@@ -3,7 +3,8 @@ import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const sessionCookie = request.cookies.get('hazel_session');
+  const adminCookie = request.cookies.get('hazel_admin_session');
+  const clientCookie = request.cookies.get('hazel_client_session');
 
   // Allow static assets, next internal files, and API routes
   if (
@@ -15,58 +16,99 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 1. If user is NOT logged in:
-  if (!sessionCookie || !sessionCookie.value) {
+  // ========== ADMIN PANEL ROUTES ==========
+  if (pathname.startsWith('/admin')) {
+    // Old /admin/login redirect
     if (pathname === '/admin/login') {
+      if (adminCookie && adminCookie.value) {
+        return NextResponse.redirect(new URL('/admin', request.url));
+      }
       return NextResponse.redirect(new URL('/login?portal=admin', request.url));
     }
-    // If attempting to access protected dashboards without a session
-    if (pathname.startsWith('/client') || pathname.startsWith('/admin')) {
-      const portal = pathname.startsWith('/admin') ? 'admin' : 'client';
-      const loginUrl = new URL(`/login?portal=${portal}`, request.url);
-      return NextResponse.redirect(loginUrl);
+
+    // If no admin session, redirect to admin login
+    if (!adminCookie || !adminCookie.value) {
+      return NextResponse.redirect(new URL('/login?portal=admin', request.url));
     }
+
+    // Validate admin role
+    try {
+      const session = JSON.parse(adminCookie.value);
+      if (session.role !== 'admin') {
+        // Not an admin - clear bad cookie and redirect
+        const res = NextResponse.redirect(new URL('/login?portal=admin', request.url));
+        res.cookies.delete('hazel_admin_session');
+        return res;
+      }
+    } catch (e) {
+      const res = NextResponse.redirect(new URL('/login?portal=admin', request.url));
+      res.cookies.delete('hazel_admin_session');
+      return res;
+    }
+
     return NextResponse.next();
   }
 
-  // 2. If user IS logged in:
-  try {
-    const session = JSON.parse(sessionCookie.value);
-
-    // If super admin:
-    if (session.role === 'admin') {
-      // If super admin visits /login or /admin/login, send to /admin
-      if (pathname === '/login' || pathname === '/admin/login') {
-        return NextResponse.redirect(new URL('/admin', request.url));
-      }
-      // Super admin can freely access BOTH / (Landing/Client Panel) and /admin (Admin Dashboard)!
-      return NextResponse.next();
-    } 
-
-    // If client user:
-    if (session.role === 'client') {
-      // Client cannot access /admin or /admin/login -> redirect to /client
-      if (pathname.startsWith('/admin')) {
-        return NextResponse.redirect(new URL('/client', request.url));
-      }
-      // If client visits /login, send to /client
-      if (pathname === '/login') {
-        return NextResponse.redirect(new URL('/client', request.url));
-      }
+  // ========== CLIENT PANEL ROUTES ==========
+  if (pathname.startsWith('/client')) {
+    // If no client session, redirect to client login
+    if (!clientCookie || !clientCookie.value) {
+      return NextResponse.redirect(new URL('/login?portal=client', request.url));
     }
-  } catch (e) {
-    // Invalid cookie fallback -> redirect to /login
-    const loginUrl = new URL('/login', request.url);
-    const res = NextResponse.redirect(loginUrl);
-    res.cookies.delete('hazel_session');
-    return res;
+
+    // Validate client role
+    try {
+      const session = JSON.parse(clientCookie.value);
+      if (session.role !== 'client') {
+        const res = NextResponse.redirect(new URL('/login?portal=client', request.url));
+        res.cookies.delete('hazel_client_session');
+        return res;
+      }
+    } catch (e) {
+      const res = NextResponse.redirect(new URL('/login?portal=client', request.url));
+      res.cookies.delete('hazel_client_session');
+      return res;
+    }
+
+    return NextResponse.next();
   }
 
+  // ========== LOGIN PAGE ==========
+  if (pathname === '/login') {
+    // If admin is already logged in and portal=admin, redirect to /admin
+    if (adminCookie && adminCookie.value) {
+      try {
+        const params = request.nextUrl.searchParams;
+        if (params.get('portal') === 'admin') {
+          const session = JSON.parse(adminCookie.value);
+          if (session.role === 'admin') {
+            return NextResponse.redirect(new URL('/admin', request.url));
+          }
+        }
+      } catch (e) {}
+    }
+
+    // If client is already logged in and portal=client (or no portal specified), redirect to /client
+    if (clientCookie && clientCookie.value) {
+      try {
+        const params = request.nextUrl.searchParams;
+        const portal = params.get('portal');
+        if (!portal || portal === 'client') {
+          const session = JSON.parse(clientCookie.value);
+          if (session.role === 'client') {
+            return NextResponse.redirect(new URL('/client', request.url));
+          }
+        }
+      } catch (e) {}
+    }
+
+    return NextResponse.next();
+  }
+
+  // ========== LANDING PAGE (/) and everything else ==========
   return NextResponse.next();
 }
 
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
-
-
