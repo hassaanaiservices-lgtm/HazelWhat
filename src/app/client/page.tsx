@@ -902,8 +902,17 @@ export default function DashboardPage() {
 
   const fetchChats = async () => {
     try {
-      const res = await fetch("/api/whatsapp/chats");
+      console.log("[Client] Fetching chats...");
+      const timestamp = new Date().getTime();
+      const res = await fetch(`/api/whatsapp/chats?t=${timestamp}`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       const data = await res.json();
+      console.log("[Client] Chats data received:", data);
+      
       if (data.success) {
         const mergedChats = { ...data.chats };
         const customersMap: Record<string, any> = {};
@@ -915,11 +924,15 @@ export default function DashboardPage() {
             }
           });
         }
+        
+        console.log(`[Client] Parsed ${Object.keys(mergedChats).length} chat threads.`);
         setChats(mergedChats);
         setCustomers(customersMap);
+      } else {
+         console.warn("[Client] fetchChats returned success: false", data);
       }
     } catch (e) {
-      console.error(e);
+      console.error("[Client] fetchChats error:", e);
     }
   };
 
