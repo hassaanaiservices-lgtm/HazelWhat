@@ -1532,58 +1532,7 @@ export default function VoiceSaaSApp() {
                     </div>
                   </div>
 
-                  {/* 🔑 API KEYS EDITABLE CARD */}
-                  <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div>
-                        <h3 className="text-base font-bold text-slate-900 flex items-center space-x-2">
-                          <Key className="w-5 h-5 text-purple-600" />
-                          <span>API Keys & Voice Engines</span>
-                          <span className="bg-emerald-100 text-emerald-700 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full">Backend Shared Keys Active</span>
-                        </h3>
-                        <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                          All client accounts share backend environment API keys automatically. If any key runs out of balance or fails, an instant warning will pop up in the Admin Panel.
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setShowApiKeys(!showApiKeys)}
-                        className="text-xs font-semibold text-purple-600 hover:text-purple-700 flex items-center space-x-1 cursor-pointer"
-                      >
-                        {showApiKeys ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        <span>{showApiKeys ? 'Hide Keys' : 'Show Keys'}</span>
-                      </button>
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Deepgram API Key */}
-                      <div>
-                        <label className="text-xs font-bold text-slate-600 uppercase mb-1 block">
-                          Deepgram API Key (Pay-As-You-Go Voice Engine)
-                        </label>
-                        <input
-                          type={showApiKeys ? 'text' : 'password'}
-                          value={selectedTenant.deepgramApiKey}
-                          onChange={e => handleUpdateTenantConfig({ deepgramApiKey: e.target.value })}
-                          placeholder="dg_live_..."
-                          className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        />
-                      </div>
-
-                      {/* Conversational LLM API Key */}
-                      <div>
-                        <label className="text-xs font-bold text-slate-600 uppercase mb-1 block">
-                          Conversational LLM API Key (DeepSeek / OpenAI / Claude / Gemini)
-                        </label>
-                        <input
-                          type={showApiKeys ? 'text' : 'password'}
-                          value={selectedTenant.openaiApiKey}
-                          onChange={e => handleUpdateTenantConfig({ openaiApiKey: e.target.value })}
-                          placeholder="sk-proj-... or sk-deepseek-..."
-                          className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
 
                   {/* Website Auto-Scraper Module */}
                   <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
