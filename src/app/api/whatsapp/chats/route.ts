@@ -56,12 +56,18 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    console.log(`${tag} Returning — chats: ${Object.keys(chats).length}, customers: ${customers.length}`);
+    const { isSupabaseConfigured } = await import('@/lib/supabase');
+    
+    console.log(`${tag} Returning — chats: ${Object.keys(chats).length}, customers: ${customers.length}, supabaseConnected: ${isSupabaseConfigured}`);
     return NextResponse.json({ 
       success: true, 
       chats, 
       customers,
-      _debug: { tenantId, chatPhones: Object.keys(chats) }
+      _debug: { 
+        tenantId, 
+        chatPhones: Object.keys(chats),
+        supabaseConnected: isSupabaseConfigured
+      }
     });
 
   } catch (err: any) {
