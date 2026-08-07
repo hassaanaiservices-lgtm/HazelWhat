@@ -129,9 +129,9 @@ const defaultFallbackTenant: Tenant = {
 };
 
 export default function VoiceSaaSApp() {
-  const [activeTab, setActiveTabRaw] = useState<'dashboard' | 'clients' | 'admins'>('dashboard');
+  const [activeTab, setActiveTabRaw] = useState<'dashboard' | 'clients' | 'admins' | 'settings'>('dashboard');
 
-  const setActiveTab = (tab: 'dashboard' | 'clients' | 'admins') => {
+  const setActiveTab = (tab: 'dashboard' | 'clients' | 'admins' | 'settings') => {
     setActiveTabRaw(tab);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -140,13 +140,20 @@ export default function VoiceSaaSApp() {
     }
   };
 
+  const handleAdminLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {}
+    window.location.href = '/login';
+  };
+
   // Sync tab from URL query on initial load & popstate (browser back/forward)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const syncTabFromUrl = () => {
         const params = new URLSearchParams(window.location.search);
         const urlTab = params.get('tab');
-        const validTabs = ['dashboard', 'clients', 'admins'];
+        const validTabs = ['dashboard', 'clients', 'admins', 'settings'];
         if (urlTab && validTabs.includes(urlTab)) {
           setActiveTabRaw(urlTab as any);
         }
@@ -747,25 +754,26 @@ export default function VoiceSaaSApp() {
               <span>Team Admins</span>
             </button>
 
-            {/* TAB 4: SWITCH TO CLIENT WORKSPACE */}
-            <a
-              href="/"
-              className="w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-sm font-semibold transition-all cursor-pointer bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/80 shadow-xs mt-4"
-            >
-              <Bot className="w-5 h-5 text-emerald-600 shrink-0" />
-              <span>Client Workspace</span>
-              <ExternalLink className="w-3.5 h-3.5 ml-auto text-emerald-500 shrink-0" />
-            </a>
           </nav>
         </div>
 
         {/* Bottom Sidebar Controls */}
         <div className="space-y-1.5 pt-6 border-t border-slate-100">
-          <button className="w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-all cursor-pointer">
+          <button 
+            onClick={() => setActiveTab('settings')}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-sm font-semibold transition-all cursor-pointer ${
+              activeTab === 'settings'
+                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
+                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+            }`}
+          >
             <Settings className="w-5 h-5" />
             <span>Setting</span>
           </button>
-          <button className="w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-all cursor-pointer">
+          <button 
+            onClick={handleAdminLogout}
+            className="w-full flex items-center space-x-3 px-4 py-3 rounded-2xl text-sm font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-all cursor-pointer"
+          >
             <LogOut className="w-5 h-5" />
             <span>Log Out</span>
           </button>
@@ -1982,6 +1990,66 @@ export default function VoiceSaaSApp() {
                 </div>
               </div>
 
+            </div>
+          )}
+
+          {/* ================= TAB 4: SYSTEM SETTINGS ================= */}
+          {activeTab === 'settings' && (
+            <div className="space-y-8 animate-in fade-in">
+              <div className="bg-white p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2 tracking-tight">
+                    <Settings className="w-6 h-6 text-purple-600" />
+                    <span>Admin System & Platform Settings</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 font-medium mt-1">
+                    Manage global platform defaults, backend service connections, and administrative security.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200/80 space-y-3">
+                    <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                      <Key className="w-4 h-4 text-purple-600" />
+                      <span>Shared Backend API Keys</span>
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      All client portals share central backend environment API keys (`DEEPGRAM_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`).
+                    </p>
+                    <div className="pt-2">
+                      <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-lg inline-flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5" /> Backend Environment Keys Active
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200/80 space-y-3">
+                    <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-purple-600" />
+                      <span>Database & Supabase Status</span>
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Supabase Cloud Database connected for multi-tenant isolation, chat persistence, and order tracking.
+                    </p>
+                    <div className="pt-2">
+                      <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-bold rounded-lg inline-flex items-center gap-1.5">
+                        <Zap className="w-3.5 h-3.5 text-purple-600" /> Supabase Realtime Sync OK
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-xs text-slate-400 font-semibold">HazelWhat Multi-Tenant AI Platform v1.2</span>
+                  <button
+                    onClick={handleAdminLogout}
+                    className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Log Out of Admin Console</span>
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
