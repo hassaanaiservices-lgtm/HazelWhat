@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   Bot, 
@@ -56,6 +56,26 @@ export default function LandingPage() {
 
   // FAQ Accordion Toggle
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+
+  // Active Session Check for Header Navbar
+  const [sessionUser, setSessionUser] = useState<any>(null);
+
+  useEffect(() => {
+    async function checkSession() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.authenticated && data.user) {
+            setSessionUser(data.user);
+          }
+        }
+      } catch (err) {
+        console.log('Session check error:', err);
+      }
+    }
+    checkSession();
+  }, []);
 
   const handleSimSend = (presetText?: string) => {
     const textToSend = presetText || simQuery;
@@ -156,22 +176,34 @@ export default function LandingPage() {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-3">
-            {/* Sign In Button */}
-            <button
-              onClick={() => setShowSignInModal(true)}
-              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-200 transition-all cursor-pointer hover:border-purple-500/40"
-            >
-              Sign In
-            </button>
+            {sessionUser ? (
+              <Link
+                href={sessionUser.role === 'admin' ? '/admin' : '/client'}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 text-xs font-black text-slate-950 transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2 cursor-pointer animate-pulse"
+              >
+                <Bot className="w-4 h-4 text-slate-950" />
+                <span>Open {sessionUser.role === 'admin' ? 'Super Admin' : sessionUser.businessName || 'Client Portal'} →</span>
+              </Link>
+            ) : (
+              <>
+                {/* Sign In Button */}
+                <button
+                  onClick={() => setShowSignInModal(true)}
+                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-200 transition-all cursor-pointer hover:border-purple-500/40"
+                >
+                  Sign In
+                </button>
 
-            {/* Sign Up Button (FROZEN / INVITE ONLY) */}
-            <button
-              onClick={() => setShowSignUpModal(true)}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-xs font-extrabold text-white transition-all cursor-pointer shadow-lg shadow-purple-600/30 flex items-center gap-1.5"
-            >
-              <span>Sign Up</span>
-              <Lock className="w-3 h-3 text-purple-200" />
-            </button>
+                {/* Sign Up Button (FROZEN / INVITE ONLY) */}
+                <button
+                  onClick={() => setShowSignUpModal(true)}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-xs font-extrabold text-white transition-all cursor-pointer shadow-lg shadow-purple-600/30 flex items-center gap-1.5"
+                >
+                  <span>Sign Up</span>
+                  <Lock className="w-3 h-3 text-purple-200" />
+                </button>
+              </>
+            )}
           </div>
 
         </nav>

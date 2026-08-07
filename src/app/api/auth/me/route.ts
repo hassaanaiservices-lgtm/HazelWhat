@@ -28,8 +28,8 @@ export async function GET() {
       });
     }
 
-    // Fetch fresh tenant data for client directly from Supabase
-    let tenant = await DB.getTenantById(session.tenantId);
+    // Fetch fresh tenant data for client directly from Supabase / DB store
+    let tenant = (await DB.getTenantById(session.tenantId)) || (await DB.getTenantByUsername(session.username || session.clientUsername || ""));
 
     if (!tenant) {
       return NextResponse.json({ authenticated: false, error: "Tenant not found" }, { status: 404 });
