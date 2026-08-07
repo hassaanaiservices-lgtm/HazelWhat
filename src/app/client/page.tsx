@@ -911,7 +911,7 @@ export default function DashboardPage() {
         }
       });
       const data = await res.json();
-      console.log("[Client] Chats data received:", data);
+      console.log(`[Client] Chats received. Success: ${data.success}, tenantId: ${data._debug?.tenantId}, supabaseConnected: ${data._debug?.supabaseConnected}`);
       
       if (data.success) {
         const mergedChats = { ...data.chats };
