@@ -950,15 +950,125 @@ export class DB {
   }
 
   // --- TENANTS & PARTNERS ---
-  static async getTenants(): Promise<Tenant[]> {
-    if (!supabase) return [];
-    try {
-      const { fetchTenantsFromSupabase } = await import('./supabase');
-      const tenants = await fetchTenantsFromSupabase();
-      return tenants || [];
-    } catch (e) {
-      return [];
+  static tenantsMemoryStore: Tenant[] = [
+    {
+      id: 't-1003',
+      clientNumber: '1003',
+      name: 'Ayan',
+      businessName: 'ayan',
+      phoneNumber: '03194188820',
+      email: 'client@business.com',
+      status: 'active',
+      installationFee: 0,
+      monthlySubscriptionFee: 0,
+      currency: 'PKR',
+      paymentStatus: 'paid',
+      allocatedMinutes: 800,
+      usedMinutes: 0,
+      clientUsername: 'ayan_247',
+      clientPassword: 'client1003',
+      systemPrompt: 'You are an AI assistant for ayan.',
+      knowledgeBase: 'ayan business FAQs',
+      productKnowledgeBase: 'ayan product catalog',
+      followupMechanism: 'Standard follow-up',
+      llmModel: 'gpt-4o-mini',
+      temperature: 0.7,
+      deepgramVoice: 'aura-asteria-en',
+      deepgramApiKey: '',
+      openaiApiKey: '',
+      omnivoiceApiKey: '',
+      omnivoiceNumber: '+1 (555) 668-1519',
+      createdAt: new Date().toISOString(),
+      troubleshoot: { webhookConnected: true, deepgramApiValid: true, llmApiValid: true, whatsappSessionActive: true, serviceBlocked: false },
+      promotionsSent: 0,
+      revivalLeadsActive: 0,
+      conversationalLeadsCount: 0,
+    },
+    {
+      id: 't-1002',
+      clientNumber: '1002',
+      name: 'Leads',
+      businessName: 'hazelwhat',
+      phoneNumber: '03177598978',
+      email: 'client@business.com',
+      status: 'suspended',
+      installationFee: 0,
+      monthlySubscriptionFee: 0,
+      currency: 'PKR',
+      paymentStatus: 'paid',
+      allocatedMinutes: 800,
+      usedMinutes: 0,
+      clientUsername: 'hazelwhat_346',
+      clientPassword: 'client1002',
+      systemPrompt: 'You are an AI assistant for hazelwhat.',
+      knowledgeBase: 'hazelwhat business FAQs',
+      productKnowledgeBase: 'hazelwhat product catalog',
+      followupMechanism: 'Standard follow-up',
+      llmModel: 'gpt-4o-mini',
+      temperature: 0.7,
+      deepgramVoice: 'aura-asteria-en',
+      deepgramApiKey: '',
+      openaiApiKey: '',
+      omnivoiceApiKey: '',
+      omnivoiceNumber: '+1 (555) 123-4567',
+      createdAt: new Date().toISOString(),
+      troubleshoot: { webhookConnected: true, deepgramApiValid: true, llmApiValid: true, whatsappSessionActive: false, serviceBlocked: true },
+      promotionsSent: 0,
+      revivalLeadsActive: 0,
+      conversationalLeadsCount: 0,
+    },
+    {
+      id: 't-1001',
+      clientNumber: '1001',
+      name: 'M Shafiq',
+      businessName: 'Trend aura',
+      phoneNumber: '0314 3060320',
+      email: 'client@business.com',
+      status: 'active',
+      installationFee: 0,
+      monthlySubscriptionFee: 9000,
+      currency: 'PKR',
+      paymentStatus: 'paid',
+      allocatedMinutes: 800,
+      usedMinutes: 0,
+      clientUsername: 'trend_aura_423',
+      clientPassword: 'client1001',
+      systemPrompt: 'You are an AI assistant for Trend aura.',
+      knowledgeBase: 'Trend aura business FAQs',
+      productKnowledgeBase: 'Trend aura product catalog',
+      followupMechanism: 'Standard follow-up',
+      llmModel: 'gpt-4o-mini',
+      temperature: 0.7,
+      deepgramVoice: 'aura-asteria-en',
+      deepgramApiKey: '',
+      openaiApiKey: '',
+      omnivoiceApiKey: '',
+      omnivoiceNumber: '+1 (555) 987-6543',
+      createdAt: new Date().toISOString(),
+      troubleshoot: { webhookConnected: true, deepgramApiValid: true, llmApiValid: true, whatsappSessionActive: true, serviceBlocked: false },
+      promotionsSent: 0,
+      revivalLeadsActive: 0,
+      conversationalLeadsCount: 0,
     }
+  ];
+
+  static async getTenants(): Promise<Tenant[]> {
+    let supabaseTenants: Tenant[] = [];
+    if (supabase) {
+      try {
+        const { fetchTenantsFromSupabase } = await import('./supabase');
+        const fetched = await fetchTenantsFromSupabase();
+        if (fetched && fetched.length > 0) {
+          supabaseTenants = fetched;
+        }
+      } catch (e) {
+        console.error('Failed to fetch tenants from Supabase:', e);
+      }
+    }
+    const map = new Map<string, Tenant>();
+    DB.tenantsMemoryStore.forEach(t => map.set(t.id, t));
+    supabaseTenants.forEach(t => map.set(t.id, t));
+    return Array.from(map.values());
   }
 
   static async getTenantByUsername(username: string): Promise<Tenant | null> {
@@ -971,9 +1081,10 @@ export class DB {
       const u1 = t.clientUsername?.trim().toLowerCase() || '';
       const u2 = t.email?.trim().toLowerCase() || '';
       const u3 = t.clientNumber?.toString().trim() || '';
+      const u4 = `client${t.clientNumber}`.toLowerCase();
       const u5 = t.businessName?.trim().toLowerCase() || '';
 
-      if (u1 === cleanUsername || u2 === cleanUsername || u3 === cleanUsername) return true;
+      if (u1 === cleanUsername || u2 === cleanUsername || u3 === cleanUsername || u4 === cleanUsername) return true;
       if (u1.replace(/[\s\-_]/g, '') === normalizedUsername) return true;
       if (u5 && u5.replace(/[\s\-_]/g, '') === normalizedUsername) return true;
       return false;
@@ -997,7 +1108,12 @@ export class DB {
   }
 
   static async saveTenantsAsync(tenants: Tenant[]): Promise<boolean> {
-    if (!supabase) return false;
+    const map = new Map<string, Tenant>();
+    DB.tenantsMemoryStore.forEach(t => map.set(t.id, t));
+    tenants.forEach(t => map.set(t.id, t));
+    DB.tenantsMemoryStore = Array.from(map.values());
+
+    if (!supabase) return true;
     try {
       const { upsertTenantToSupabase } = await import('./supabase');
       const results = await Promise.all(tenants.map(async (t) => {
