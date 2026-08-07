@@ -1790,8 +1790,8 @@ export default function DashboardPage() {
         {/* Growth Section */}
         <div className="px-6 mb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Growth</div>
         <div className="flex flex-col gap-1 px-4 mb-6">
-          <button onClick={() => setActiveTab('leads-revival')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'leads-revival' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
-            <RefreshCw className={`h-4 w-4 ${activeTab === 'leads-revival' ? 'text-purple-600' : 'text-slate-400'}`} /> Follow Ups
+          <button onClick={() => setActiveTab('promotions')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${(activeTab === 'promotions' || activeTab === 'leads-revival') ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+            <RefreshCw className={`h-4 w-4 ${(activeTab === 'promotions' || activeTab === 'leads-revival') ? 'text-purple-600' : 'text-slate-400'}`} /> Follow Ups
           </button>
         </div>
 
@@ -3539,8 +3539,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-        {/* Leads Revival Tab - DashMark Theme */}
-        {activeTab === 'leads-revival' && (
+        {/* Follow Ups Tab - DashMark Theme */}
+        {(activeTab === 'leads-revival' || activeTab === 'promotions') && (
           <div className="flex-1 h-full overflow-y-auto bg-[#f8f9fc]">
             <div className="p-8 md:p-10 max-w-[1400px] mx-auto w-full space-y-8">
             <div className="flex justify-between items-center mb-2">
