@@ -20,9 +20,10 @@ export function middleware(request: NextRequest) {
     if (pathname === '/admin/login') {
       return NextResponse.redirect(new URL('/login?portal=admin', request.url));
     }
-    // If they are NOT on /login, redirect immediately to /login
-    if (pathname !== '/login') {
-      const loginUrl = new URL('/login', request.url);
+    // If attempting to access protected dashboards without a session
+    if (pathname.startsWith('/client') || pathname.startsWith('/admin')) {
+      const portal = pathname.startsWith('/admin') ? 'admin' : 'client';
+      const loginUrl = new URL(`/login?portal=${portal}`, request.url);
       return NextResponse.redirect(loginUrl);
     }
     return NextResponse.next();
@@ -38,19 +39,19 @@ export function middleware(request: NextRequest) {
       if (pathname === '/login' || pathname === '/admin/login') {
         return NextResponse.redirect(new URL('/admin', request.url));
       }
-      // Super admin can freely access BOTH / (Client Panel) and /admin (Admin Dashboard)!
+      // Super admin can freely access BOTH / (Landing/Client Panel) and /admin (Admin Dashboard)!
       return NextResponse.next();
     } 
 
     // If client user:
     if (session.role === 'client') {
-      // Client cannot access /admin or /admin/login -> redirect to /
+      // Client cannot access /admin or /admin/login -> redirect to /client
       if (pathname.startsWith('/admin')) {
-        return NextResponse.redirect(new URL('/', request.url));
+        return NextResponse.redirect(new URL('/client', request.url));
       }
-      // If client visits /login or /client, send to / (Full Client Workspace)
-      if (pathname === '/login' || pathname === '/client') {
-        return NextResponse.redirect(new URL('/', request.url));
+      // If client visits /login, send to /client
+      if (pathname === '/login') {
+        return NextResponse.redirect(new URL('/client', request.url));
       }
     }
   } catch (e) {
@@ -67,4 +68,5 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
+
 
