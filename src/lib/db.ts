@@ -944,8 +944,11 @@ export class DB {
       if (updates.status) payload.status = updates.status;
       if (updates.sentToday !== undefined) payload.sent_today = updates.sentToday;
       if (updates.lastSentDate) payload.last_sent_date = updates.lastSentDate;
+      if (updates.lastSentAt) payload.last_sent_at = updates.lastSentAt;
       if (updates.sentPhones) payload.sent_phones = updates.sentPhones;
       if (updates.failedPhones) payload.failed_phones = updates.failedPhones;
+      if (updates.repliedPhones) payload.replied_phones = updates.repliedPhones;
+      if (updates.optedOutPhones) payload.opted_out_phones = updates.optedOutPhones;
       if (updates.leadProgress) payload.lead_progress = updates.leadProgress;
 
       let query = supabase.from('revival_campaigns').update(payload).eq('id', id);
