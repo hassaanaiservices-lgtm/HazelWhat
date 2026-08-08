@@ -53,7 +53,9 @@ export async function GET(request: NextRequest) {
         res.cookies.delete('hazel_client_session');
         return res;
       }
-      if (tenant.status !== "active") {
+
+      const statusLower = (tenant.status || 'active').trim().toLowerCase();
+      if (statusLower === 'suspended' || statusLower === 'blocked' || statusLower === 'draft') {
         return NextResponse.json({ authenticated: false, error: "Account inactive or suspended" }, { status: 403 });
       }
 
@@ -100,7 +102,8 @@ export async function GET(request: NextRequest) {
         const session = JSON.parse(clientCookie.value);
         if (session.role === 'client') {
           let tenant = (await DB.getTenantById(session.tenantId)) || (await DB.getTenantByUsername(session.username || session.clientUsername || ""));
-          if (tenant && tenant.status === "active") {
+          const stLower = (tenant?.status || 'active').trim().toLowerCase();
+          if (tenant && stLower !== 'suspended' && stLower !== 'blocked' && stLower !== 'draft') {
             return NextResponse.json({
               authenticated: true,
               user: {

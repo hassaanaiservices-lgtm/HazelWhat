@@ -153,11 +153,6 @@ export default function LoginPage() {
             <p className="text-xs text-slate-400 font-medium">Enterprise WhatsApp & Voice Automation</p>
           </div>
         </div>
-
-        <div className="hidden sm:flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-          <ShieldCheck className="w-3.5 h-3.5" />
-          <span>{portal === 'admin' ? 'Super Admin Portal' : 'Secure Client Access'}</span>
-        </div>
       </header>
 
       {/* Main Login Card */}
@@ -198,10 +193,6 @@ export default function LoginPage() {
           )}
 
           <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700/60 text-xs font-medium text-slate-300 mb-3">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              {portal === 'admin' ? 'Super Admin Access' : 'Client Portal Sign In'}
-            </div>
             <h2 className="text-2xl font-bold text-white tracking-tight">
               {portal === 'admin' ? 'Admin Portal Sign In' : 'Welcome Back'}
             </h2>

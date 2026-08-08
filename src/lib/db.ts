@@ -1087,16 +1087,36 @@ export class DB {
     const cleanUsername = username.trim().toLowerCase();
     const normalizedUsername = cleanUsername.replace(/[\s\-_]/g, '');
 
-    return tenants.find(t => {
+    // 1. Exact or normalized match
+    let match = tenants.find(t => {
       const u1 = t.clientUsername?.trim().toLowerCase() || '';
       const u2 = t.email?.trim().toLowerCase() || '';
       const u3 = t.clientNumber?.toString().trim() || '';
       const u4 = `client${t.clientNumber}`.toLowerCase();
       const u5 = t.businessName?.trim().toLowerCase() || '';
+      const u6 = t.name?.trim().toLowerCase() || '';
+      const u7 = t.id?.trim().toLowerCase() || '';
 
-      if (u1 === cleanUsername || u2 === cleanUsername || u3 === cleanUsername || u4 === cleanUsername) return true;
-      if (u1.replace(/[\s\-_]/g, '') === normalizedUsername) return true;
+      if (u1 === cleanUsername || u2 === cleanUsername || u3 === cleanUsername || u4 === cleanUsername || u7 === cleanUsername) return true;
+      if (u1 && u1.replace(/[\s\-_]/g, '') === normalizedUsername) return true;
       if (u5 && u5.replace(/[\s\-_]/g, '') === normalizedUsername) return true;
+      if (u6 && u6.replace(/[\s\-_]/g, '') === normalizedUsername) return true;
+      return false;
+    });
+
+    if (match) return match;
+
+    // 2. Partial prefix / fuzzy fallback (e.g. "pizzabox" matching "pizzabox_183343")
+    return tenants.find(t => {
+      const u1 = (t.clientUsername || '').toLowerCase().replace(/[\s\-_]/g, '');
+      const u5 = (t.businessName || '').toLowerCase().replace(/[\s\-_]/g, '');
+      const u6 = (t.name || '').toLowerCase().replace(/[\s\-_]/g, '');
+
+      if (normalizedUsername.length >= 3) {
+        if (u1 && (u1.startsWith(normalizedUsername) || normalizedUsername.startsWith(u1))) return true;
+        if (u5 && (u5.startsWith(normalizedUsername) || normalizedUsername.startsWith(u5))) return true;
+        if (u6 && (u6.startsWith(normalizedUsername) || normalizedUsername.startsWith(u6))) return true;
+      }
       return false;
     }) || null;
   }
