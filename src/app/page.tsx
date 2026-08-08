@@ -132,11 +132,10 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#07080C] text-slate-100 font-sans selection:bg-purple-500/30 selection:text-purple-300 relative overflow-x-hidden">
+    <div className="min-h-screen bg-[#07080C] text-slate-100 font-sans selection:bg-white/20 selection:text-white relative overflow-x-hidden">
       
-      {/* Background Subtle Gradient Radial Glow */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[500px] bg-gradient-to-b from-purple-900/20 via-indigo-900/10 to-transparent rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute top-[800px] -right-40 w-[600px] h-[600px] bg-purple-900/10 rounded-full blur-[160px] pointer-events-none" />
+      {/* Background Subtle Monochrome Glow */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[500px] bg-gradient-to-b from-slate-800/10 via-slate-900/5 to-transparent rounded-full blur-[140px] pointer-events-none" />
 
       {/* Subtle Grid Pattern Overlay */}
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:24px_24px]" />
@@ -147,12 +146,12 @@ export default function LandingPage() {
           
           {/* Brand Logo */}
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white font-bold text-xs shadow-md group-hover:scale-105 transition-transform">
-              <Bot className="w-4.5 h-4.5 text-white" />
+            <div className="w-8 h-8 rounded-full bg-white text-slate-950 flex items-center justify-center font-bold text-xs shadow-md group-hover:scale-105 transition-transform">
+              <Bot className="w-4.5 h-4.5 text-slate-950" />
             </div>
             <div className="flex items-center gap-2">
               <span className="font-extrabold text-lg text-white tracking-tight">HazelWhat</span>
-              <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/20 text-[10px] font-bold">
+              <span className="px-2 py-0.5 rounded-full bg-white/5 text-slate-300 border border-white/10 text-[10px] font-bold">
                 Enterprise AI
               </span>
             </div>
@@ -196,15 +195,15 @@ export default function LandingPage() {
       <section id="hero" className="pt-20 pb-16 px-4 max-w-5xl mx-auto text-center relative z-10">
         
         {/* Pill Badge */}
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs font-bold mb-6">
-          <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-bold mb-6">
+          <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
           <span>Autonomous WhatsApp & Voice AI Infrastructure</span>
         </div>
 
         {/* Hero Title */}
         <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-[1.12] mb-6">
           Automate Your Entire <br />
-          <span className="bg-gradient-to-r from-purple-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
             WhatsApp Sales Pipeline
           </span>
         </h1>
@@ -229,7 +228,7 @@ export default function LandingPage() {
             className="px-8 py-4 rounded-full bg-[#0D0F17] hover:bg-[#131624] border border-white/10 text-slate-300 font-extrabold text-xs transition-all flex items-center gap-2 cursor-pointer"
           >
             <span>Try Interactive Simulator</span>
-            <Play className="w-4 h-4 text-purple-400" />
+            <Play className="w-4 h-4 text-white" />
           </a>
         </div>
 
@@ -240,7 +239,7 @@ export default function LandingPage() {
             <div className="text-xs text-slate-400 font-medium mt-1">Average Response Latency</div>
           </div>
           <div className="bg-[#0D0F17]/90 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
-            <div className="text-2xl sm:text-3xl font-black text-purple-400 font-mono">+340%</div>
+            <div className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono">+340%</div>
             <div className="text-xs text-slate-400 font-medium mt-1">Midnight Order Conversion</div>
           </div>
           <div className="bg-[#0D0F17]/90 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
@@ -248,14 +247,14 @@ export default function LandingPage() {
             <div className="text-xs text-slate-400 font-medium mt-1">Isolated Tenant Security</div>
           </div>
           <div className="bg-[#0D0F17]/90 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
-            <div className="text-2xl sm:text-3xl font-black text-indigo-400 font-mono">24/7</div>
+            <div className="text-2xl sm:text-3xl font-black text-slate-200 font-mono">24/7</div>
             <div className="text-xs text-slate-400 font-medium mt-1">Voice & Chat Availability</div>
           </div>
         </div>
 
         {/* HERO INTERFACE PREVIEW */}
         <div className="relative max-w-4xl mx-auto">
-          <div className="absolute -inset-1 rounded-3xl bg-purple-600/20 blur-2xl opacity-50" />
+          <div className="absolute -inset-1 rounded-3xl bg-white/5 blur-2xl opacity-50" />
           
           <div className="relative bg-[#0B0D14] border border-white/15 rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden text-left space-y-6">
             
@@ -295,7 +294,7 @@ export default function LandingPage() {
 
               <div className="bg-[#121522] border border-white/10 rounded-2xl p-5 space-y-4">
                 <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Lead Revival System</div>
-                <div className="text-4xl font-black text-purple-400 font-mono">+42%</div>
+                <div className="text-4xl font-black text-emerald-400 font-mono">+42%</div>
                 <p className="text-xs text-slate-400">Abandoned cart and stale inquiry recovery rate via timed follow-ups.</p>
               </div>
 
@@ -318,8 +317,8 @@ export default function LandingPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
           
-          <div className="bg-[#0D0F17] p-8 rounded-3xl border border-white/10 space-y-4 hover:border-purple-500/40 transition-all">
-            <div className="w-12 h-12 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center border border-purple-500/20">
+          <div className="bg-[#0D0F17] p-8 rounded-3xl border border-white/10 space-y-4 hover:border-white/30 transition-all">
+            <div className="w-12 h-12 rounded-2xl bg-white/5 text-emerald-400 flex items-center justify-center border border-white/10">
               <Bot className="w-6 h-6" />
             </div>
             <h3 className="text-lg font-bold text-white">24/7 Autonomous Sales</h3>
@@ -328,8 +327,8 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="bg-[#0D0F17] p-8 rounded-3xl border border-white/10 space-y-4 hover:border-purple-500/40 transition-all">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+          <div className="bg-[#0D0F17] p-8 rounded-3xl border border-white/10 space-y-4 hover:border-white/30 transition-all">
+            <div className="w-12 h-12 rounded-2xl bg-white/5 text-slate-300 flex items-center justify-center border border-white/10">
               <Volume2 className="w-6 h-6" />
             </div>
             <h3 className="text-lg font-bold text-white">Voice Note Intelligence</h3>
@@ -338,8 +337,8 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="bg-[#0D0F17] p-8 rounded-3xl border border-white/10 space-y-4 hover:border-purple-500/40 transition-all">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+          <div className="bg-[#0D0F17] p-8 rounded-3xl border border-white/10 space-y-4 hover:border-white/30 transition-all">
+            <div className="w-12 h-12 rounded-2xl bg-white/5 text-emerald-400 flex items-center justify-center border border-white/10">
               <Layers className="w-6 h-6" />
             </div>
             <h3 className="text-lg font-bold text-white">Interactive Product Catalogs</h3>
@@ -348,8 +347,8 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="bg-[#0D0F17] p-8 rounded-3xl border border-white/10 space-y-4 hover:border-purple-500/40 transition-all">
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/20">
+          <div className="bg-[#0D0F17] p-8 rounded-3xl border border-white/10 space-y-4 hover:border-white/30 transition-all">
+            <div className="w-12 h-12 rounded-2xl bg-white/5 text-slate-300 flex items-center justify-center border border-white/10">
               <RefreshCw className="w-6 h-6" />
             </div>
             <h3 className="text-lg font-bold text-white">Automated Lead Revival</h3>
@@ -365,8 +364,8 @@ export default function LandingPage() {
       {/* ================= INTERACTIVE DEMO SIMULATOR ================= */}
       <section id="simulator" className="py-20 px-4 max-w-5xl mx-auto text-center">
         
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs font-bold mb-4">
-          <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-bold mb-4">
+          <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
           <span>Test Drive Live Bot Experience</span>
         </div>
 
@@ -383,7 +382,7 @@ export default function LandingPage() {
           {/* Header Bar */}
           <div className="bg-[#07080C] border-b border-white/10 p-4 px-6 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center font-bold text-xs text-white">
+              <div className="w-8 h-8 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center font-bold text-xs">
                 AI
               </div>
               <div>
@@ -397,13 +396,13 @@ export default function LandingPage() {
             <div className="flex gap-2">
               <button 
                 onClick={() => setSimActiveTab('chat')}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${simActiveTab === 'chat' ? 'bg-purple-600 text-white' : 'bg-white/5 text-slate-400'}`}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${simActiveTab === 'chat' ? 'bg-white text-slate-950 font-bold' : 'bg-white/5 text-slate-400'}`}
               >
                 Chat Mode
               </button>
               <button 
                 onClick={() => setSimActiveTab('voice')}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${simActiveTab === 'voice' ? 'bg-purple-600 text-white' : 'bg-white/5 text-slate-400'}`}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${simActiveTab === 'voice' ? 'bg-white text-slate-950 font-bold' : 'bg-white/5 text-slate-400'}`}
               >
                 Voice Note
               </button>
@@ -420,7 +419,7 @@ export default function LandingPage() {
                 <div 
                   className={`max-w-[80%] p-3.5 rounded-2xl text-xs whitespace-pre-line leading-relaxed shadow-sm ${
                     msg.sender === 'user' 
-                      ? 'bg-purple-600 text-white rounded-br-none' 
+                      ? 'bg-white/10 border border-white/10 text-white rounded-br-none' 
                       : 'bg-[#141724] border border-white/10 text-slate-200 rounded-bl-none'
                   }`}
                 >
@@ -432,7 +431,7 @@ export default function LandingPage() {
             {isSimTyping && (
               <div className="flex justify-start">
                 <div className="bg-[#141724] border border-white/10 p-3 rounded-2xl rounded-bl-none text-xs text-slate-400 flex items-center gap-2">
-                  <Bot className="w-3.5 h-3.5 text-purple-400 animate-spin" />
+                  <Bot className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
                   <span>HazelWhat AI is thinking...</span>
                 </div>
               </div>
@@ -470,14 +469,14 @@ export default function LandingPage() {
               onChange={e => setSimQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSimSend()}
               placeholder="Type your customer query here..."
-              className="flex-1 bg-[#0D0F17] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-purple-500"
+              className="flex-1 bg-[#0D0F17] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-white/30"
             />
             <button 
               onClick={() => handleSimSend()}
-              className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+              className="px-5 py-2.5 bg-white hover:bg-slate-200 text-slate-950 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
             >
               <span>Send</span>
-              <Send className="w-3.5 h-3.5" />
+              <Send className="w-3.5 h-3.5 text-slate-950" />
             </button>
           </div>
 
@@ -510,10 +509,10 @@ export default function LandingPage() {
             <div key={idx} className="bg-[#0D0F17] border border-white/10 rounded-2xl overflow-hidden transition-all">
               <button
                 onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
-                className="w-full p-5 text-left flex justify-between items-center text-sm font-bold text-white hover:text-purple-300 transition-colors cursor-pointer"
+                className="w-full p-5 text-left flex justify-between items-center text-sm font-bold text-white hover:text-emerald-400 transition-colors cursor-pointer"
               >
                 <span>{item.q}</span>
-                <ChevronDown className={`w-4 h-4 transition-transform ${openFaq === idx ? 'rotate-180 text-purple-400' : 'text-slate-400'}`} />
+                <ChevronDown className={`w-4 h-4 transition-transform ${openFaq === idx ? 'rotate-180 text-emerald-400' : 'text-slate-400'}`} />
               </button>
               {openFaq === idx && (
                 <div className="px-5 pb-5 text-xs text-slate-400 leading-relaxed border-t border-white/5 pt-3">
@@ -529,7 +528,7 @@ export default function LandingPage() {
       <footer className="py-12 px-4 border-t border-white/10 relative z-10 bg-[#05060A]">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-purple-600 flex items-center justify-center text-white font-bold text-xs">
+            <div className="w-8 h-8 rounded-full bg-white text-slate-950 flex items-center justify-center font-bold text-xs">
               HW
             </div>
             <span className="font-extrabold text-white text-sm">HazelWhat AI Platform</span>
@@ -559,7 +558,7 @@ export default function LandingPage() {
             </button>
 
             <div className="text-center space-y-2">
-              <div className="w-12 h-12 rounded-2xl bg-purple-600/20 border border-purple-500/30 text-purple-400 flex items-center justify-center mx-auto">
+              <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/10 text-white flex items-center justify-center mx-auto">
                 <Bot className="w-6 h-6" />
               </div>
               <h3 className="text-xl font-bold text-white">Client Portal Sign In</h3>
@@ -586,7 +585,7 @@ export default function LandingPage() {
                   value={loginUser}
                   onChange={(e) => setLoginUser(e.target.value)}
                   placeholder="e.g. royal_fashion"
-                  className="w-full bg-[#07080C] border border-white/10 focus:border-purple-500 rounded-xl p-3 text-xs text-white outline-none"
+                  className="w-full bg-[#07080C] border border-white/10 focus:border-white/30 rounded-xl p-3 text-xs text-white outline-none"
                 />
               </div>
 
@@ -600,21 +599,21 @@ export default function LandingPage() {
                   value={loginPass}
                   onChange={(e) => setLoginPass(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-[#07080C] border border-white/10 focus:border-purple-500 rounded-xl p-3 text-xs text-white outline-none"
+                  className="w-full bg-[#07080C] border border-white/10 focus:border-white/30 rounded-xl p-3 text-xs text-white outline-none"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={loginLoading}
-                className="w-full py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-extrabold text-white transition-all shadow-lg shadow-purple-600/30 cursor-pointer disabled:opacity-50"
+                className="w-full py-3.5 rounded-xl bg-white hover:bg-slate-200 text-xs font-extrabold text-slate-950 transition-all shadow-lg cursor-pointer disabled:opacity-50"
               >
                 {loginLoading ? 'Authenticating...' : 'Sign In to Client Portal'}
               </button>
             </form>
 
             <div className="text-center pt-2 border-t border-white/5">
-              <Link href="/login?portal=client" className="text-xs text-purple-400 hover:underline">
+              <Link href="/login?portal=client" className="text-xs text-slate-300 hover:text-white underline">
                 Open Dedicated Client Portal Sign In Page →
               </Link>
             </div>
@@ -647,8 +646,8 @@ export default function LandingPage() {
             </div>
 
             <div className="p-4 rounded-2xl bg-[#121524] border border-white/10 text-left space-y-2 text-xs">
-              <div className="font-bold text-purple-300 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4" />
+              <div className="font-bold text-slate-200 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
                 <span>How to Get Access:</span>
               </div>
               <p className="text-slate-300 leading-relaxed">
@@ -663,7 +662,7 @@ export default function LandingPage() {
                 setShowSignUpModal(false);
                 setShowSignInModal(true);
               }}
-              className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition-all cursor-pointer"
+              className="w-full py-3 rounded-xl bg-white hover:bg-slate-200 text-xs font-bold text-slate-950 transition-all cursor-pointer"
             >
               Already Onboarded? Sign In Here
             </button>
