@@ -192,7 +192,7 @@ export default function VoiceSaaSApp() {
 
   const copyClientCredentials = (type: 'username' | 'password' | 'all' | 'link') => {
     let textToCopy = '';
-    const loginUrl = typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://hazelwhat.com/login';
+    const loginUrl = typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://hazelwhat-production.up.railway.app/login';
     if (type === 'username') textToCopy = selectedTenant.clientUsername || '';
     else if (type === 'password') textToCopy = selectedTenant.clientPassword || '';
     else if (type === 'link') textToCopy = loginUrl;
@@ -2007,7 +2007,7 @@ export default function VoiceSaaSApp() {
 
                               <button
                                 onClick={() => {
-                                  const loginUrl = typeof window !== 'undefined' ? `${window.location.origin}/login?portal=admin` : 'https://hazelwhat.com/login?portal=admin';
+                                  const loginUrl = typeof window !== 'undefined' ? `${window.location.origin}/login?portal=admin` : 'https://hazelwhat-production.up.railway.app/login?portal=admin';
                                   const credsText = `🔐 HazelWhat Admin Team Member Login\nPortal Link: ${loginUrl}\nEmail/Username: ${p.email}\nPassword: ${p.password || 'AdminPass123'}\nAccess Level: ${p.accessLevel === 'read_write' ? 'Full Read/Write' : 'View Only'}`;
                                   navigator.clipboard.writeText(credsText);
                                   setCopiedCredsNotice(`Login Credentials for ${p.name} copied!`);
@@ -2460,7 +2460,7 @@ export default function VoiceSaaSApp() {
             <div className="space-y-2">
               <button
                 onClick={() => {
-                  const loginUrl = typeof window !== 'undefined' ? `${window.location.origin}/login?portal=admin` : 'https://hazelwhat.com/login?portal=admin';
+                  const loginUrl = typeof window !== 'undefined' ? `${window.location.origin}/login?portal=admin` : 'https://hazelwhat-production.up.railway.app/login?portal=admin';
                   const text = `🔐 HazelWhat Admin Team Access Details\nPortal Link: ${loginUrl}\nEmail/Username: ${createdAdminInfo.email}\nPassword: ${createdAdminInfo.password}\nAccess Level: ${createdAdminInfo.accessLevel === 'read_write' ? 'Full Read/Write' : 'View Only'}`;
                   navigator.clipboard.writeText(text);
                   setCopiedCredsNotice('Admin Credentials & Invite Link Copied!');
