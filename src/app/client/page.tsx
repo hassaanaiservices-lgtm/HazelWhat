@@ -2193,55 +2193,7 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-            {/* API Key Configuration */}
-            <div className="border-t border-slate-100 pt-6 mt-6">
-              <h3 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-emerald-500" /> API Key Configuration
-              </h3>
-              <p className="text-xs text-slate-500 mb-6 font-medium">
-                Configure your AI autopilot engine key. The system auto-detects the provider based on the key prefix (Anthropic: sk-ant-..., OpenRouter: sk-or-..., DeepSeek: sk-...).
-              </p>
-              
-              <div className="grid gap-6">
-                {/* Unified API Key */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-bold text-slate-700">AI API Key</label>
-                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
-                      apiKeyStatus === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                      apiKeyStatus === 'Out of Credits' ? 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse' :
-                      apiKeyStatus === 'Invalid' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
-                      apiKeyStatus === 'checking' ? 'bg-slate-100 text-slate-500 animate-pulse' :
-                      'bg-slate-50 text-slate-500 border border-slate-200'
-                    }`}>
-                      {apiKeyStatus === 'checking' ? 'Checking...' : apiKeyStatus}
-                    </span>
-                  </div>
-                  <div className="relative">
-                    <input 
-                      type={showApiKey ? "text" : "password"} 
-                      value={config.apiKey || ''} 
-                      onChange={e => setConfig({...config, apiKey: e.target.value})}
-                      onBlur={() => validateApiKey(config.apiKey)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-12 py-3 text-slate-900 font-medium focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
-                      placeholder="sk-ant-..., sk-or-..., or sk-..."
-                    />
-                    <button 
-                      type="button"
-                      onClick={() => setShowApiKey(!showApiKey)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
-                    >
-                      {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  </div>
-                  {apiKeyError && (
-                    <p className="text-xs text-rose-600 font-bold mt-1.5 flex items-center gap-1">
-                      <AlertCircle className="h-3.5 w-3.5" /> {apiKeyError}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
+
             
             <div className="mt-8 border-t border-slate-100 pt-6 flex justify-end">
               <button 
