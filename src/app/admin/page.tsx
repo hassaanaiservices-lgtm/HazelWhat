@@ -239,7 +239,12 @@ export default function VoiceSaaSApp() {
     email: '',
     role: 'admin' as 'admin' | 'manager' | 'viewer',
     accessLevel: 'read_write' as 'read_write' | 'view_only',
+    password: '',
   });
+
+  // New Admin Success Modal State
+  const [showAdminSuccessModal, setShowAdminSuccessModal] = useState(false);
+  const [createdAdminInfo, setCreatedAdminInfo] = useState<Partner | null>(null);
 
   // Save Success Pop-up Modal State
   const [showSaveSuccessModal, setShowSaveSuccessModal] = useState(false);
@@ -447,19 +452,23 @@ export default function VoiceSaaSApp() {
 
   const handleAddTeamAdmin = (e: React.FormEvent) => {
     e.preventDefault();
+    const assignedPassword = newAdminForm.password.trim() || `AdminPass@${Math.floor(1000 + Math.random() * 9000)}`;
     const createdAdmin: Partner = {
-      id: `p-${partners.length + 1}`,
-      name: newAdminForm.name,
-      email: newAdminForm.email,
+      id: `p-${Date.now()}`,
+      name: newAdminForm.name.trim(),
+      email: newAdminForm.email.trim(),
       role: newAdminForm.role,
       accessLevel: newAdminForm.accessLevel,
       clientsAssigned: 0,
       permissions: newAdminForm.accessLevel === 'read_write' ? ['edit_setup', 'manage_billing'] : ['view_only'],
+      password: assignedPassword,
     };
     const newPartnersList = [...partners, createdAdmin];
     persistTenants(tenants, newPartnersList);
     setShowAddAdminModal(false);
-    setNewAdminForm({ name: '', email: '', role: 'admin', accessLevel: 'read_write' });
+    setCreatedAdminInfo(createdAdmin);
+    setShowAdminSuccessModal(true);
+    setNewAdminForm({ name: '', email: '', role: 'admin', accessLevel: 'read_write', password: '' });
   };
 
   const handleGeneratePairingCode = async (e: React.FormEvent) => {
@@ -1979,20 +1988,51 @@ export default function VoiceSaaSApp() {
                             </span>
                           </td>
                           <td className="p-4">
-                            <button
-                              onClick={() => {
-                                setPartners(partners.map(item => {
-                                  if (item.id === p.id) {
-                                    const nextAccess = item.accessLevel === 'read_write' ? 'view_only' : 'read_write';
-                                    return { ...item, accessLevel: nextAccess };
-                                  }
-                                  return item;
-                                }));
-                              }}
-                              className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-semibold hover:bg-slate-50 transition cursor-pointer"
-                            >
-                              Toggle Access
-                            </button>
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => {
+                                  const updated: Partner[] = partners.map(item => {
+                                    if (item.id === p.id) {
+                                      const nextAccess: 'read_write' | 'view_only' = item.accessLevel === 'read_write' ? 'view_only' : 'read_write';
+                                      return { ...item, accessLevel: nextAccess };
+                                    }
+                                    return item;
+                                  });
+                                  persistTenants(tenants, updated);
+                                }}
+                                className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-semibold hover:bg-slate-50 transition cursor-pointer"
+                              >
+                                Toggle Access
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  const loginUrl = typeof window !== 'undefined' ? `${window.location.origin}/login?portal=admin` : 'https://hazelwhat.com/login?portal=admin';
+                                  const credsText = `🔐 HazelWhat Admin Team Member Login\nPortal Link: ${loginUrl}\nEmail/Username: ${p.email}\nPassword: ${p.password || 'AdminPass123'}\nAccess Level: ${p.accessLevel === 'read_write' ? 'Full Read/Write' : 'View Only'}`;
+                                  navigator.clipboard.writeText(credsText);
+                                  setCopiedCredsNotice(`Login Credentials for ${p.name} copied!`);
+                                  setTimeout(() => setCopiedCredsNotice(null), 3000);
+                                }}
+                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1"
+                              >
+                                <span>Copy Pass</span>
+                              </button>
+
+                              {p.email !== 'admin@hazelwhat.com' && (
+                                <button
+                                  onClick={() => {
+                                    if (confirm(`Are you sure you want to remove admin access for ${p.name}?`)) {
+                                      const updated = partners.filter(item => item.id !== p.id);
+                                      persistTenants(tenants, updated);
+                                    }
+                                  }}
+                                  className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                  title="Remove Admin Member"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2326,6 +2366,18 @@ export default function VoiceSaaSApp() {
               </div>
 
               <div>
+                <label className="text-xs font-bold text-slate-600 uppercase mb-1 block">Initial Password</label>
+                <input
+                  type="text"
+                  placeholder="e.g. AdminPass123 (or auto-generated)"
+                  value={newAdminForm.password}
+                  onChange={e => setNewAdminForm({ ...newAdminForm, password: e.target.value })}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Leave blank to auto-generate a secure random password.</p>
+              </div>
+
+              <div>
                 <label className="text-xs font-bold text-slate-600 uppercase mb-1 block">Admin Role</label>
                 <select
                   value={newAdminForm.role}
@@ -2366,6 +2418,67 @@ export default function VoiceSaaSApp() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: ADMIN CREATED & CREDENTIALS ================= */}
+      {showAdminSuccessModal && createdAdminInfo && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl text-center space-y-6">
+            <div className="w-14 h-14 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center mx-auto">
+              <UserCheck2 className="w-8 h-8" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-slate-900">New Admin Account Ready! 🎉</h3>
+              <p className="text-xs text-slate-500 font-medium mt-1">
+                {createdAdminInfo.name} has been added to Team Admins with {createdAdminInfo.accessLevel === 'read_write' ? 'Full Read/Write' : 'View Only'} permissions.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-left space-y-2.5">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-slate-400 font-bold uppercase">Admin Name:</span>
+                <span className="text-xs font-bold text-slate-900">{createdAdminInfo.name}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-slate-400 font-bold uppercase">Email / Login ID:</span>
+                <span className="text-xs font-mono font-bold text-slate-900">{createdAdminInfo.email}</span>
+              </div>
+              <div className="flex justify-between items-center border-t border-slate-200 pt-2">
+                <span className="text-xs text-slate-400 font-bold uppercase">Assigned Password:</span>
+                <span className="text-xs font-mono font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                  {createdAdminInfo.password}
+                </span>
+              </div>
+              <div className="flex justify-between items-center border-t border-slate-200 pt-2">
+                <span className="text-xs text-slate-400 font-bold uppercase">Admin Login Portal:</span>
+                <span className="text-[11px] font-mono text-slate-600">/login?portal=admin</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  const loginUrl = typeof window !== 'undefined' ? `${window.location.origin}/login?portal=admin` : 'https://hazelwhat.com/login?portal=admin';
+                  const text = `🔐 HazelWhat Admin Team Access Details\nPortal Link: ${loginUrl}\nEmail/Username: ${createdAdminInfo.email}\nPassword: ${createdAdminInfo.password}\nAccess Level: ${createdAdminInfo.accessLevel === 'read_write' ? 'Full Read/Write' : 'View Only'}`;
+                  navigator.clipboard.writeText(text);
+                  setCopiedCredsNotice('Admin Credentials & Invite Link Copied!');
+                  setTimeout(() => setCopiedCredsNotice(null), 3000);
+                }}
+                className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-md shadow-purple-600/20 cursor-pointer flex items-center justify-center space-x-2"
+              >
+                <CheckCircle className="w-4 h-4" />
+                <span>Copy All Admin Credentials & Invite Link</span>
+              </button>
+
+              <button
+                onClick={() => setShowAdminSuccessModal(false)}
+                className="w-full py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

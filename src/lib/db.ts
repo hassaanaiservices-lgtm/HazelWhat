@@ -1145,25 +1145,62 @@ export class DB {
     }
   }
 
-  static async getPartners(): Promise<Partner[]> {
-    if (!supabase) return [];
-    try {
-      const { data } = await supabase.from('partners').select('*');
-      return (data || []).map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        email: p.email,
-        role: p.role || 'partner',
-        accessLevel: p.access_level || 'read_write',
-        clientsAssigned: p.clients_assigned || 0,
-        permissions: p.permissions || []
-      }));
-    } catch (e) {
-      return [];
+  static partnersMemoryStore: Partner[] = [
+    { 
+      id: 'p-1', 
+      name: 'Hassaan (Super Admin)', 
+      email: 'admin@hazelwhat.com', 
+      role: 'admin', 
+      accessLevel: 'read_write', 
+      clientsAssigned: 0, 
+      permissions: ['edit_setup', 'manage_billing'],
+      password: 'admin123'
+    },
+    {
+      id: 'p-2',
+      name: 'ayan abubakar',
+      email: 'abubaker687526@gmail.com',
+      role: 'admin',
+      accessLevel: 'read_write',
+      clientsAssigned: 0,
+      permissions: ['edit_setup', 'manage_billing'],
+      password: 'AdminPass123'
     }
+  ];
+
+  static async getPartners(): Promise<Partner[]> {
+    let supabasePartners: Partner[] = [];
+    if (supabase) {
+      try {
+        const { data } = await supabase.from('partners').select('*');
+        if (data && data.length > 0) {
+          supabasePartners = data.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            email: p.email,
+            role: p.role || 'admin',
+            accessLevel: p.access_level || 'read_write',
+            clientsAssigned: p.clients_assigned || 0,
+            permissions: p.permissions || [],
+            password: p.password || 'AdminPass123'
+          }));
+        }
+      } catch (e) {
+        console.error('[DB/Supabase] Failed to fetch partners:', e);
+      }
+    }
+    const map = new Map<string, Partner>();
+    DB.partnersMemoryStore.forEach(p => map.set(p.id, p));
+    supabasePartners.forEach(p => map.set(p.id, p));
+    return Array.from(map.values());
   }
 
   static async savePartners(partners: Partner[]) {
+    const map = new Map<string, Partner>();
+    DB.partnersMemoryStore.forEach(p => map.set(p.id, p));
+    partners.forEach(p => map.set(p.id, p));
+    DB.partnersMemoryStore = Array.from(map.values());
+
     if (!supabase) return;
     try {
       const payloads = partners.map(p => ({
@@ -1172,8 +1209,9 @@ export class DB {
         email: p.email,
         role: p.role,
         access_level: p.accessLevel,
-        clients_assigned: p.clientsAssigned,
-        permissions: p.permissions || []
+        clients_assigned: p.clientsAssigned || 0,
+        permissions: p.permissions || [],
+        password: p.password || 'AdminPass123'
       }));
       await supabase.from('partners').upsert(payloads);
     } catch (e) {

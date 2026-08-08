@@ -8,6 +8,7 @@ export interface Partner {
   accessLevel: 'read_write' | 'view_only';
   clientsAssigned: number;
   permissions?: ('edit_setup' | 'view_only' | 'manage_billing')[];
+  password?: string;
 }
 
 export interface ClientTroubleshootStatus {
