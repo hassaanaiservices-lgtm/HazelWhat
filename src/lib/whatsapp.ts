@@ -677,7 +677,9 @@ export class WhatsAppManager {
           }
 
           const credsFile = path.join(AUTH_FOLDER, "creds.json");
-          const hasCreds = fs.existsSync(credsFile);
+          const hasLocalCreds = fs.existsSync(credsFile);
+          const hasSupabaseCreds = await DB.hasSavedCredentials("default");
+          const hasCreds = hasLocalCreds || hasSupabaseCreds;
 
           const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
           const errorMsg = lastDisconnect?.error?.message || "";
@@ -685,18 +687,22 @@ export class WhatsAppManager {
           console.log(`[Baileys] Connection closed. Status code: ${statusCode || 'unknown'}. Error: ${errorMsg}`);
           globalForBaileys.baileysSession.sock = null;
 
-          // If auth credentials exist on disk, we ALWAYS attempt reconnection with backoff!
-          // We NEVER immediately purge creds on transient 401/500 errors.
-          if (hasCreds) {
+          // If auth credentials exist or if socket closed during QR generation/re-pairing, attempt reconnection
+          if (hasCreds || globalForBaileys.baileysSession.qrCode) {
             const currentAttempts = (globalForBaileys.reconnectAttempts || 0) + 1;
             globalForBaileys.reconnectAttempts = currentAttempts;
 
             // Only clear creds if WhatsApp explicitly logged out device from phone AFTER repeated retries (5+ retries)
             if (statusCode === DisconnectReason.loggedOut && currentAttempts > 5) {
-              console.log("[Baileys] Device explicitly logged out from WhatsApp phone app after retries. Clearing local credentials.");
+              console.log("[Baileys] Device explicitly logged out from WhatsApp phone app after retries. Clearing credentials.");
               globalForBaileys.baileysSession.status = "disconnected";
               globalForBaileys.baileysSession.qrCode = null;
               globalForBaileys.reconnectAttempts = 0;
+              try {
+                const { useSupabaseAuthState } = await import("./whatsapp-auth");
+                const { removeCreds } = await useSupabaseAuthState("default");
+                await removeCreds();
+              } catch (e) {}
               if (fs.existsSync(AUTH_FOLDER)) {
                 try {
                   fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
@@ -710,7 +716,7 @@ export class WhatsAppManager {
             globalForBaileys.baileysSession.status = "connecting";
 
             if (!globalForBaileys.reconnectTimeout) {
-              const backoffMs = Math.min(30000, Math.pow(2, Math.min(currentAttempts, 5)) * 1000);
+              const backoffMs = Math.min(10000, Math.pow(2, Math.min(currentAttempts, 4)) * 1000);
               console.log(`[Baileys] Scheduling auto-reconnect attempt #${currentAttempts} in ${backoffMs / 1000}s...`);
 
               globalForBaileys.reconnectTimeout = setTimeout(() => {

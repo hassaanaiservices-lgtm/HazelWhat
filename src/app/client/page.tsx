@@ -2717,6 +2717,46 @@ export default function DashboardPage() {
                 </div>
               )}
 
+              {/* ERROR / DISCONNECTED STATE */}
+              {status === "error" && (
+                <div className="flex flex-col items-center justify-center text-center space-y-6 py-6 w-full max-w-sm">
+                  <div className="bg-rose-50 p-5 rounded-full border border-rose-100 shadow-inner">
+                    <AlertCircle className="h-12 w-12 text-rose-500" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <h3 className="text-base font-extrabold text-slate-900">WhatsApp Not Connected</h3>
+                    <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                      {errorMessage || "Connection dropped or session expired. Please generate a new QR code to link your phone."}
+                    </p>
+                  </div>
+
+                  <div className="w-full space-y-3 pt-2">
+                    <button 
+                      onClick={() => {
+                        setStatus("idle");
+                        setWaConnectMode("qr");
+                        startSession();
+                      }} 
+                      className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold h-12 rounded-xl transition-all shadow-md shadow-purple-500/20 text-xs cursor-pointer"
+                    >
+                      Generate New QR Code
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatus("idle");
+                        setWaConnectMode('pairing');
+                      }}
+                      className="text-xs font-extrabold text-purple-600 hover:text-purple-700 hover:underline flex items-center justify-center gap-2 mx-auto transition cursor-pointer"
+                    >
+                      <Smartphone className="h-4 w-4" />
+                      <span>Link with phone number instead</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* LINK WITH PHONE NUMBER INSTEAD VIEW */}
               {waConnectMode === "pairing" && status !== "connected" && (
                 <div className="w-full max-w-sm space-y-5 animate-in fade-in zoom-in duration-300">
