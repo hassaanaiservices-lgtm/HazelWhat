@@ -31,7 +31,13 @@ import {
   Radio, 
   Flame, 
   Headphones, 
-  Send
+  Send,
+  ShoppingBag,
+  Sliders,
+  Share2,
+  Video,
+  Camera,
+  Plus
 } from 'lucide-react';
 
 export default function LandingPage() {
@@ -132,46 +138,35 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#07080C] text-slate-100 font-sans selection:bg-purple-500/30 selection:text-purple-300 relative overflow-x-hidden">
+    <div className="min-h-screen bg-[#F8F9FD] text-slate-900 font-sans selection:bg-purple-500/20 selection:text-purple-900 relative overflow-x-hidden">
       
-      {/* Background Subtle Gradient Glow Orbs (Matching Dark Aesthetic) */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[500px] bg-gradient-to-b from-purple-900/20 via-indigo-900/10 to-transparent rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute top-[800px] -right-40 w-[600px] h-[600px] bg-emerald-900/15 rounded-full blur-[160px] pointer-events-none" />
-      <div className="absolute top-[1800px] -left-40 w-[600px] h-[600px] bg-purple-900/15 rounded-full blur-[160px] pointer-events-none" />
+      {/* Background Soft Purple Radial Glow Mesh */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1200px] h-[650px] bg-gradient-to-b from-purple-200/50 via-pink-100/30 to-transparent rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute top-[1200px] -right-40 w-[600px] h-[600px] bg-purple-100/40 rounded-full blur-[160px] pointer-events-none" />
+      <div className="absolute top-[2400px] -left-40 w-[600px] h-[600px] bg-indigo-100/40 rounded-full blur-[160px] pointer-events-none" />
 
       {/* Grid Pattern Overlay */}
-      <div 
-        className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:24px_24px]" 
-      />
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#000_1px,transparent_1px)] [background-size:24px_24px]" />
 
-      {/* ================= STICKY PILL NAVBAR ================= */}
-      <header className="sticky top-4 z-40 max-w-7xl mx-auto px-4">
-        <nav className="bg-[#0D0F17]/80 backdrop-blur-xl border border-white/10 rounded-2xl px-6 py-3.5 flex items-center justify-between shadow-2xl shadow-black/80">
+      {/* ================= STICKY FLOATING PILL NAVBAR ================= */}
+      <header className="sticky top-5 z-40 max-w-6xl mx-auto px-4">
+        <nav className="bg-white/80 backdrop-blur-xl border border-slate-200/80 rounded-full px-6 py-3 flex items-center justify-between shadow-lg shadow-slate-200/50">
           
           {/* Brand Logo */}
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 via-indigo-500 to-purple-400 p-[1px] shadow-lg shadow-purple-600/30">
-              <div className="w-full h-full bg-[#0D0F17] rounded-[11px] flex items-center justify-center">
-                <Bot className="w-5 h-5 text-purple-400 group-hover:scale-110 transition-transform" />
-              </div>
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-sm shadow-md group-hover:scale-105 transition-transform">
+              <Bot className="w-4.5 h-4.5 text-white" />
             </div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-lg text-white tracking-tight">HazelWhat</span>
-              <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/20 text-[10px] font-bold">
-                Enterprise AI
-              </span>
-            </div>
+            <span className="font-extrabold text-xl text-slate-900 tracking-tight">HazelWhat<span className="text-purple-600">.AI</span></span>
           </Link>
 
           {/* Nav Links */}
-          <div className="hidden md:flex items-center gap-8 text-xs font-semibold text-slate-400">
-            <a href="#hero" className="hover:text-white transition-colors">Overview</a>
-            <a href="#pain-points" className="hover:text-white transition-colors">Pain Points</a>
-            <a href="#solutions" className="hover:text-white transition-colors">AI Features</a>
-            <a href="#case-studies" className="hover:text-white transition-colors">Case Studies</a>
-            <a href="#simulator" className="hover:text-white transition-colors">Live Demo</a>
-            <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
-            <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
+          <div className="hidden md:flex items-center gap-8 text-xs font-semibold text-slate-600">
+            <a href="#hero" className="hover:text-slate-900 transition-colors">Product</a>
+            <a href="#features" className="hover:text-slate-900 transition-colors">Solution</a>
+            <a href="#workflow" className="hover:text-slate-900 transition-colors">Resources</a>
+            <a href="#simulator" className="hover:text-slate-900 transition-colors">Live Demo</a>
+            <a href="#metrics" className="hover:text-slate-900 transition-colors">Pricing</a>
           </div>
 
           {/* Action Buttons */}
@@ -179,28 +174,18 @@ export default function LandingPage() {
             {sessionUser ? (
               <Link
                 href={sessionUser.role === 'admin' ? '/admin' : '/client'}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:brightness-110 text-xs font-black text-slate-950 transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2 cursor-pointer animate-pulse"
+                className="px-5 py-2.5 rounded-full bg-slate-900 hover:bg-black text-xs font-extrabold text-white transition-all shadow-md flex items-center gap-2 cursor-pointer"
               >
-                <Bot className="w-4 h-4 text-slate-950" />
+                <Bot className="w-4 h-4" />
                 <span>Open {sessionUser.role === 'admin' ? 'Super Admin' : sessionUser.businessName || 'Client Portal'} →</span>
               </Link>
             ) : (
               <>
-                {/* Sign In Button */}
                 <button
                   onClick={() => setShowSignInModal(true)}
-                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-200 transition-all cursor-pointer hover:border-purple-500/40"
+                  className="px-6 py-2.5 rounded-full bg-slate-900 hover:bg-black text-xs font-extrabold text-white transition-all shadow-md cursor-pointer hover:shadow-lg"
                 >
-                  Sign In
-                </button>
-
-                {/* Sign Up Button (FROZEN / INVITE ONLY) */}
-                <button
-                  onClick={() => setShowSignUpModal(true)}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-xs font-extrabold text-white transition-all cursor-pointer shadow-lg shadow-purple-600/30 flex items-center gap-1.5"
-                >
-                  <span>Sign Up</span>
-                  <Lock className="w-3 h-3 text-purple-200" />
+                  Client Sign In
                 </button>
               </>
             )}
@@ -209,457 +194,454 @@ export default function LandingPage() {
         </nav>
       </header>
 
-      {/* ================= SEQUENCE 1: HERO SECTION ================= */}
-      <section id="hero" className="pt-20 pb-16 px-4 max-w-7xl mx-auto text-center relative z-10">
+      {/* ================= HERO SECTION ================= */}
+      <section id="hero" className="pt-16 pb-12 px-4 max-w-6xl mx-auto text-center relative z-10">
         
-        {/* Pill Badge */}
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs font-bold mb-6 animate-pulse">
-          <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-          <span>Next-Generation WhatsApp & Voice AI Agent</span>
-        </div>
-
-        {/* Hero Title */}
-        <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-white max-w-5xl mx-auto leading-[1.1] mb-6">
-          Autonomous WhatsApp Sales & Voice Infrastructure for <span className="bg-gradient-to-r from-purple-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">Modern Enterprise</span>
+        {/* Main Headline */}
+        <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-slate-900 max-w-4xl mx-auto leading-[1.12] mb-6">
+          AI That Supercharges Your <br />
+          <span className="italic font-serif font-normal bg-gradient-to-r from-purple-600 via-pink-600 to-orange-500 bg-clip-text text-transparent">Conversions 4x</span>
         </h1>
 
-        {/* Hero Subtitle */}
-        <p className="text-slate-400 text-base sm:text-lg max-w-2xl mx-auto font-normal leading-relaxed mb-10">
-          Turn midnight inquiries into instant bookings. HazelWhat powers 24/7 autonomous customer chats, natural voice note responses, formatted catalog cards, and automated lead revivals.
+        {/* Subtitle */}
+        <p className="text-slate-600 text-base sm:text-lg max-w-2xl mx-auto font-normal leading-relaxed mb-8">
+          Our AI-powered sales assistant helps you capture, qualify, and convert transforming leads into loyal customers across WhatsApp, Voice, and Web.
         </p>
 
-        {/* Hero CTAs */}
-        <div className="flex flex-wrap items-center justify-center gap-4 mb-16">
+        {/* Primary CTA Pill Button */}
+        <div className="flex justify-center mb-16">
           <button
             onClick={() => setShowSignInModal(true)}
-            className="px-8 py-4 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:brightness-110 text-white font-extrabold text-sm shadow-xl shadow-purple-600/30 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+            className="px-8 py-3.5 rounded-full bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 hover:opacity-95 text-white font-bold text-sm shadow-xl shadow-purple-500/25 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
           >
             <span>Client Sign In to Dashboard</span>
             <ArrowRight className="w-4 h-4" />
           </button>
+        </div>
 
-          <a
-            href="#simulator"
-            className="px-8 py-4 rounded-2xl bg-[#0D0F17] hover:bg-[#131624] border border-white/10 text-slate-300 font-extrabold text-sm transition-all flex items-center gap-2 cursor-pointer"
+        {/* HERO IMAGE & FLOATING GLASS WIDGETS */}
+        <div className="relative max-w-4xl mx-auto mb-16">
+          
+          {/* Main Rounded Image Showcase */}
+          <div className="relative mx-auto w-full max-w-2xl h-[380px] sm:h-[480px] rounded-[2.5rem] overflow-hidden shadow-2xl border-4 border-white bg-slate-100">
+            <img 
+              src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=1200&auto=format&fit=crop" 
+              alt="AI Sales Assistant" 
+              className="w-full h-full object-cover object-center"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 via-transparent to-transparent" />
+          </div>
+
+          {/* FLOATING WIDGET LEFT: 35% Growth in New Customers */}
+          <div className="absolute top-16 left-0 sm:-left-10 bg-white/90 backdrop-blur-xl border border-white/80 p-4 rounded-2xl shadow-xl shadow-purple-500/10 flex items-center gap-3.5 text-left max-w-[200px] animate-bounce-slow">
+            <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center font-bold text-sm">
+              35%
+            </div>
+            <div>
+              <div className="text-[11px] font-bold text-slate-800 leading-snug">Growth in New Customers</div>
+              <div className="text-[9px] text-slate-500 font-medium">Automated 24/7</div>
+            </div>
+          </div>
+
+          {/* FLOATING WIDGET RIGHT: Product Card with Add To Cart */}
+          <div className="absolute bottom-12 right-0 sm:-right-10 bg-white/95 backdrop-blur-xl border border-white/80 p-4 rounded-2xl shadow-2xl text-left max-w-[210px]">
+            <div className="relative mb-3 rounded-xl overflow-hidden bg-slate-100 h-24">
+              <img 
+                src="https://images.unsplash.com/photo-1608248597263-0057e43a4524?q=80&w=400&auto=format&fit=crop" 
+                alt="Product" 
+                className="w-full h-full object-cover"
+              />
+              <span className="absolute top-2 right-2 bg-white/90 px-2 py-0.5 rounded-full text-[10px] font-bold text-slate-800 flex items-center gap-1 shadow-sm">
+                <Star className="w-3 h-3 text-amber-400 fill-amber-400" /> 4.5
+              </span>
+            </div>
+            <div className="text-xs font-bold text-slate-900 mb-2">Radiance Facial Serum</div>
+            <button 
+              onClick={() => setShowSignInModal(true)}
+              className="w-full py-2 bg-slate-900 hover:bg-black text-white text-[11px] font-bold rounded-xl shadow transition-all cursor-pointer text-center"
+            >
+              Add To Cart
+            </button>
+          </div>
+
+        </div>
+
+        {/* FLOATING DARK BANNER OVERLAY Across Bottom of Hero */}
+        <div className="max-w-4xl mx-auto bg-[#13151D] text-white rounded-3xl p-6 sm:p-8 shadow-2xl grid grid-cols-1 sm:grid-cols-3 gap-6 text-center border border-white/10">
+          <div className="space-y-1 sm:border-r border-white/10 sm:pr-4">
+            <div className="text-3xl font-extrabold tracking-tight">70%</div>
+            <div className="text-xs text-slate-400 font-medium">Less Manual Communication</div>
+          </div>
+          <div className="space-y-1 sm:border-r border-white/10 sm:px-4">
+            <div className="text-3xl font-extrabold tracking-tight">3-6X</div>
+            <div className="text-xs text-slate-400 font-medium">Higher Engagement</div>
+          </div>
+          <div className="space-y-1 sm:pl-4">
+            <div className="text-3xl font-extrabold tracking-tight">50%</div>
+            <div className="text-xs text-slate-400 font-medium">More Customer Interaction</div>
+          </div>
+        </div>
+
+      </section>
+
+      {/* ================= FEATURE SECTION 1: MULTI-AGENT & VOICE FEATURE ================= */}
+      <section id="features" className="py-20 px-4 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+          
+          {/* Left Text Column */}
+          <div className="space-y-6 text-left">
+            <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900 leading-tight">
+              Multi-Agent & <br />Voice AI Feature
+            </h2>
+            <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
+              Collaborate in real time by deploying autonomous WhatsApp & Voice co-hosts to handle inquiries, recommend products, and book appointments 24/7.
+            </p>
+            <button
+              onClick={() => setShowSignInModal(true)}
+              className="px-6 py-3 rounded-full bg-slate-900 hover:bg-black text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+            >
+              Start Hosting
+            </button>
+          </div>
+
+          {/* Right Visual Card Column */}
+          <div className="relative">
+            <div className="relative bg-white rounded-[2.5rem] p-6 shadow-xl border border-slate-200/80 flex items-center justify-center">
+              <div className="relative w-full h-[320px] rounded-2xl overflow-hidden bg-slate-100">
+                <img 
+                  src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=800&auto=format&fit=crop" 
+                  alt="Feature Visual" 
+                  className="w-full h-full object-cover"
+                />
+                
+                {/* Floating Discount Badge */}
+                <div className="absolute bottom-6 right-6 bg-white/95 backdrop-blur-md p-3 px-5 rounded-2xl shadow-lg border border-slate-100 text-left">
+                  <div className="text-base font-extrabold text-slate-900">30%</div>
+                  <div className="text-[10px] text-slate-500 font-medium">Up To Customer</div>
+                </div>
+
+                {/* Floating Product Badge Top-Left */}
+                <div className="absolute top-6 left-6 bg-white/95 backdrop-blur-md p-3 rounded-2xl shadow-lg flex items-center gap-3 border border-slate-100">
+                  <div className="w-10 h-10 rounded-xl bg-purple-100 overflow-hidden">
+                    <img src="https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?q=80&w=200&auto=format&fit=crop" alt="Item" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="text-left">
+                    <div className="text-xs font-bold text-slate-900">Body Polish</div>
+                    <div className="text-[11px] font-extrabold text-purple-600">$120.00</div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      {/* ================= 3-CARD FEATURE GRID: REVOLUTIONIZE YOUR SALES WITH AI ================= */}
+      <section className="py-20 px-4 max-w-6xl mx-auto text-center">
+        
+        <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900 mb-4">
+          Revolutionize Your Sales With AI
+        </h2>
+        <p className="text-slate-600 text-sm sm:text-base max-w-xl mx-auto mb-6">
+          Our AI-powered sales assistant helps you capture, qualify, and convert transforming leads into loyal customers.
+        </p>
+        
+        <div className="flex justify-center mb-16">
+          <button
+            onClick={() => setShowSignInModal(true)}
+            className="px-6 py-3 rounded-full bg-slate-900 hover:bg-black text-white text-xs font-bold transition-all shadow-md cursor-pointer"
           >
-            <span>Try Interactive Simulator</span>
-            <Play className="w-4 h-4 text-purple-400" />
-          </a>
+            Try AI Sales Now
+          </button>
         </div>
 
-        {/* Trust Stats Bar */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto mb-20 text-left">
-          <div className="bg-[#0D0F17]/80 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
-            <div className="text-2xl sm:text-3xl font-black text-white font-mono">&lt; 3 Sec</div>
-            <div className="text-xs text-slate-400 font-medium mt-1">Average Response Latency</div>
-          </div>
-          <div className="bg-[#0D0F17]/80 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
-            <div className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono">+340%</div>
-            <div className="text-xs text-slate-400 font-medium mt-1">Midnight Order Conversion</div>
-          </div>
-          <div className="bg-[#0D0F17]/80 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
-            <div className="text-2xl sm:text-3xl font-black text-purple-400 font-mono">100%</div>
-            <div className="text-xs text-slate-400 font-medium mt-1">Isolated Tenant Security</div>
-          </div>
-          <div className="bg-[#0D0F17]/80 border border-white/10 rounded-2xl p-5 backdrop-blur-md">
-            <div className="text-2xl sm:text-3xl font-black text-indigo-400 font-mono">24/7</div>
-            <div className="text-xs text-slate-400 font-medium mt-1">Voice & Chat Availability</div>
-          </div>
-        </div>
-
-        {/* HERO FEATURED MOCKUP CARD (Matching Reference Image Dark Glow Aesthetic) */}
-        <div className="relative max-w-5xl mx-auto">
-          <div className="absolute -inset-1 rounded-3xl bg-gradient-to-r from-purple-600/30 via-indigo-500/20 to-emerald-500/30 blur-2xl opacity-50" />
+        {/* 3 Light Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left">
           
-          <div className="relative bg-[#0B0D14] border border-white/15 rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden text-left space-y-6">
-            
-            {/* Header bar of mockup */}
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="flex space-x-1.5">
-                  <div className="w-3 h-3 rounded-full bg-rose-500/80" />
-                  <div className="w-3 h-3 rounded-full bg-amber-500/80" />
-                  <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
-                </div>
-                <span className="text-xs font-mono text-slate-400">hazelwhat.ai // live-engine-instance</span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span>AI Core Active</span>
-              </div>
-            </div>
-
-            {/* Dashboard Mockup Layout */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              
-              {/* Card 1: Active Stats */}
-              <div className="bg-[#121522] border border-white/10 rounded-2xl p-5 space-y-4">
-                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Live WhatsApp Engine</div>
-                <div className="text-4xl font-black text-white font-mono">99.8%</div>
-                <p className="text-xs text-slate-400">Automated query resolution rate across 45,000+ customer chats.</p>
-                <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-purple-500 to-emerald-400 w-[94%]" />
-                </div>
-              </div>
-
-              {/* Card 2: Voice AI Player */}
-              <div className="bg-[#121522] border border-white/10 rounded-2xl p-5 space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Deepgram Voice AI</span>
-                  <Volume2 className="w-4 h-4 text-purple-400" />
-                </div>
-                <div className="flex items-center gap-3 bg-[#0B0D14] p-3 rounded-xl border border-white/5">
-                  <div className="w-8 h-8 rounded-full bg-purple-600/20 text-purple-400 flex items-center justify-center">
-                    <Play className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <div className="flex justify-between text-[11px] font-mono text-slate-400">
-                      <span>Audio Voice Reply</span>
-                      <span>0:14</span>
-                    </div>
-                    <div className="flex gap-1 items-end h-4">
-                      {[40, 70, 30, 90, 50, 80, 100, 60, 40, 70, 30, 90, 50, 80, 60, 30].map((h, i) => (
-                        <div key={i} className="flex-1 bg-purple-500/70 rounded-full" style={{ height: `${h}%` }} />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <p className="text-xs text-slate-400">Generates natural human-like voice responses in Urdu and English.</p>
-              </div>
-
-              {/* Card 3: Formatted Product Card */}
-              <div className="bg-[#121522] border border-white/10 rounded-2xl p-5 space-y-3">
-                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Visual Product Card</div>
-                <div className="bg-[#0B0D14] p-3 rounded-xl border border-white/5 flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-lg bg-purple-900/40 border border-purple-500/30 flex items-center justify-center font-extrabold text-xs text-purple-300">
-                    CATALOG
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-white">Royal Cotton Suit</div>
-                    <div className="text-xs font-mono text-emerald-400">PKR 4,500</div>
-                    <div className="text-[10px] text-slate-400">In Stock • Immediate Dispatch</div>
-                  </div>
-                </div>
-                <div className="text-[11px] text-purple-300 font-semibold bg-purple-500/10 p-2 rounded-lg text-center">
-                  Direct Checkout Link Sent to WhatsApp
-                </div>
-              </div>
-
-            </div>
-
-          </div>
-        </div>
-
-      </section>
-
-      {/* ================= SEQUENCE 2: BUSINESS PAIN POINTS ================= */}
-      <section id="pain-points" className="py-20 px-4 max-w-7xl mx-auto relative z-10 border-t border-white/5">
-        
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-bold mb-4">
-            <AlertTriangle className="w-3.5 h-3.5" />
-            <span>The High Cost of Manual Operations</span>
-          </div>
-          <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight mb-4">
-            Why 67% of WhatsApp Sales Leads Are Lost Forever
-          </h2>
-          <p className="text-slate-400 text-sm sm:text-base">
-            Relying on manual human sales agents for WhatsApp customer conversations creates critical revenue bottlenecks.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          
-          {/* Pain Point 1 */}
-          <div className="bg-[#0D0F17] border border-white/10 hover:border-rose-500/40 rounded-3xl p-6 transition-all hover:-translate-y-1 space-y-4 group">
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-              <Clock className="w-6 h-6" />
-            </div>
-            <h3 className="text-lg font-bold text-white">Midnight Response Gap</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              45% of online shopping inquiries arrive between 8 PM and 2 AM. When customers wait hours for a reply, they buy from competitors within minutes.
-            </p>
-          </div>
-
-          {/* Pain Point 2 */}
-          <div className="bg-[#0D0F17] border border-white/10 hover:border-amber-500/40 rounded-3xl p-6 transition-all hover:-translate-y-1 space-y-4 group">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-              <Headphones className="w-6 h-6" />
-            </div>
-            <h3 className="text-lg font-bold text-white">Voice Note Burnout</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Modern buyers prefer sending 60-second voice notes instead of typing text. Human agents waste hours listening, typing responses, and making mistakes.
-            </p>
-          </div>
-
-          {/* Pain Point 3 */}
-          <div className="bg-[#0D0F17] border border-white/10 hover:border-purple-500/40 rounded-3xl p-6 transition-all hover:-translate-y-1 space-y-4 group">
-            <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-              <RefreshCw className="w-6 h-6" />
-            </div>
-            <h3 className="text-lg font-bold text-white">Forgotten Follow-Ups</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              70% of prospective leads stop replying after receiving a price quote. Human reps forget to follow up after 24-48 hours, abandoning warm pipeline deals.
-            </p>
-          </div>
-
-          {/* Pain Point 4 */}
-          <div className="bg-[#0D0F17] border border-white/10 hover:border-indigo-500/40 rounded-3xl p-6 transition-all hover:-translate-y-1 space-y-4 group">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-              <Layers className="w-6 h-6" />
-            </div>
-            <h3 className="text-lg font-bold text-white">Messy Catalog Sharing</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Manually finding product photos, sizes, and pricing details in phone galleries wastes valuable agent time and leads to order entry errors.
-            </p>
-          </div>
-
-        </div>
-
-      </section>
-
-      {/* ================= SEQUENCE 3: PRODUCT SOLUTIONS ================= */}
-      <section id="solutions" className="py-20 px-4 max-w-7xl mx-auto relative z-10 border-t border-white/5">
-        
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold mb-4">
-            <Zap className="w-3.5 h-3.5" />
-            <span>Built for High Conversions</span>
-          </div>
-          <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight mb-4">
-            The HazelWhat AI Automation Engine
-          </h2>
-          <p className="text-slate-400 text-sm sm:text-base">
-            Everything your business needs to turn WhatsApp into an autonomous sales machine.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          
-          {/* Solution 1 */}
-          <div className="bg-[#0D0F17] border border-white/10 rounded-3xl p-8 space-y-5 hover:border-purple-500/50 transition-all">
-            <div className="w-12 h-12 rounded-2xl bg-purple-600/20 text-purple-400 flex items-center justify-center">
+          {/* Card 1 */}
+          <div className="bg-white p-8 rounded-3xl border border-slate-200/80 shadow-md hover:shadow-xl transition-all space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center border border-purple-100">
               <Bot className="w-6 h-6" />
             </div>
-            <h3 className="text-xl font-bold text-white">24/7 AI Booking Agent</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Trained on your exact business knowledge base, FAQs, policies, and pricing. Answers queries in natural conversational tones without hallucinating.
+            <h3 className="text-lg font-bold text-slate-900">Automated Conversations</h3>
+            <p className="text-xs text-slate-500 leading-relaxed font-normal">
+              AI-powered chats that answer questions 24/7, qualify incoming leads, and guide them through catalog checkout seamlessly.
             </p>
-            <ul className="space-y-2 text-xs text-slate-300">
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>Multi-turn contextual memory</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>Instant booking & order creation</span>
-              </li>
-            </ul>
           </div>
 
-          {/* Solution 2 */}
-          <div className="bg-[#0D0F17] border border-white/10 rounded-3xl p-8 space-y-5 hover:border-indigo-500/50 transition-all">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center">
-              <Volume2 className="w-6 h-6" />
+          {/* Card 2 */}
+          <div className="bg-white p-8 rounded-3xl border border-slate-200/80 shadow-md hover:shadow-xl transition-all space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-pink-50 text-pink-600 flex items-center justify-center border border-pink-100">
+              <TrendingUp className="w-6 h-6" />
             </div>
-            <h3 className="text-xl font-bold text-white">Natural Voice AI Engine</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Powered by Deepgram voice synthesis. Transcribes incoming customer audio messages and responds with natural, human-sounding voice notes.
+            <h3 className="text-lg font-bold text-slate-900">Smart Sales Insights</h3>
+            <p className="text-xs text-slate-500 leading-relaxed font-normal">
+              AI-driven analytics that help your team understand customer prospects, score lead urgency, and predict revenue outcomes.
             </p>
-            <ul className="space-y-2 text-xs text-slate-300">
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>Supports Urdu & English voices</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>Sub-second audio synthesis</span>
-              </li>
-            </ul>
           </div>
 
-          {/* Solution 3 */}
-          <div className="bg-[#0D0F17] border border-white/10 rounded-3xl p-8 space-y-5 hover:border-emerald-500/50 transition-all">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-600/20 text-emerald-400 flex items-center justify-center">
-              <Clock className="w-6 h-6" />
+          {/* Card 3 */}
+          <div className="bg-white p-8 rounded-3xl border border-slate-200/80 shadow-md hover:shadow-xl transition-all space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center border border-orange-100">
+              <MessageSquare className="w-6 h-6" />
             </div>
-            <h3 className="text-xl font-bold text-white">Automated Follow-ups</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Configurable sequence rules (1 hour, 1 day, 3 days...). Automatically sends non-spammy reminders to un-replied leads until they convert.
+            <h3 className="text-lg font-bold text-slate-900">Multichannel Communication</h3>
+            <p className="text-xs text-slate-500 leading-relaxed font-normal">
+              Engage customers on their favorite platforms — WhatsApp, Voice notes, and Web — keeping conversations unified across channels.
             </p>
-            <ul className="space-y-2 text-xs text-slate-300">
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>Auto-skips if customer orders</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>Dynamic AI message variation</span>
-              </li>
-            </ul>
           </div>
 
         </div>
 
       </section>
 
-      {/* ================= SEQUENCE 4: CASE STUDIES ================= */}
-      <section id="case-studies" className="py-20 px-4 max-w-7xl mx-auto relative z-10 border-t border-white/5">
-        
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-bold mb-4">
-            <TrendingUp className="w-3.5 h-3.5" />
-            <span>Proven Enterprise Impact</span>
-          </div>
-          <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight mb-4">
-            Real Revenue Growth for Real Businesses
-          </h2>
-          <p className="text-slate-400 text-sm sm:text-base">
-            See how leading brands transformed their WhatsApp conversions with HazelWhat.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      {/* ================= "HOW IT WORKS" WORKFLOW SECTION ================= */}
+      <section id="workflow" className="py-20 px-4 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
           
-          {/* Case Study 1 */}
-          <div className="bg-[#0D0F17] border border-white/10 rounded-3xl p-8 space-y-6 relative overflow-hidden">
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-bold text-purple-400 uppercase tracking-wider font-mono">Retail Apparel</span>
-              <div className="flex text-amber-400 text-xs">★★★★★</div>
-            </div>
-            <h3 className="text-xl font-bold text-white">Royal Fashion & Fabrics</h3>
-            <blockquote className="text-xs text-slate-300 italic leading-relaxed">
-              "Before HazelWhat, we lost over 50 inquiries every night after 10 PM. Now, HazelWhat AI handles overnight catalog queries and completes payments automatically. Our sales jumped 340% in 60 days."
-            </blockquote>
-            <div className="pt-4 border-t border-white/10 flex justify-between items-center text-xs font-mono">
-              <span className="text-slate-400">Midnight Revenue</span>
-              <span className="text-emerald-400 font-bold">+340% Growth</span>
-            </div>
+          {/* Left Text */}
+          <div className="space-y-6 text-left">
+            <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900 leading-tight">
+              How It Works
+            </h2>
+            <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
+              Our 4-step sales agent workflow moves leads smoothly from initial inquiry to closing the deal.
+            </p>
+            <button
+              onClick={() => setShowSignInModal(true)}
+              className="px-6 py-3 rounded-full bg-slate-900 hover:bg-black text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+            >
+              Start the Overview
+            </button>
           </div>
 
-          {/* Case Study 2 */}
-          <div className="bg-[#0D0F17] border border-white/10 rounded-3xl p-8 space-y-6 relative overflow-hidden">
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider font-mono">Auto Services</span>
-              <div className="flex text-amber-400 text-xs">★★★★★</div>
-            </div>
-            <h3 className="text-xl font-bold text-white">AutoCare Premier Services</h3>
-            <blockquote className="text-xs text-slate-300 italic leading-relaxed">
-              "Customer voice note follow-ups changed everything. The automated sequence sends audio reminders to un-replied leads after 24 hours. We recovered 142 abandoned bookings last month alone."
-            </blockquote>
-            <div className="pt-4 border-t border-white/10 flex justify-between items-center text-xs font-mono">
-              <span className="text-slate-400">Leads Recovered</span>
-              <span className="text-indigo-400 font-bold">142 Deals / Mo</span>
-            </div>
-          </div>
-
-          {/* Case Study 3 */}
-          <div className="bg-[#0D0F17] border border-white/10 rounded-3xl p-8 space-y-6 relative overflow-hidden">
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider font-mono">E-Commerce</span>
-              <div className="flex text-amber-400 text-xs">★★★★★</div>
-            </div>
-            <h3 className="text-xl font-bold text-white">NextGen Tech Store</h3>
-            <blockquote className="text-xs text-slate-300 italic leading-relaxed">
-              "Response time dropped from 45 minutes to 2.1 seconds. HazelWhat answers spec questions, sends product catalog cards, and routes high-value orders instantly."
-            </blockquote>
-            <div className="pt-4 border-t border-white/10 flex justify-between items-center text-xs font-mono">
-              <span className="text-slate-400">Support Cost Saved</span>
-              <span className="text-purple-400 font-bold">82% Reduction</span>
-            </div>
-          </div>
-
-        </div>
-
-      </section>
-
-      {/* ================= SEQUENCE 5: INTERACTIVE LIVE SIMULATOR ================= */}
-      <section id="simulator" className="py-20 px-4 max-w-7xl mx-auto relative z-10 border-t border-white/5">
-        
-        <div className="text-center max-w-3xl mx-auto mb-12">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold mb-4">
-            <Radio className="w-3.5 h-3.5" />
-            <span>Test the Engine Live</span>
-          </div>
-          <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight mb-4">
-            Experience HazelWhat WhatsApp AI Live
-          </h2>
-          <p className="text-slate-400 text-sm sm:text-base">
-            Type any sample question below to watch how the HazelWhat AI agent responds in real-time.
-          </p>
-        </div>
-
-        <div className="max-w-3xl mx-auto bg-[#0D0F17] border border-white/15 rounded-3xl overflow-hidden shadow-2xl">
-          
-          {/* Chat Simulator Header */}
-          <div className="bg-[#121522] p-4 border-b border-white/10 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center font-bold">
-                <Bot className="w-5 h-5" />
+          {/* Right 4 Steps List */}
+          <div className="space-y-4 text-left">
+            
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-extrabold text-xs flex items-center justify-center shrink-0">
+                01
               </div>
               <div>
-                <div className="text-sm font-bold text-white flex items-center gap-2">
-                  <span>HazelWhat Store AI</span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                </div>
-                <div className="text-[11px] text-slate-400">Online • Typically replies instantly</div>
+                <div className="text-sm font-bold text-slate-900">Customer asks about a product</div>
+                <div className="text-xs text-slate-500 mt-0.5">Inbound query received via WhatsApp or Web.</div>
               </div>
             </div>
 
-            <div className="flex gap-2">
-              {['What are your store hours?', 'Send product prices', 'Voice note sample 🎙️'].map((chip, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleSimSend(chip)}
-                  className="hidden sm:block text-[11px] font-semibold bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 px-3 py-1.5 rounded-lg transition-all cursor-pointer"
-                >
-                  {chip}
-                </button>
-              ))}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 text-white font-extrabold text-xs flex items-center justify-center shrink-0">
+                02
+              </div>
+              <div>
+                <div className="text-sm font-bold text-slate-900">AI answers instantly</div>
+                <div className="text-xs text-slate-500 mt-0.5">Autonomous response with catalog cards & natural voice notes.</div>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold text-xs flex items-center justify-center shrink-0">
+                03
+              </div>
+              <div>
+                <div className="text-sm font-bold text-slate-900">Lead qualified & score assigned</div>
+                <div className="text-xs text-slate-500 mt-0.5">Contextual memory captures intent and alerts your team if needed.</div>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-extrabold text-xs flex items-center justify-center shrink-0">
+                04
+              </div>
+              <div>
+                <div className="text-sm font-bold text-slate-900">Sale closed</div>
+                <div className="text-xs text-slate-500 mt-0.5">Direct product link sent and order confirmed automatically.</div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+
+      {/* ================= OMNICHANNEL SECTION: LIVE ON EVERY CHANNEL AT ONCE ================= */}
+      <section className="py-20 px-4 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+          
+          {/* Left Visual Mockup */}
+          <div className="relative">
+            <div className="bg-white rounded-[2.5rem] p-6 shadow-xl border border-slate-200/80 space-y-4 text-left">
+              
+              {/* Product Badge */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-100 overflow-hidden">
+                    <img src="https://images.unsplash.com/photo-1608248597263-0057e43a4524?q=80&w=200&auto=format&fit=crop" alt="Oil" className="w-full h-full object-cover" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900">Facial Oil</div>
+                    <div className="text-[10px] text-slate-500">$126.00 USD</div>
+                  </div>
+                </div>
+                <span className="px-3 py-1 bg-purple-600 text-white text-[10px] font-bold rounded-full">Active Reel</span>
+              </div>
+
+              {/* Going Live Selector */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-md space-y-3">
+                <div className="text-xs font-bold text-slate-800">Going Live On:</div>
+                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs font-semibold text-slate-700">
+                  <Camera className="w-4 h-4 text-pink-600" />
+                  <span>Import Instagram Reel</span>
+                </div>
+                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs font-semibold text-slate-700">
+                  <Video className="w-4 h-4 text-slate-900" />
+                  <span>Import TikTok Reel</span>
+                </div>
+                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs font-semibold text-slate-700">
+                  <Plus className="w-4 h-4 text-purple-600" />
+                  <span>Import From Your Device</span>
+                </div>
+              </div>
+
             </div>
           </div>
 
-          {/* Chat Messages Body */}
-          <div className="p-6 space-y-4 min-h-[300px] max-h-[420px] overflow-y-auto bg-[#08090E]">
-            {simMessages.map((msg, idx) => (
-              <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] rounded-2xl p-4 text-xs leading-relaxed ${
-                  msg.sender === 'user'
-                    ? 'bg-purple-600 text-white rounded-br-none shadow-md'
-                    : 'bg-[#141724] border border-white/10 text-slate-200 rounded-bl-none shadow-md'
-                }`}>
-                  <div className="whitespace-pre-line">{msg.text}</div>
+          {/* Right Text */}
+          <div className="space-y-6 text-left">
+            <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900 leading-tight">
+              Live on Every <br />Channel at Once
+            </h2>
+            <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
+              Go live once and share your automated message across all major messaging and social platforms without extra effort.
+            </p>
+            <button
+              onClick={() => setShowSignInModal(true)}
+              className="px-6 py-3 rounded-full bg-slate-900 hover:bg-black text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+            >
+              Start Streaming Now
+            </button>
+          </div>
+
+        </div>
+      </section>
+
+      {/* ================= INTERACTIVE DEMO SIMULATOR ================= */}
+      <section id="simulator" className="py-20 px-4 max-w-5xl mx-auto text-center">
+        
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-100 border border-purple-200 text-purple-700 text-xs font-bold mb-4">
+          <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+          <span>Test Drive Live Bot Experience</span>
+        </div>
+
+        <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 mb-3">
+          Try the Interactive AI Simulator
+        </h2>
+        <p className="text-slate-600 text-xs sm:text-sm max-w-lg mx-auto mb-8">
+          Type any inquiry below to test how HazelWhat AI handles customer chats, product catalogs, and voice responses in real time.
+        </p>
+
+        {/* Simulator Container */}
+        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xl overflow-hidden text-left max-w-3xl mx-auto">
+          
+          {/* Header Bar */}
+          <div className="bg-slate-900 text-white p-4 px-6 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center font-bold text-xs">
+                AI
+              </div>
+              <div>
+                <div className="text-xs font-bold">HazelWhat Autonomous Assistant</div>
+                <div className="text-[10px] text-emerald-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Online 24/7
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setSimActiveTab('chat')}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${simActiveTab === 'chat' ? 'bg-purple-600 text-white' : 'bg-white/10 text-slate-300'}`}
+              >
+                Chat Mode
+              </button>
+              <button 
+                onClick={() => setSimActiveTab('voice')}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${simActiveTab === 'voice' ? 'bg-purple-600 text-white' : 'bg-white/10 text-slate-300'}`}
+              >
+                Voice Note
+              </button>
+            </div>
+          </div>
+
+          {/* Chat Body */}
+          <div className="p-6 h-[320px] overflow-y-auto space-y-4 bg-slate-50">
+            {simMessages.map((msg, i) => (
+              <div 
+                key={i} 
+                className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div 
+                  className={`max-w-[80%] p-3.5 rounded-2xl text-xs whitespace-pre-line leading-relaxed shadow-sm ${
+                    msg.sender === 'user' 
+                      ? 'bg-slate-900 text-white rounded-br-none' 
+                      : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none'
+                  }`}
+                >
+                  {msg.text}
                 </div>
               </div>
             ))}
 
             {isSimTyping && (
               <div className="flex justify-start">
-                <div className="bg-[#141724] border border-white/10 text-slate-400 rounded-2xl px-4 py-3 text-xs flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" />
-                  <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce [animation-delay:0.2s]" />
-                  <span className="w-2 h-2 rounded-full bg-purple-400 animate-bounce [animation-delay:0.4s]" />
-                  <span className="text-[11px] font-mono ml-1">HazelWhat AI is generating response...</span>
+                <div className="bg-white border border-slate-200 p-3 rounded-2xl rounded-bl-none text-xs text-slate-500 flex items-center gap-2">
+                  <Bot className="w-3.5 h-3.5 text-purple-600 animate-spin" />
+                  <span>HazelWhat AI is thinking...</span>
                 </div>
               </div>
             )}
           </div>
 
+          {/* Preset Buttons */}
+          <div className="px-6 py-3 bg-white border-t border-slate-100 flex flex-wrap gap-2 text-[11px]">
+            <span className="text-slate-400 font-bold self-center mr-1">Try Preset:</span>
+            <button 
+              onClick={() => handleSimSend('What are your product prices?')}
+              className="px-3 py-1 rounded-full bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-700 transition-colors font-medium border border-slate-200/80 cursor-pointer"
+            >
+              📦 Ask Prices
+            </button>
+            <button 
+              onClick={() => handleSimSend('Are you open right now?')}
+              className="px-3 py-1 rounded-full bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-700 transition-colors font-medium border border-slate-200/80 cursor-pointer"
+            >
+              ⏰ Opening Hours
+            </button>
+            <button 
+              onClick={() => handleSimSend('Send me a voice note details')}
+              className="px-3 py-1 rounded-full bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-700 transition-colors font-medium border border-slate-200/80 cursor-pointer"
+            >
+              🎙️ Voice Note Demo
+            </button>
+          </div>
+
           {/* Input Box */}
-          <div className="p-4 bg-[#121522] border-t border-white/10 flex items-center gap-3">
-            <input
+          <div className="p-4 bg-white border-t border-slate-200 flex gap-2">
+            <input 
               type="text"
               value={simQuery}
-              onChange={(e) => setSimQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSimSend()}
-              placeholder="Type a sample customer question (e.g. Do you deliver to Lahore?)..."
-              className="flex-1 bg-[#08090E] border border-white/10 rounded-xl px-4 py-3 text-xs text-white placeholder-slate-500 outline-none focus:border-purple-500"
+              onChange={e => setSimQuery(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSimSend()}
+              placeholder="Type your customer query here..."
+              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none focus:border-purple-500"
             />
-            <button
+            <button 
               onClick={() => handleSimSend()}
-              className="bg-purple-600 hover:bg-purple-500 text-white p-3 rounded-xl transition-all cursor-pointer"
+              className="px-5 py-2.5 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
             >
-              <Send className="w-4 h-4" />
+              <span>Send</span>
+              <Send className="w-3.5 h-3.5" />
             </button>
           </div>
 
@@ -667,212 +649,246 @@ export default function LandingPage() {
 
       </section>
 
-      {/* ================= SEQUENCE 6: PRICING TIERS ================= */}
-      <section id="pricing" className="py-20 px-4 max-w-7xl mx-auto relative z-10 border-t border-white/5">
+      {/* ================= STAT GAUGES SECTION: THE PROOF IN THE NUMBER ================= */}
+      <section id="metrics" className="py-20 px-4 max-w-6xl mx-auto text-center">
         
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-bold mb-4">
-            <Layers className="w-3.5 h-3.5" />
-            <span>Transparent Investment</span>
-          </div>
-          <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight mb-4">
-            Enterprise Automation Plans
-          </h2>
-          <p className="text-slate-400 text-sm sm:text-base">
-            Select the scale that matches your business customer volume.
-          </p>
-        </div>
+        <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900 mb-3">
+          The Proof In The Number
+        </h2>
+        <p className="text-slate-600 text-sm sm:text-base max-w-xl mx-auto mb-16">
+          Our AI sales agent doesn't just promise results, it delivers them. See the metrics for yourself.
+        </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {/* 3 Circular Dotted SVG Gauges */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 max-w-4xl mx-auto">
           
-          {/* Plan 1 */}
-          <div className="bg-[#0D0F17] border border-white/10 rounded-3xl p-8 space-y-6 flex flex-col justify-between">
-            <div>
-              <h3 className="text-lg font-bold text-white">Starter Automation</h3>
-              <p className="text-xs text-slate-400 mt-1">Ideal for boutique stores & new brands.</p>
-              <div className="my-6">
-                <span className="text-3xl font-black text-white font-mono">PKR 15,000</span>
-                <span className="text-xs text-slate-400 font-normal"> / month</span>
+          {/* Gauge 1: 10,000+ */}
+          <div className="flex flex-col items-center space-y-4">
+            <div className="relative w-44 h-44 flex items-center justify-center">
+              <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  stroke="#E2E8F0"
+                  strokeWidth="6"
+                  strokeDasharray="4 4"
+                  fill="transparent"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  stroke="#8B5CF6"
+                  strokeWidth="6"
+                  strokeDasharray="4 4"
+                  strokeDashoffset="60"
+                  fill="transparent"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-2xl font-extrabold text-slate-900">10,000+</span>
+                <span className="text-[10px] font-bold text-purple-600 uppercase tracking-wider mt-0.5">Closed</span>
               </div>
-              <ul className="space-y-3 text-xs text-slate-300">
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> 1 WhatsApp Business Line</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> 24/7 AI Knowledge Base Agent</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> 800 AI Chat Minutes / Mo</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> Automated Sequence Follow-ups</li>
-              </ul>
             </div>
-            <button
-              onClick={() => setShowSignInModal(true)}
-              className="w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-white transition-all cursor-pointer mt-6"
-            >
-              Sign In to Access
-            </button>
+            <div className="text-xs font-bold text-slate-600">Leads Closed With AI</div>
           </div>
 
-          {/* Plan 2 (Highlighted) */}
-          <div className="bg-[#121524] border-2 border-purple-500 rounded-3xl p-8 space-y-6 flex flex-col justify-between shadow-2xl shadow-purple-600/20 relative">
-            <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-purple-600 text-white text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-md">
-              Most Popular
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-white">Growth Suite</h3>
-              <p className="text-xs text-slate-400 mt-1">For scaling e-commerce & active service businesses.</p>
-              <div className="my-6">
-                <span className="text-3xl font-black text-white font-mono">PKR 35,000</span>
-                <span className="text-xs text-slate-400 font-normal"> / month</span>
+          {/* Gauge 2: 70% */}
+          <div className="flex flex-col items-center space-y-4">
+            <div className="relative w-44 h-44 flex items-center justify-center">
+              <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  stroke="#E2E8F0"
+                  strokeWidth="6"
+                  strokeDasharray="4 4"
+                  fill="transparent"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  stroke="#F97316"
+                  strokeWidth="6"
+                  strokeDasharray="4 4"
+                  strokeDashoffset="80"
+                  fill="transparent"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-2xl font-extrabold text-slate-900">70%</span>
+                <span className="text-[10px] font-bold text-orange-600 uppercase tracking-wider mt-0.5">Faster</span>
               </div>
-              <ul className="space-y-3 text-xs text-slate-300">
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> Deepgram Voice AI Enabled</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> Formatted Visual Product Catalog</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> 2,500 AI Chat & Voice Minutes</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> Automated Leads Revival Engine</li>
-              </ul>
             </div>
-            <button
-              onClick={() => setShowSignInModal(true)}
-              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-xs font-extrabold text-white transition-all cursor-pointer shadow-lg shadow-purple-600/30 mt-6"
-            >
-              Sign In to Client Portal
-            </button>
+            <div className="text-xs font-bold text-slate-600">Faster Response Time</div>
           </div>
 
-          {/* Plan 3 */}
-          <div className="bg-[#0D0F17] border border-white/10 rounded-3xl p-8 space-y-6 flex flex-col justify-between">
-            <div>
-              <h3 className="text-lg font-bold text-white">Custom Enterprise</h3>
-              <p className="text-xs text-slate-400 mt-1">High volume multi-channel organizations.</p>
-              <div className="my-6">
-                <span className="text-3xl font-black text-white font-mono">Custom</span>
+          {/* Gauge 3: 5X */}
+          <div className="flex flex-col items-center space-y-4">
+            <div className="relative w-44 h-44 flex items-center justify-center">
+              <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  stroke="#E2E8F0"
+                  strokeWidth="6"
+                  strokeDasharray="4 4"
+                  fill="transparent"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  stroke="#EAB308"
+                  strokeWidth="6"
+                  strokeDasharray="4 4"
+                  strokeDashoffset="90"
+                  fill="transparent"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-2xl font-extrabold text-slate-900">5X</span>
+                <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mt-0.5">More</span>
               </div>
-              <ul className="space-y-3 text-xs text-slate-300">
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> Dedicated Enterprise Infrastructure</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> Custom LLM Prompt & API Fine-tuning</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> Unlimited Quota Minutes</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-400" /> 24/7 Priority SLA Manager</li>
-              </ul>
             </div>
-            <button
-              onClick={() => setShowSignUpModal(true)}
-              className="w-full py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-300 transition-all cursor-pointer mt-6"
-            >
-              Contact Sales
-            </button>
+            <div className="text-xs font-bold text-slate-600">More Conversions</div>
           </div>
 
         </div>
 
       </section>
 
-      {/* ================= SEQUENCE 7: FAQ ACCORDION ================= */}
-      <section id="faq" className="py-20 px-4 max-w-4xl mx-auto relative z-10 border-t border-white/5">
-        
-        <div className="text-center mb-16">
-          <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight mb-4">
-            Frequently Asked Questions
-          </h2>
-          <p className="text-slate-400 text-sm">
-            Everything you need to know about HazelWhat client onboarding and platform features.
-          </p>
-        </div>
-
+      {/* ================= FAQ SECTION ================= */}
+      <section id="faq" className="py-20 px-4 max-w-4xl mx-auto text-left">
+        <h2 className="text-3xl font-extrabold text-slate-900 mb-8 text-center">Frequently Asked Questions</h2>
         <div className="space-y-4">
           {[
             {
-              q: "How do onboarded clients sign in to HazelWhat?",
-              a: "When your business is onboarded by the HazelWhat Super Admin team, you receive unique client login credentials (Username & Password). Click the 'Sign In' button at the top of this landing page or visit /login to enter your Client Portal."
+              q: "How fast does HazelWhat AI respond to WhatsApp messages?",
+              a: "Our average response latency is under 3 seconds. The AI answers customer inquiries, calculates shipping, and displays product catalog cards immediately."
             },
             {
-              q: "Why is the Sign Up option frozen / invite-only?",
-              a: "HazelWhat operates as an exclusive, managed enterprise AI platform. Accounts are set up and verified directly by agency admins to ensure dedicated API provisioning and 100% data privacy."
+              q: "Can HazelWhat AI send voice notes?",
+              a: "Yes! HazelWhat comes with natural voice note synthesis. The AI converts text responses into human-sounding voice notes directly inside WhatsApp chats."
             },
             {
-              q: "How does HazelWhat connect to our WhatsApp Business number?",
-              a: "You can link your WhatsApp Business phone number in under 30 seconds by scanning a QR code inside your Client Portal or entering an 8-digit device pairing code on your phone."
+              q: "Is client data kept private and isolated?",
+              a: "Absolutely. Every client has an isolated database schema and dedicated configuration. Your customer conversations and knowledge base remain strictly private."
             },
             {
-              q: "Can the AI voice assistant speak in Urdu and local dialects?",
-              a: "Yes! HazelWhat uses Deepgram voice synthesis, supporting clear, natural Urdu and English voice note generation."
-            },
-            {
-              q: "How does the AI know about our products and prices?",
-              a: "Inside your Client Portal, you can enter your exact business FAQs, product catalog items, prices, and response guidelines. The AI syncs in real-time."
+              q: "How do I connect my WhatsApp number?",
+              a: "Once logged into your Client Portal, simply click 'Connect WhatsApp' and scan the QR code using your WhatsApp Business mobile app."
             }
           ].map((item, idx) => (
-            <div 
-              key={idx}
-              className="bg-[#0D0F17] border border-white/10 rounded-2xl overflow-hidden transition-all"
-            >
+            <div key={idx} className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden transition-all shadow-sm">
               <button
                 onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
-                className="w-full p-5 text-left flex justify-between items-center text-sm font-bold text-white hover:text-purple-300 transition-colors cursor-pointer"
+                className="w-full p-5 text-left flex justify-between items-center text-sm font-bold text-slate-900 hover:text-purple-600 transition-colors cursor-pointer"
               >
                 <span>{item.q}</span>
-                <ChevronDown className={`w-4 h-4 transition-transform ${openFaq === idx ? 'rotate-180 text-purple-400' : 'text-slate-400'}`} />
+                <ChevronDown className={`w-4 h-4 transition-transform ${openFaq === idx ? 'rotate-180 text-purple-600' : 'text-slate-400'}`} />
               </button>
               {openFaq === idx && (
-                <div className="px-5 pb-5 text-xs text-slate-400 leading-relaxed border-t border-white/5 pt-3">
+                <div className="px-5 pb-5 text-xs text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
                   {item.a}
                 </div>
               )}
             </div>
           ))}
         </div>
-
       </section>
 
-      {/* ================= FOOTER ================= */}
-      <footer className="py-12 px-4 border-t border-white/10 relative z-10 bg-[#05060A]">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-purple-600 flex items-center justify-center text-white font-bold text-xs">
-              HW
+      {/* ================= DARK FOOTER WITH GIANT TYPOGRAPHY WATERMARK ================= */}
+      <footer className="bg-[#0B0D12] text-white pt-20 pb-12 px-6 relative z-10 overflow-hidden">
+        <div className="max-w-6xl mx-auto space-y-16">
+          
+          {/* Top Row */}
+          <div className="flex flex-col md:flex-row items-start justify-between gap-8">
+            <div className="space-y-3">
+              <h3 className="text-2xl font-bold tracking-tight text-white">Smarter Sales Starts with AI</h3>
+              <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
+                Autonomous WhatsApp & Voice Infrastructure powering 24/7 customer engagement for modern businesses.
+              </p>
             </div>
-            <span className="font-extrabold text-white text-sm">HazelWhat AI Platform</span>
+
+            <div className="grid grid-cols-2 gap-12 text-xs">
+              <div className="space-y-2">
+                <div className="font-bold text-slate-300">Function</div>
+                <div className="space-y-1.5 text-slate-500">
+                  <div>Sales</div>
+                  <div>Voice AI</div>
+                  <div>Research</div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="font-bold text-slate-300">Company</div>
+                <div className="space-y-1.5 text-slate-500">
+                  <div>About Us</div>
+                  <div>Product</div>
+                  <div>Agents</div>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs font-mono text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>All Systems Operational (Production Server)</span>
+          {/* Copyright Row */}
+          <div className="pt-8 border-t border-white/10 flex flex-col sm:flex-row justify-between items-center text-xs text-slate-500 gap-4">
+            <div>© {new Date().getFullYear()} HazelWhat.AI All Rights Reserved.</div>
+            <div className="flex gap-6 text-slate-400">
+              <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
+              <a href="#" className="hover:text-white transition-colors">Terms Of Use</a>
+            </div>
           </div>
 
-          <div className="text-xs text-slate-500">
-            © {new Date().getFullYear()} HazelWhat AI Inc. Enterprise Access Only.
+          {/* GIANT BOLD WATERMARK FOOTER (Matching Reference Image) */}
+          <div className="pt-6 text-center select-none opacity-90">
+            <h1 className="text-6xl sm:text-9xl lg:text-[14rem] font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white/90 via-white/40 to-white/5 leading-none uppercase">
+              HazelWhat
+            </h1>
           </div>
+
         </div>
       </footer>
 
       {/* ================= MODAL: SIGN IN (QUICK ACCESS) ================= */}
       {showSignInModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0D0F17] border border-white/15 rounded-3xl max-w-md w-full p-8 shadow-2xl relative space-y-6">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-8 shadow-2xl relative space-y-6 text-left">
             
             <button
               onClick={() => setShowSignInModal(false)}
-              className="absolute top-6 right-6 p-2 rounded-full bg-white/5 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              className="absolute top-6 right-6 p-2 rounded-full bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
 
             <div className="text-center space-y-2">
-              <div className="w-12 h-12 rounded-2xl bg-purple-600/20 border border-purple-500/30 text-purple-400 flex items-center justify-center mx-auto">
+              <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center mx-auto">
                 <Bot className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold text-white">Client Portal Sign In</h3>
-              <p className="text-xs text-slate-400">
+              <h3 className="text-xl font-bold text-slate-900">Client Portal Sign In</h3>
+              <p className="text-xs text-slate-500">
                 Enter credentials provided by your HazelWhat Super Admin.
               </p>
             </div>
 
             {loginError && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
                 <span>{loginError}</span>
               </div>
             )}
 
             <form onSubmit={handleModalLoginSubmit} className="space-y-4">
               <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
                   Username / Client ID
                 </label>
                 <input
@@ -881,12 +897,12 @@ export default function LandingPage() {
                   value={loginUser}
                   onChange={(e) => setLoginUser(e.target.value)}
                   placeholder="e.g. royal_fashion"
-                  className="w-full bg-[#07080C] border border-white/10 focus:border-purple-500 rounded-xl p-3 text-xs text-white outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-purple-600 rounded-xl p-3 text-xs text-slate-900 outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
                   Password
                 </label>
                 <input
@@ -895,21 +911,21 @@ export default function LandingPage() {
                   value={loginPass}
                   onChange={(e) => setLoginPass(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-[#07080C] border border-white/10 focus:border-purple-500 rounded-xl p-3 text-xs text-white outline-none"
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-purple-600 rounded-xl p-3 text-xs text-slate-900 outline-none"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={loginLoading}
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-xs font-extrabold text-white transition-all shadow-lg shadow-purple-600/30 cursor-pointer disabled:opacity-50"
+                className="w-full py-3.5 rounded-xl bg-slate-900 hover:bg-black text-xs font-extrabold text-white transition-all shadow-md cursor-pointer disabled:opacity-50"
               >
                 {loginLoading ? 'Authenticating...' : 'Sign In to Client Portal'}
               </button>
             </form>
 
-            <div className="text-center pt-2 border-t border-white/5">
-              <Link href="/login?portal=client" className="text-xs text-purple-400 hover:underline">
+            <div className="text-center pt-2 border-t border-slate-100">
+              <Link href="/login?portal=client" className="text-xs text-purple-600 font-semibold hover:underline">
                 Open Dedicated Client Portal Sign In Page →
               </Link>
             </div>
@@ -918,35 +934,35 @@ export default function LandingPage() {
         </div>
       )}
 
-      {/* ================= MODAL: SIGN UP (FROZEN / INVITE ONLY NOTICE) ================= */}
+      {/* ================= MODAL: SIGN UP (INVITE ONLY NOTICE) ================= */}
       {showSignUpModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0D0F17] border border-white/15 rounded-3xl max-w-md w-full p-8 shadow-2xl relative text-center space-y-6">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-8 shadow-2xl relative text-center space-y-6">
             
             <button
               onClick={() => setShowSignUpModal(false)}
-              className="absolute top-6 right-6 p-2 rounded-full bg-white/5 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              className="absolute top-6 right-6 p-2 rounded-full bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
 
-            <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto">
+            <div className="w-16 h-16 rounded-full bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center mx-auto">
               <Lock className="w-8 h-8" />
             </div>
 
             <div>
-              <h3 className="text-xl font-bold text-white">Public Registration Frozen</h3>
-              <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                HazelWhat is an exclusive, invite-only enterprise platform. Public self-registration is frozen to maintain dedicated server speeds and strict tenant privacy.
+              <h3 className="text-xl font-bold text-slate-900">Public Registration Frozen</h3>
+              <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                HazelWhat is an exclusive enterprise platform. Public self-registration is frozen to maintain dedicated server speeds and strict tenant privacy.
               </p>
             </div>
 
-            <div className="p-4 rounded-2xl bg-[#121524] border border-white/10 text-left space-y-2 text-xs">
-              <div className="font-bold text-purple-300 flex items-center gap-1.5">
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-left space-y-2 text-xs">
+              <div className="font-bold text-purple-700 flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4" />
                 <span>How to Get Access:</span>
               </div>
-              <p className="text-slate-300">
+              <p className="text-slate-600 leading-relaxed">
                 1. Your account is onboarded directly by our Super Admin team.<br />
                 2. Once onboarded, you receive your Client Username & Password.<br />
                 3. Use the <strong>Sign In</strong> button to access your portal.
@@ -958,7 +974,7 @@ export default function LandingPage() {
                 setShowSignUpModal(false);
                 setShowSignInModal(true);
               }}
-              className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition-all cursor-pointer"
+              className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-xs font-bold text-white transition-all cursor-pointer shadow-md"
             >
               Already Onboarded? Sign In Here
             </button>
