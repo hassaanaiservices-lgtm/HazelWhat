@@ -940,6 +940,22 @@ export class WhatsAppManager {
         console.error("Failed to delete auth folder:", e);
       }
     }
+
+    // Also clear Supabase auth credentials for fresh pairing!
+    try {
+      const { useSupabaseAuthState } = await import("./whatsapp-auth");
+      const tenantId = this.getActiveTenantId() || "default";
+      // Clear "default" credentials as well since startSession defaults to "default"
+      const { removeCreds: removeDefault } = await useSupabaseAuthState("default");
+      await removeDefault();
+      if (tenantId !== "default") {
+        const { removeCreds: removeTenant } = await useSupabaseAuthState(tenantId);
+        await removeTenant();
+      }
+      console.log(`[Baileys] Supabase credentials cleared for fresh QR pairing.`);
+    } catch (e) {
+      console.error("[Baileys] Failed to clear Supabase credentials:", e);
+    }
   }
 
   /**
@@ -979,6 +995,21 @@ export class WhatsAppManager {
       } catch (e) {
         console.error("Failed to delete auth folder:", e);
       }
+    }
+
+    // Also clear Supabase auth credentials!
+    try {
+      const { useSupabaseAuthState } = await import("./whatsapp-auth");
+      const tenantId = this.getActiveTenantId() || "default";
+      const { removeCreds: removeDefault } = await useSupabaseAuthState("default");
+      await removeDefault();
+      if (tenantId !== "default") {
+        const { removeCreds: removeTenant } = await useSupabaseAuthState(tenantId);
+        await removeTenant();
+      }
+      console.log(`[Baileys] Supabase credentials cleared on disconnect.`);
+    } catch (e) {
+      console.error("[Baileys] Failed to clear Supabase credentials on disconnect:", e);
     }
   }
 

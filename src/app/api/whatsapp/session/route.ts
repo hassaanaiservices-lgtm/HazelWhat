@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { WhatsAppManager } from "@/lib/whatsapp";
 import { handleWhatsAppMessage } from "@/lib/ai-handler";
 import { getSessionFromCookies } from "@/lib/auth-session";
-import { DB_DIR } from "@/lib/db";
+import { DB, DB_DIR } from "@/lib/db";
 import path from "path";
 import fs from "fs";
 
@@ -21,7 +21,10 @@ export async function GET(request: NextRequest) {
       const authFolder = path.join(DB_DIR, ".baileys_auth");
       const credsFile = path.join(authFolder, "creds.json");
       
-      if (fs.existsSync(credsFile)) {
+      const hasLocalCreds = fs.existsSync(credsFile);
+      const hasSupabaseCreds = await DB.hasSavedCredentials("default");
+
+      if (hasLocalCreds || hasSupabaseCreds) {
         console.log("[Session Route] Saved credentials found. Auto-connecting WhatsApp...");
         WhatsAppManager.startSession(async (msg) => {
           await handleWhatsAppMessage(msg, tenantId);

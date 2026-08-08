@@ -1265,4 +1265,19 @@ export class DB {
     }
     return DB.apiAlertsMemory;
   }
+
+  static async hasSavedCredentials(tenantId: string = "default"): Promise<boolean> {
+    if (!supabase) return false;
+    try {
+      const { data } = await supabase
+        .from("whatsapp_auth")
+        .select("key_id")
+        .eq("tenant_id", tenantId)
+        .eq("key_id", "creds")
+        .limit(1);
+      return !!data && data.length > 0;
+    } catch (e) {
+      return false;
+    }
+  }
 }
