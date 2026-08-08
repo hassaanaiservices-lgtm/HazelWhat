@@ -1844,13 +1844,30 @@ export default function DashboardPage() {
           <button onClick={() => setActiveTab('settings')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'settings' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
             <Settings className={`h-4 w-4 ${activeTab === 'settings' ? 'text-purple-600' : 'text-slate-400'}`} /> Settings
           </button>
+          <button 
+            onClick={async () => {
+              try {
+                await fetch('/api/auth/logout', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ portal: 'client' })
+                });
+              } catch (e) {
+                console.error("Logout error:", e);
+              }
+              window.location.href = '/';
+            }} 
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+          >
+            <LogOut className="h-4 w-4 text-rose-500" /> Sign Out
+          </button>
         </div>
 
 
         {/* Bottom User Footer */}
-        <div className="mt-auto px-5 pt-4 border-t border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 bg-gradient-to-tr from-purple-600 to-indigo-500 rounded-full flex items-center justify-center text-white font-extrabold text-xs shadow-md relative">
+        <div className="mt-auto px-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="h-9 w-9 bg-gradient-to-tr from-purple-600 to-indigo-500 rounded-full flex items-center justify-center text-white font-extrabold text-xs shadow-md relative flex-shrink-0">
               {(sessionData?.businessName || sessionData?.name || 'H')[0]?.toUpperCase()}
               <div className="absolute bottom-0 right-0 h-2.5 w-2.5 bg-emerald-500 rounded-full border-2 border-white flex items-center justify-center text-[7px]"></div>
             </div>
@@ -1859,6 +1876,24 @@ export default function DashboardPage() {
               <p className="text-[10px] text-purple-600 font-semibold">Client Account</p>
             </div>
           </div>
+          <button 
+            onClick={async () => {
+              try {
+                await fetch('/api/auth/logout', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ portal: 'client' })
+                });
+              } catch (e) {
+                console.error("Logout error:", e);
+              }
+              window.location.href = '/';
+            }}
+            title="Sign Out"
+            className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50/50 transition-colors cursor-pointer flex-shrink-0"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
