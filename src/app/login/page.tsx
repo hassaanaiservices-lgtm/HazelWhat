@@ -24,12 +24,19 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [portal, setPortal] = useState<'client' | 'admin'>('client');
+  const [showSwitcher, setShowSwitcher] = useState(false);
 
   // Sync portal from URL search query on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const urlPortal = params.get('portal');
+      const isAdminQuery = params.get('admin') === 'true' || urlPortal === 'admin';
+      
+      if (isAdminQuery) {
+        setShowSwitcher(true);
+      }
+
       if (urlPortal === 'admin') {
         setPortal('admin');
       } else if (urlPortal === 'client') {
@@ -160,33 +167,35 @@ export default function LoginPage() {
           {/* Top Subtle Border highlight */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500" />
 
-          {/* Portal Switcher Tabs */}
-          <div className="flex rounded-xl bg-slate-950/90 p-1 border border-slate-800 mb-6">
-            <button
-              type="button"
-              onClick={() => handlePortalSwitch('client')}
-              className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                portal === 'client'
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <User className="w-3.5 h-3.5" />
-              <span>Client Portal</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handlePortalSwitch('admin')}
-              className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                portal === 'admin'
-                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Super Admin</span>
-            </button>
-          </div>
+           {/* Portal Switcher Tabs */}
+          {showSwitcher && (
+            <div className="flex rounded-xl bg-slate-950/90 p-1 border border-slate-800 mb-6">
+              <button
+                type="button"
+                onClick={() => handlePortalSwitch('client')}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  portal === 'client'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <User className="w-3.5 h-3.5" />
+                <span>Client Portal</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePortalSwitch('admin')}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  portal === 'admin'
+                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Super Admin</span>
+              </button>
+            </div>
+          )}
 
           <div className="text-center mb-8">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700/60 text-xs font-medium text-slate-300 mb-3">
