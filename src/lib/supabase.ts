@@ -10,6 +10,15 @@ export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
+export function handleSupabaseError(context: string, error: any) {
+  if (!error) return;
+  if (error.code === 'PGRST205' || (error.message && (error.message.includes('schema cache') || error.message.includes('Could not find the table')))) {
+    console.warn(`[Supabase Setup Notice] ${context}: Table missing in Supabase. Please run full SQL schema in Supabase SQL Editor!`);
+  } else {
+    console.error(`[Supabase Error] ${context}:`, error.message || error);
+  }
+}
+
 /**
  * SQL DDL Schema Reference for Supabase Setup:
  * 
