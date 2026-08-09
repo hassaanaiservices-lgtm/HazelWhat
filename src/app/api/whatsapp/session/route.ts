@@ -23,35 +23,7 @@ export async function GET(request: NextRequest) {
       console.log(`[Session API] GET status query. Tenant: ${tenantId || 'unknown'}. Connection Status: ${status.status.toUpperCase()}`);
     }
     
-    // Auto-reconnect if auth credentials exist but session is disconnected
-    if (status.status === "disconnected") {
-      const authFolder = path.join(DB_DIR, ".baileys_auth");
-      const credsFile = path.join(authFolder, "creds.json");
-      
-      const hasLocalCreds = fs.existsSync(credsFile);
-      const hasSupabaseCreds = await DB.hasSavedCredentials("default");
-
-      if (hasLocalCreds || hasSupabaseCreds) {
-        console.log("[Session Route] Saved credentials found. Auto-connecting WhatsApp...");
-        WhatsAppManager.startSession(async (msg) => {
-          await handleWhatsAppMessage(msg, tenantId);
-        }).catch(err => {
-          console.error("[Session Route] Auto-connect failed:", err);
-        });
-        
-        status = {
-          status: "connecting",
-          qrCode: null,
-          qrGeneratedAt: null,
-          phoneNumber: undefined,
-          displayName: "WhatsApp Business",
-          lastError: null,
-          lastStatusCode: null,
-          reconnectAttempts: 0
-        };
-      }
-    }
-    
+    // GET simply returns the current status without triggering background changes
     return NextResponse.json({ success: true, session: status });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
