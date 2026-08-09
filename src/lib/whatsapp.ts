@@ -747,6 +747,27 @@ export class WhatsAppManager {
             clearTimeout(globalForBaileys.reconnectTimeout);
             globalForBaileys.reconnectTimeout = null;
           }
+
+          // Auto-resolve active tenant from the connected phone number
+          if (sock.user?.id) {
+            const cleanPhone = sock.user.id.split("@")[0].split(":")[0].replace(/[^0-9]/g, "");
+            console.log(`[Baileys] Socket opened. Connected user ID: ${sock.user.id} (Phone: ${cleanPhone})`);
+            
+            DB.getTenants().then(tenants => {
+              const matchedTenant = tenants.find(t => {
+                const tPhone = (t.phoneNumber || "").replace(/[^0-9]/g, "");
+                return tPhone && (tPhone === cleanPhone || cleanPhone.endsWith(tPhone) || tPhone.endsWith(cleanPhone));
+              });
+              if (matchedTenant) {
+                globalForBaileys.activeTenantId = matchedTenant.id;
+                console.log(`[WhatsApp] Auto-resolved active tenant from connected phone: ${cleanPhone} -> ${matchedTenant.id}`);
+              } else {
+                console.log(`[WhatsApp] No tenant matches connected phone number: ${cleanPhone}`);
+              }
+            }).catch(err => {
+              console.error("[WhatsApp] Error resolving active tenant on connection open:", err);
+            });
+          }
         }
       });
 
