@@ -977,10 +977,10 @@ export class DB {
       usedMinutes: 0,
       clientUsername: 'ayan_247',
       clientPassword: 'client1003',
-      systemPrompt: 'You are an AI assistant for ayan.',
-      knowledgeBase: 'ayan business FAQs',
-      productKnowledgeBase: 'ayan product catalog',
-      followupMechanism: 'Standard follow-up',
+      systemPrompt: '',
+      knowledgeBase: '',
+      productKnowledgeBase: '',
+      followupMechanism: '',
       llmModel: 'gpt-4o-mini',
       temperature: 0.7,
       deepgramVoice: 'aura-asteria-en',
@@ -1010,10 +1010,10 @@ export class DB {
       usedMinutes: 0,
       clientUsername: 'pizzabox_183343',
       clientPassword: 'client1004',
-      systemPrompt: 'You are an AI assistant for Pizza Box.',
-      knowledgeBase: 'Pizza Box business FAQs',
-      productKnowledgeBase: 'Pizza Box product catalog',
-      followupMechanism: 'Standard follow-up',
+      systemPrompt: '',
+      knowledgeBase: '',
+      productKnowledgeBase: '',
+      followupMechanism: '',
       llmModel: 'gpt-4o-mini',
       temperature: 0.7,
       deepgramVoice: 'aura-asteria-en',
@@ -1043,10 +1043,10 @@ export class DB {
       usedMinutes: 0,
       clientUsername: 'hazeldid_346',
       clientPassword: 'client1002',
-      systemPrompt: 'You are an AI assistant for Hazeldid Store.',
-      knowledgeBase: 'Hazeldid Store business FAQs',
-      productKnowledgeBase: 'Hazeldid Store product catalog',
-      followupMechanism: 'Standard follow-up',
+      systemPrompt: '',
+      knowledgeBase: '',
+      productKnowledgeBase: '',
+      followupMechanism: '',
       llmModel: 'gpt-4o-mini',
       temperature: 0.7,
       deepgramVoice: 'aura-asteria-en',
@@ -1076,10 +1076,10 @@ export class DB {
       usedMinutes: 0,
       clientUsername: 'trend_aura_423',
       clientPassword: 'client1001',
-      systemPrompt: 'You are an AI assistant for Trend aura.',
-      knowledgeBase: 'Trend aura business FAQs',
-      productKnowledgeBase: 'Trend aura product catalog',
-      followupMechanism: 'Standard follow-up',
+      systemPrompt: '',
+      knowledgeBase: '',
+      productKnowledgeBase: '',
+      followupMechanism: '',
       llmModel: 'gpt-4o-mini',
       temperature: 0.7,
       deepgramVoice: 'aura-asteria-en',
@@ -1108,9 +1108,22 @@ export class DB {
         console.error('Failed to fetch tenants from Supabase:', e);
       }
     }
+    // Supabase always wins — only fall back to in-memory defaults for keys NOT in Supabase
     const map = new Map<string, Tenant>();
     DB.tenantsMemoryStore.forEach(t => map.set(t.id, t));
-    supabaseTenants.forEach(t => map.set(t.id, t));
+    supabaseTenants.forEach(t => {
+      const existing = map.get(t.id);
+      // Deep merge: Supabase fields override memory, but keep memory fields not present in Supabase
+      map.set(t.id, {
+        ...existing,
+        ...t,
+        // Always prefer non-empty Supabase values for these critical fields
+        systemPrompt: (t.systemPrompt && t.systemPrompt.trim()) ? t.systemPrompt : (existing?.systemPrompt || ''),
+        knowledgeBase: (t.knowledgeBase && t.knowledgeBase.trim()) ? t.knowledgeBase : (existing?.knowledgeBase || ''),
+        productKnowledgeBase: (t.productKnowledgeBase && t.productKnowledgeBase.trim()) ? t.productKnowledgeBase : (existing?.productKnowledgeBase || ''),
+        products: (t.products && t.products.length > 0) ? t.products : (existing?.products || []),
+      });
+    });
     return Array.from(map.values());
   }
 
