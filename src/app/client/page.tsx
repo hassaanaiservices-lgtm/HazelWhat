@@ -920,7 +920,6 @@ export default function DashboardPage() {
 
   const fetchChats = async () => {
     try {
-      console.log("[Client] Fetching chats...");
       const timestamp = new Date().getTime();
       const res = await fetch(`/api/whatsapp/chats?t=${timestamp}`, {
         headers: {
@@ -929,7 +928,6 @@ export default function DashboardPage() {
         }
       });
       const data = await res.json();
-      console.log(`[Client] Chats received. Success: ${data.success}, tenantId: ${data._debug?.tenantId}, supabaseConnected: ${data._debug?.supabaseConnected}`);
       
       if (data.success) {
         const mergedChats = { ...data.chats };
@@ -943,7 +941,6 @@ export default function DashboardPage() {
           });
         }
         
-        console.log(`[Client] Parsed ${Object.keys(mergedChats).length} chat threads.`);
         setChats(mergedChats);
         setCustomers(customersMap);
       } else {
@@ -2683,9 +2680,15 @@ export default function DashboardPage() {
               )}
 
               {(status === "creating" || status === "waiting_qr") && (
-                <div className="flex flex-col items-center justify-center space-y-6 py-10">
+                <div className="flex flex-col items-center justify-center space-y-6 py-10 w-full max-w-sm">
                   <Loader2 className="h-10 w-10 text-purple-600 animate-spin" />
                   <p className="text-slate-500 font-bold text-xs">Initializing Secure Connection...</p>
+                  <button 
+                    onClick={disconnectSession} 
+                    className="text-xs font-bold text-rose-500 bg-rose-50 hover:bg-rose-100 px-4 py-2 rounded-xl transition-colors mt-2"
+                  >
+                    Reset & Generate New QR Code
+                  </button>
                 </div>
               )}
 
