@@ -232,11 +232,11 @@ export interface DbSchema {
 }
 
 const DEFAULT_CONFIG: Config = {
-  systemPrompt: "You are an expert Booking and Sales AI Assistant. Your goal is to consult the user, answer questions, and recommend products or book appointments using your tools.",
-  productInfo: "Services offered:\n- Basic Consultation: $50\n- Premium Service: $150\n\nWorking hours: 9 AM to 5 PM, Monday to Friday.",
+  systemPrompt: "You are a friendly, helpful AI team member. Engage warmly with customers, answer their questions accurately using the knowledge base and catalog, and assist them naturally.",
+  productInfo: "",
   keywordReplies: [],
   enabledFeatures: [],
-  businessName: "My Business",
+  businessName: "our store",
   timezone: "UTC",
   workingHours: "9:00 AM - 5:00 PM",
   followUps: [
