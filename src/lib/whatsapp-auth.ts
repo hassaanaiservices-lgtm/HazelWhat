@@ -14,7 +14,7 @@ export const useSupabaseAuthState = async (tenantId: string): Promise<{ state: A
         tenant_id: tenantId,
         key_id: key,
         key_data: JSON.parse(jsonString)
-      });
+      }, { onConflict: 'tenant_id,key_id' });
     } catch (e) {
       console.error(`[SupabaseAuth] Failed to write data for key ${key}:`, e);
     }
@@ -138,7 +138,7 @@ export const useSupabaseAuthState = async (tenantId: string): Promise<{ state: A
               };
             });
             tasks.push((async () => {
-              const { error } = await client.from("whatsapp_auth").upsert(rows);
+              const { error } = await client.from("whatsapp_auth").upsert(rows, { onConflict: 'tenant_id,key_id' });
               if (error) console.error(`[SupabaseAuth] Bulk upsert error for ${toWrite.length} items:`, error);
             })());
           }
