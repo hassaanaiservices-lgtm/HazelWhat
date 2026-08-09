@@ -770,13 +770,13 @@ export class WhatsAppManager {
                 
                 if (from) {
                   if (originalJid) {
-                    await DB.updateCustomer(from, { jid: originalJid });
+                    await DB.updateCustomer(from, { jid: originalJid }, globalForBaileys.activeTenantId || undefined);
                   }
                   const history = await DB.getChats(from);
                   const exists = history.some((chatMsg: any) => chatMsg.id === msg.key.id);
                   if (!exists) {
                     // Save the owner's manual message as 'assistant' so it appears on the dashboard
-                    await DB.addChatMessage(from, { id: msg.key.id || undefined, role: "assistant", content });
+                    await DB.addChatMessage(from, { id: msg.key.id || undefined, role: "assistant", content }, globalForBaileys.activeTenantId || undefined);
                   }
                 }
               }
@@ -803,7 +803,7 @@ export class WhatsAppManager {
               await DB.updateCustomer(phone, { 
                 name: contact.name || contact.notify || (isGroup ? `Group: ${phone.split('@')[0]}` : phone),
                 jid: contact.id
-              });
+              }, globalForBaileys.activeTenantId || undefined);
             }
           }
         }
@@ -831,7 +831,7 @@ export class WhatsAppManager {
                 
                 if (from) {
                   if (originalJid) {
-                    await DB.updateCustomer(from, { jid: originalJid });
+                    await DB.updateCustomer(from, { jid: originalJid }, globalForBaileys.activeTenantId || undefined);
                   }
                   const history = await DB.getChats(from);
                   const exists = history.some((chatMsg: any) => chatMsg.id === msg.key.id);
@@ -845,7 +845,7 @@ export class WhatsAppManager {
                       role: msg.key.fromMe ? "assistant" : "user", 
                       content,
                       timestamp: timestampStr
-                    });
+                    }, globalForBaileys.activeTenantId || undefined);
                   }
                 }
               }
@@ -863,7 +863,7 @@ export class WhatsAppManager {
               await DB.updateCustomer(phone, { 
                 name: contact.name || contact.notify || (isGroup ? `Group: ${phone.split('@')[0]}` : phone),
                 jid: contact.id
-              });
+              }, globalForBaileys.activeTenantId || undefined);
             }
           }
         }
