@@ -44,7 +44,10 @@ export async function GET(request: NextRequest) {
           qrCode: null,
           qrGeneratedAt: null,
           phoneNumber: undefined,
-          displayName: "WhatsApp Business"
+          displayName: "WhatsApp Business",
+          lastError: null,
+          lastStatusCode: null,
+          reconnectAttempts: 0
         };
       }
     }

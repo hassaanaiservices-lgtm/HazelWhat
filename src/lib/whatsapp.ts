@@ -20,6 +20,8 @@ const globalForBaileys = global as unknown as {
   startPromise?: Promise<any> | null;
   reconnectAttempts: number;
   activeTenantId?: string | null;
+  lastError?: string | null;
+  lastStatusCode?: number | null;
 };
 
 if (!globalForBaileys.baileysSession) {
@@ -685,6 +687,9 @@ export class WhatsAppManager {
           const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
           const errorMsg = lastDisconnect?.error?.message || "";
           
+          globalForBaileys.lastStatusCode = statusCode || null;
+          globalForBaileys.lastError = errorMsg || null;
+          
           console.log(`[Baileys] Connection closed. Status code: ${statusCode || 'unknown'}. Error: ${errorMsg}`);
           globalForBaileys.baileysSession.sock = null;
 
@@ -889,6 +894,9 @@ export class WhatsAppManager {
       qrGeneratedAt: globalForBaileys.baileysSession.qrGeneratedAt,
       phoneNumber: globalForBaileys.baileysSession.sock?.user?.id?.split(":")[0],
       displayName: globalForBaileys.baileysSession.sock?.user?.name || "WhatsApp Business",
+      lastError: globalForBaileys.lastError || null,
+      lastStatusCode: globalForBaileys.lastStatusCode || null,
+      reconnectAttempts: globalForBaileys.reconnectAttempts || 0,
     };
   }
 
