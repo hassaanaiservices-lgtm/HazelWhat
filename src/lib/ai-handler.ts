@@ -556,15 +556,18 @@ export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
     let resolvedTenantId = inputTenantId || WhatsAppManager.getActiveTenantId() || undefined;
     if (!resolvedTenantId && from) {
       const cust = await DB.getCustomer(from);
-      resolvedTenantId = cust?.tenantId;
+      if (cust?.tenantId && cust.tenantId !== 'admin') {
+        resolvedTenantId = cust.tenantId;
+      }
     }
     if (!resolvedTenantId) {
       const tenants = await DB.getTenants();
-      if (tenants && tenants.length === 1) {
-        resolvedTenantId = tenants[0].id;
+      if (tenants && tenants.length > 0) {
+        const clientTenant = tenants.find(t => t.id !== 'admin');
+        resolvedTenantId = clientTenant ? clientTenant.id : tenants[0].id;
       }
     }
-    resolvedTenantId = resolvedTenantId || 'admin';
+    resolvedTenantId = resolvedTenantId || 't-1004';
 
     if (interactiveResponse?.nativeFlowResponseMessage?.name === "quick_reply") {
       try {

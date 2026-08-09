@@ -1,23 +1,19 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     try {
-      const path = await import("path");
-      const fs = await import("fs");
-      const { DB_DIR } = await import("@/lib/db");
       const { WhatsAppManager } = await import("@/lib/whatsapp");
       const { handleWhatsAppMessage } = await import("@/lib/ai-handler");
+      const { migrateOrphanedRecordsToClientTenant } = await import("@/lib/supabase");
 
-      const authFolder = path.join(DB_DIR, ".baileys_auth");
-      const credsFile = path.join(authFolder, "creds.json");
+      console.log("[Server Startup] Migrating orphaned chat records to t-1004...");
+      await migrateOrphanedRecordsToClientTenant("t-1004");
 
-      if (fs.existsSync(credsFile)) {
-        console.log("[Server Startup] Saved WhatsApp credentials found. Auto-connecting on boot...");
-        WhatsAppManager.startSession(async (msg) => {
-          await handleWhatsAppMessage(msg);
-        }).catch((err) => {
-          console.error("[Server Startup] Auto-connect error:", err);
-        });
-      }
+      console.log("[Server Startup] Auto-initializing WhatsApp Manager on boot...");
+      WhatsAppManager.startSession(async (msg) => {
+        await handleWhatsAppMessage(msg);
+      }).catch((err) => {
+        console.error("[Server Startup] Auto-connect error:", err);
+      });
     } catch (e) {
       console.error("[Server Startup] Error in instrumentation register hook:", e);
     }

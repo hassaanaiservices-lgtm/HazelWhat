@@ -168,3 +168,26 @@ export async function upsertTenantToSupabase(tenant: Tenant): Promise<boolean> {
     return false;
   }
 }
+
+export async function migrateOrphanedRecordsToClientTenant(targetTenantId: string = 't-1004') {
+  if (!supabase) return;
+  try {
+    const { error: chatErr } = await supabase
+      .from('chat_messages')
+      .update({ tenant_id: targetTenantId })
+      .in('tenant_id', ['admin', 'default']);
+    if (!chatErr) {
+      console.log(`[Supabase Migration] Migrated orphaned chat_messages to ${targetTenantId}`);
+    }
+
+    const { error: custErr } = await supabase
+      .from('customers')
+      .update({ tenant_id: targetTenantId })
+      .in('tenant_id', ['admin', 'default']);
+    if (!custErr) {
+      console.log(`[Supabase Migration] Migrated orphaned customers to ${targetTenantId}`);
+    }
+  } catch (e) {
+    console.error("[Supabase Migration] Error migrating orphaned records:", e);
+  }
+}
