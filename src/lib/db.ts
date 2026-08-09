@@ -374,35 +374,57 @@ export class DB {
     if (!supabase) return DEFAULT_CONFIG;
     try {
       const resolvedTenantId = tenantId || DEFAULT_TENANT_ID;
-      let tenantRecord: Tenant | null = null;
-      if (resolvedTenantId) {
-        tenantRecord = await DB.getTenantById(resolvedTenantId);
-        if (!tenantRecord) {
-          const allTenants = await DB.getTenants();
-          if (allTenants && allTenants.length > 0) {
-            tenantRecord = allTenants.find(t => t.id === resolvedTenantId) || allTenants[0];
-          }
-        }
+
+      // Load tenant record (from tenants table, Supabase wins)
+      const allTenants = await DB.getTenants();
+      const tenantRecord = allTenants.find(t => t.id === resolvedTenantId) || allTenants[0] || null;
+
+      // Load tenant_configs row
+      const { data, error: cfgError } = await supabase
+        .from('tenant_configs')
+        .select('*')
+        .eq('tenant_id', resolvedTenantId)
+        .single();
+
+      if (cfgError && cfgError.code !== 'PGRST116') {
+        console.warn('[DB/Supabase] getConfig query error:', cfgError.message);
       }
 
-      const { data } = await supabase.from('tenant_configs').select('*').eq('tenant_id', resolvedTenantId).single();
-      
-      const systemPrompt = (data?.system_prompt && data.system_prompt.trim() !== '') 
-        ? data.system_prompt 
-        : (tenantRecord?.systemPrompt && tenantRecord.systemPrompt.trim() !== '') 
-          ? tenantRecord.systemPrompt 
-          : DEFAULT_CONFIG.systemPrompt;
+      // Priority: tenant_configs > tenants table > empty string (NOT DEFAULT_CONFIG garbage)
+      const systemPrompt = 
+        (data?.system_prompt && data.system_prompt.trim() !== '') ? data.system_prompt :
+        (tenantRecord?.systemPrompt && tenantRecord.systemPrompt.trim() !== '') ? tenantRecord.systemPrompt :
+        '';
 
-      const productInfo = (data?.product_info && data.product_info.trim() !== '') 
-        ? data.product_info 
-        : (tenantRecord?.knowledgeBase && tenantRecord.knowledgeBase.trim() !== '') 
-          ? tenantRecord.knowledgeBase 
-          : (tenantRecord?.productKnowledgeBase && tenantRecord.productKnowledgeBase.trim() !== '') 
-            ? tenantRecord.productKnowledgeBase 
-            : DEFAULT_CONFIG.productInfo;
+      const productInfo = 
+        (data?.product_info && data.product_info.trim() !== '') ? data.product_info :
+        (tenantRecord?.knowledgeBase && tenantRecord.knowledgeBase.trim() !== '') ? tenantRecord.knowledgeBase :
+        (tenantRecord?.productKnowledgeBase && tenantRecord.productKnowledgeBase.trim() !== '') ? tenantRecord.productKnowledgeBase :
+        '';
 
-      const products = (data?.products && data.products.length > 0) ? data.products : (tenantRecord?.products || []);
-      const businessName = data?.business_name || tenantRecord?.businessName || tenantRecord?.name || DEFAULT_CONFIG.businessName;
+      const products = (data?.products && data.products.length > 0)
+        ? data.products
+        : (tenantRecord?.products || []);
+
+      const businessName = data?.business_name || tenantRecord?.businessName || tenantRecord?.name || 'My Business';
+
+      // Auto-create tenant_configs row from tenants table if it is missing but tenants table has data
+      if (!data && tenantRecord && (systemPrompt || productInfo)) {
+        console.log(`[DB/Supabase] tenant_configs missing for ${resolvedTenantId} — auto-seeding from tenants table...`);
+        supabase.from('tenant_configs').upsert({
+          tenant_id: resolvedTenantId,
+          system_prompt: systemPrompt,
+          product_info: productInfo,
+          products: products,
+          business_name: businessName,
+          global_ai_enabled: true
+        }, { onConflict: 'tenant_id' }).then(({ error: seedErr }) => {
+          if (seedErr) console.error('[DB/Supabase] Auto-seed tenant_configs error:', seedErr.message);
+          else console.log(`[DB/Supabase] Auto-seeded tenant_configs for ${resolvedTenantId}`);
+        });
+      }
+
+      console.log(`[DB/getConfig] Tenant: ${resolvedTenantId} | prompt: "${systemPrompt.substring(0,60)}" | products: ${products.length}`);
 
       return {
         systemPrompt,
@@ -421,6 +443,7 @@ export class DB {
         followUps: data?.follow_ups || DEFAULT_CONFIG.followUps
       };
     } catch (e) {
+      console.error('[DB/Supabase] getConfig exception:', e);
       return DEFAULT_CONFIG;
     }
   }
