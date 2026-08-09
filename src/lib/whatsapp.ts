@@ -1,5 +1,5 @@
 import { makeWASocket, DisconnectReason, WAMessageStatus, downloadMediaMessage, generateWAMessageFromContent, prepareWAMessageMedia, fetchLatestBaileysVersion, Browsers, DEFAULT_CONNECTION_CONFIG } from "@whiskeysockets/baileys";
-import { DB, DB_DIR } from "./db";
+import { DB, DB_DIR, supabase } from "./db";
 import { Boom } from "@hapi/boom";
 import QRCode from "qrcode";
 import pino from "pino";
@@ -35,6 +35,17 @@ export class WhatsAppManager {
   static setActiveTenantId(tenantId?: string | null) {
     if (tenantId) {
       globalForBaileys.activeTenantId = tenantId;
+      console.log(`[WhatsAppManager] Active tenant set to: ${tenantId}`);
+      if (supabase) {
+        supabase.from('whatsapp_auth').upsert({
+          tenant_id: 'default',
+          key_id: 'active_tenant',
+          key_data: { activeTenantId: tenantId }
+        }, { onConflict: 'tenant_id,key_id' }).then(({ error }) => {
+          if (error) console.error("[WhatsApp] Error persisting active tenant:", error);
+          else console.log("[WhatsApp] Persisted active tenant to database:", tenantId);
+        });
+      }
     }
   }
 
@@ -614,6 +625,24 @@ export class WhatsAppManager {
     }
 
     globalForBaileys.baileysSession.status = "connecting";
+
+    // Load active tenant from Supabase on startup
+    if (supabase) {
+      try {
+        const { data } = await supabase
+          .from('whatsapp_auth')
+          .select('key_data')
+          .eq('tenant_id', 'default')
+          .eq('key_id', 'active_tenant')
+          .single();
+        if (data?.key_data?.activeTenantId) {
+          globalForBaileys.activeTenantId = data.key_data.activeTenantId;
+          console.log(`[WhatsApp] Loaded active tenant from database on boot: ${globalForBaileys.activeTenantId}`);
+        }
+      } catch (e) {
+        console.warn("[WhatsApp] Could not load active tenant on boot:", e);
+      }
+    }
 
     const initPromise = (async () => {
       const { state, saveCreds } = await useSupabaseAuthState("default");
