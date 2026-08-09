@@ -1051,15 +1051,15 @@ export default function DashboardPage() {
     return () => clearInterval(pollInterval);
   }, [status]);
 
-  // QR countdown timer
+  // QR countdown timer — WhatsApp QR is valid for ~60 seconds
   useEffect(() => {
     if (status !== "scanning" || !qrGeneratedAt) {
-      setQrSecondsLeft(20);
+      setQrSecondsLeft(60);
       return;
     }
     const tick = () => {
       const elapsed = Math.floor((Date.now() - qrGeneratedAt) / 1000);
-      const left = Math.max(0, 20 - elapsed);
+      const left = Math.max(0, 60 - elapsed);
       setQrSecondsLeft(left);
     };
     tick();
@@ -2699,11 +2699,11 @@ export default function DashboardPage() {
                     <img src={qrCode} alt="QR" className="w-64 h-64 rounded-xl object-contain" />
                     {/* Freshness badge */}
                     <div className={`absolute -top-3 -right-3 text-xs font-bold px-2.5 py-1 rounded-full shadow ${
-                      qrSecondsLeft > 10 ? 'bg-emerald-500 text-white' :
-                      qrSecondsLeft > 5  ? 'bg-amber-400 text-white' :
+                      qrSecondsLeft > 30 ? 'bg-emerald-500 text-white' :
+                      qrSecondsLeft > 10 ? 'bg-amber-400 text-white' :
                                            'bg-rose-500 text-white'
                     }`}>
-                      {qrSecondsLeft > 0 ? `${qrSecondsLeft}s` : 'Refreshing...'}
+                      {qrSecondsLeft > 0 ? `${qrSecondsLeft}s` : 'New QR loading...'}
                     </div>
                   </div>
                   <div className="w-full space-y-3 bg-slate-50 p-6 rounded-2xl border border-slate-100">
