@@ -250,6 +250,57 @@ const DEFAULT_CONFIG: Config = {
   ]
 };
 
+export const PIZZA_BOX_DEFAULT_SYSTEM_PROMPT = `You are the official WhatsApp ordering assistant for Pizza Box, a fast-food pizza restaurant in Peshawar. Tagline: "Happiness In A Box."
+
+=== BRAND VOICE & TONE ===
+- Friendly, fast, upbeat, and conversational. Talk like a real team member taking orders, NOT a robotic menu-reader.
+- Keep replies concise (2-4 sentences max per message). WhatsApp customers want quick answers.
+- Use 1-2 food emojis max per message (🍕🔥).
+- Always quote EXACT prices from the Product Information & Catalog. Never estimate or round.
+
+=== CORE RESPONSIBILITIES ===
+1. ANSWERING MENU INQUIRIES: When a customer asks what pizzas/items are available (e.g. "pizza konsa hai", "kya items hain", "pizza khana", "menu deikhao"):
+   - Answer directly in text listing 2-4 top popular pizzas/combos with prices.
+   - ALWAYS call the send_product_card function to display visual product cards for top items!
+2. TAKING ORDERS: When a user wants to order:
+   - Immediately call place_order tool with whatever details you have (at least product_name).
+   - Ask naturally for remaining details (flavor, size, delivery address, contact number).
+3. UPSELLING:
+   - Pizza order -> suggest a crust upgrade (Seekh Kabab Crust or Stuffed Cheese Crust) or a dip/drink.
+   - Group/family order -> suggest a Box Combo for maximum value.
+4. LANGUAGE: Automatically respond in the customer's language (Roman Urdu, Urdu, Pashto, English) with natural local phrasing.`;
+
+export const PIZZA_BOX_DEFAULT_KNOWLEDGE_BASE = `=== PIZZA BOX PESHAWAR MENU & PRICE LIST ===
+
+1. CROWN CRUST PIZZA:
+   - Small: Rs. 650
+   - Medium: Rs. 1,250
+   - Large: Rs. 1,750
+   - Flavors: Chicken Tikka, Fajita Delight, Cheese Lover, Spicy Supreme.
+
+2. STUFFED CRUST PIZZA:
+   - Small: Rs. 700
+   - Medium: Rs. 1,350
+   - Large: Rs. 1,850
+   - Crust Options: Cheese Stuffed, Seekh Kabab Stuffed.
+
+3. SPECIAL BOX COMBOS:
+   - Box Combo 1 (For 1-2 People): 1 Small Pizza + 2 Garlic Breads + 345ml Drink — Rs. 850
+   - Box Combo 2 (For 3-4 People): 1 Medium Pizza + 4 Wings + 1.5L Drink — Rs. 1,650
+   - Family Box (For 5-6 People): 2 Large Pizzas + 6 Wings + 1.5L Drink + Dips — Rs. 3,200
+
+4. SIDES & DRINKS:
+   - Garlic Bread (4 pcs): Rs. 250
+   - Chicken Wings (6 pcs): Rs. 450
+   - Cold Drink (1.5 Litre): Rs. 220
+   - Dips (Garlic Mayo, Chipotle): Rs. 70
+
+=== RESTAURANT INFO ===
+- Location: Peshawar, KPK
+- Delivery Time: 30-45 Minutes
+- Payment Methods: Cash on Delivery (COD), JazzCash, EasyPaisa
+- Delivery Charges: Rs. 100 within city limits`;
+
 const DEFAULT_TENANT_ID = 'admin';
 
 export class DB {
@@ -390,23 +441,32 @@ export class DB {
         console.warn('[DB/Supabase] getConfig query error:', cfgError.message);
       }
 
-      // Priority: tenant_configs > tenants table > empty string (NOT DEFAULT_CONFIG garbage)
-      const systemPrompt = 
+      // Priority: tenant_configs > tenants table > Pizza Box default (if t-1004) > empty string
+      let systemPrompt = 
         (data?.system_prompt && data.system_prompt.trim() !== '') ? data.system_prompt :
         (tenantRecord?.systemPrompt && tenantRecord.systemPrompt.trim() !== '') ? tenantRecord.systemPrompt :
         '';
 
-      const productInfo = 
+      let productInfo = 
         (data?.product_info && data.product_info.trim() !== '') ? data.product_info :
         (tenantRecord?.knowledgeBase && tenantRecord.knowledgeBase.trim() !== '') ? tenantRecord.knowledgeBase :
         (tenantRecord?.productKnowledgeBase && tenantRecord.productKnowledgeBase.trim() !== '') ? tenantRecord.productKnowledgeBase :
         '';
 
+      if (resolvedTenantId === 't-1004') {
+        if (!systemPrompt || systemPrompt.trim() === '') {
+          systemPrompt = PIZZA_BOX_DEFAULT_SYSTEM_PROMPT;
+        }
+        if (!productInfo || productInfo.trim() === '') {
+          productInfo = PIZZA_BOX_DEFAULT_KNOWLEDGE_BASE;
+        }
+      }
+
       const products = (data?.products && data.products.length > 0)
         ? data.products
         : (tenantRecord?.products || []);
 
-      const businessName = data?.business_name || tenantRecord?.businessName || tenantRecord?.name || 'My Business';
+      const businessName = data?.business_name || tenantRecord?.businessName || tenantRecord?.name || (resolvedTenantId === 't-1004' ? 'Pizza Box' : 'our store');
 
       // Auto-create tenant_configs row from tenants table if it is missing but tenants table has data
       if (!data && tenantRecord && (systemPrompt || productInfo)) {
@@ -1033,10 +1093,10 @@ export class DB {
       usedMinutes: 0,
       clientUsername: 'pizzabox_183343',
       clientPassword: 'client1004',
-      systemPrompt: '',
-      knowledgeBase: '',
-      productKnowledgeBase: '',
-      followupMechanism: '',
+      systemPrompt: PIZZA_BOX_DEFAULT_SYSTEM_PROMPT,
+      knowledgeBase: PIZZA_BOX_DEFAULT_KNOWLEDGE_BASE,
+      productKnowledgeBase: PIZZA_BOX_DEFAULT_KNOWLEDGE_BASE,
+      followupMechanism: 'Standard follow-up',
       llmModel: 'gpt-4o-mini',
       temperature: 0.7,
       deepgramVoice: 'aura-asteria-en',
