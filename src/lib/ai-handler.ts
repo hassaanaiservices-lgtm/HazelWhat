@@ -796,10 +796,10 @@ export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
       activeTenant = tenants.find(t => t.id === resolvedTenantId) || tenants[0];
     }
     
-    const activeSystemPrompt = (activeTenant?.systemPrompt && activeTenant.systemPrompt.trim() !== '') ? activeTenant.systemPrompt.trim() : config.systemPrompt;
-    const activeKnowledgeBase = (activeTenant?.knowledgeBase && activeTenant.knowledgeBase.trim() !== '') ? activeTenant.knowledgeBase.trim() : config.productInfo;
+    const activeSystemPrompt = config.systemPrompt || activeTenant?.systemPrompt || "";
+    const activeKnowledgeBase = config.productInfo || activeTenant?.knowledgeBase || "";
     const activeProductKB = activeTenant?.productKnowledgeBase?.trim() || "";
-    const activeProducts = (activeTenant?.products && activeTenant.products.length > 0) ? activeTenant.products : (config.products || []);
+    const activeProducts = (config.products && config.products.length > 0) ? config.products : (activeTenant?.products || []);
     const activeCurrency = activeTenant?.currency || config.storeCurrency || "PKR";
     const activeBusinessName = activeTenant?.businessName || activeTenant?.name || config.businessName || "our store";
 
