@@ -839,15 +839,15 @@ export default function DashboardPage() {
         if (currentStatus !== lastLoggedStatusRef.current) {
           lastLoggedStatusRef.current = currentStatus;
           if (currentStatus === "connected") {
-            console.log("[Client] WhatsApp status: connected successfully");
+            console.log("🟢 [Client] WhatsApp status: CONNECTED SUCCESSFULLY");
           } else if (currentStatus === "disconnected") {
-            console.log("[Client] WhatsApp status: disconnected");
+            console.log("🔴 [Client] WhatsApp status: DISCONNECTED");
           } else if (currentStatus === "connecting") {
-            console.log("[Client] WhatsApp status: trying to connect (awaiting scan)");
+            console.log("🟡 [Client] WhatsApp status: TRYING TO CONNECT (AWAITING SCAN)");
           } else if (currentStatus === "error") {
-            console.log("[Client] WhatsApp status: failing to connect");
+            console.log("❌ [Client] WhatsApp status: FAILING TO CONNECT / ERROR");
           } else {
-            console.log(`[Client] WhatsApp status: ${currentStatus}`);
+            console.log(`📡 [Client] WhatsApp status: ${currentStatus.toUpperCase()}`);
           }
         }
 
@@ -989,19 +989,7 @@ export default function DashboardPage() {
     }
   };
 
-  useEffect(() => {
-    fetchChats();
-    fetchConfig();
-    fetchPromotions();
-    fetchOrders();
-    fetchAnalytics();
-    fetchRevivalCampaigns();
-    let pollInterval = setInterval(() => {
-      fetchChats();
-      fetchOrders();
-    }, 3000);
-    return () => clearInterval(pollInterval);
-  }, [soundEnabled]);
+
 
   useEffect(() => {
     let interval: NodeJS.Timeout;

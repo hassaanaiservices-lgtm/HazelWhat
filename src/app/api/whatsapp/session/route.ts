@@ -6,6 +6,8 @@ import { DB, DB_DIR } from "@/lib/db";
 import path from "path";
 import fs from "fs";
 
+let lastLoggedServerStatus: string | null = null;
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getSessionFromCookies(request);
@@ -15,6 +17,11 @@ export async function GET(request: NextRequest) {
     }
 
     let status = WhatsAppManager.getStatus();
+    
+    if (status.status !== lastLoggedServerStatus) {
+      lastLoggedServerStatus = status.status;
+      console.log(`[Session API] GET status query. Tenant: ${tenantId || 'unknown'}. Connection Status: ${status.status.toUpperCase()}`);
+    }
     
     // Auto-reconnect if auth credentials exist but session is disconnected
     if (status.status === "disconnected") {
