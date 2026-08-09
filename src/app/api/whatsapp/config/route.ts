@@ -17,9 +17,6 @@ export async function GET(request: NextRequest) {
     if (tenant) {
       config = {
         ...config,
-        systemPrompt: (tenant.systemPrompt && tenant.systemPrompt.trim() !== '') ? tenant.systemPrompt : config.systemPrompt,
-        productInfo: (tenant.knowledgeBase && tenant.knowledgeBase.trim() !== '') ? tenant.knowledgeBase : config.productInfo,
-        products: (tenant.products && tenant.products.length > 0) ? tenant.products : (config.products || []),
         deepgramApiKey: tenant.deepgramApiKey || config.deepgramApiKey,
         deepgramVoice: tenant.deepgramVoice || config.deepgramVoice,
         businessName: tenant.businessName || tenant.name || config.businessName
@@ -62,9 +59,6 @@ export async function POST(request: NextRequest) {
       if (tenant) {
         updatedConfig = {
           ...updatedConfig,
-          systemPrompt: (tenant.systemPrompt && tenant.systemPrompt.trim() !== '') ? tenant.systemPrompt : updatedConfig.systemPrompt,
-          productInfo: (tenant.knowledgeBase && tenant.knowledgeBase.trim() !== '') ? tenant.knowledgeBase : updatedConfig.productInfo,
-          products: (tenant.products && tenant.products.length > 0) ? tenant.products : (updatedConfig.products || []),
           businessName: tenant.businessName || tenant.name || updatedConfig.businessName
         };
       }
