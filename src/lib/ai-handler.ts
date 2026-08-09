@@ -892,6 +892,12 @@ Keep their history in mind and treat them like a valued returning customer.`;
       });
 
     // Attach base64 image to the latest user message
+    console.log(`[AI Handler Debug] Resolved Tenant: ${resolvedTenantId}`);
+    console.log(`[AI Handler Debug] Active Tenant ID: ${activeTenant?.id}`);
+    console.log(`[AI Handler Debug] System Prompt: ${fullSystemPrompt.substring(0, 200)}...`);
+    console.log(`[AI Handler Debug] History Count: ${recentHistory.length}`);
+    console.log(`[AI Handler Debug] History:`, JSON.stringify(recentHistory));
+
     if (base64Image) {
       const lastUserMsg = recentHistory[recentHistory.length - 1];
       if (lastUserMsg && lastUserMsg.role === 'user') {
