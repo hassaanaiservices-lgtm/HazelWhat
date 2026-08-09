@@ -1274,11 +1274,22 @@ export class WhatsAppManager {
       caption += `\n\nView Product: ${product.link}`;
     }
     
-    if (product.image && product.image !== "N/A") {
-      await globalForBaileys.baileysSession.sock.sendMessage(jid, { 
-        image: { url: product.image }, 
-        caption 
-      });
+    const isValidUrl = (url?: string) => {
+      if (!url || typeof url !== 'string') return false;
+      const clean = url.trim();
+      return (clean.startsWith('http://') || clean.startsWith('https://')) && !clean.includes('example.com');
+    };
+
+    if (isValidUrl(product.image)) {
+      try {
+        await globalForBaileys.baileysSession.sock.sendMessage(jid, { 
+          image: { url: product.image.trim() }, 
+          caption 
+        });
+      } catch (e) {
+        console.warn("[sendProductCard] Failed to send image, falling back to clean text card:", e);
+        await globalForBaileys.baileysSession.sock.sendMessage(jid, { text: caption });
+      }
     } else {
       await globalForBaileys.baileysSession.sock.sendMessage(jid, { text: caption });
     }

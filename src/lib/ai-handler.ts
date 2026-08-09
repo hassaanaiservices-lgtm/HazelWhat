@@ -329,10 +329,41 @@ function convertAnthropicToolsToOpenAi(tools: any[]): any[] {
   }));
 }
 
+function sanitizeLlmResponseText(text: string): string {
+  if (!text || typeof text !== 'string') return "";
+
+  // 1. Remove <think>...</think> blocks completely
+  let clean = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+
+  // 2. Remove standalone reasoning sentences like "Let me check...", "Actually, there's no user message...", "Hmm, but the conversation..."
+  const reasoningPatterns = [
+    /Let me check the conversation history.*/gi,
+    /Actually, there's no user message.*/gi,
+    /Hmm, but the conversation appears.*/gi,
+    /Wait - there's no customer message.*/gi,
+    /Since there's no user query.*/gi,
+    /Let me greet the customer.*/gi,
+    /Actually, looking at this more carefully.*/gi,
+    /Let me check if there is an actual user message.*/gi,
+    /I don't see an actual user message yet.*/gi,
+    /The conversation appears to be empty.*/gi
+  ];
+
+  for (const pattern of reasoningPatterns) {
+    clean = clean.replace(pattern, "");
+  }
+
+  clean = clean.replace(/\n{3,}/g, "\n\n").trim();
+  return clean;
+}
+
 function convertOpenAiResponseToAnthropic(message: any): any[] {
   const content: any[] = [];
   if (message.content) {
-    content.push({ type: "text", text: message.content });
+    const cleanedText = sanitizeLlmResponseText(message.content);
+    if (cleanedText) {
+      content.push({ type: "text", text: cleanedText });
+    }
   }
   if (message.tool_calls) {
     for (const tc of message.tool_calls) {
@@ -1179,7 +1210,12 @@ Keep their history in mind and treat them like a valued returning customer.`;
     }
 
     if (aiReply) {
+      aiReply = sanitizeLlmResponseText(aiReply);
       aiReply = aiReply.replace(/!\[.*?\]\((https?:\/\/[^\)]+)\)/g, '[MEDIA:$1]');
+    }
+
+    if (!aiReply || !aiReply.trim()) {
+      aiReply = "Walaikum Assalam! Pizza Box Peshawar mein khushamdeed! 🍕 Main aapki order mein kya madad kar sakta hoon?";
     }
 
     const mediaRegex = /\[MEDIA:(.+?)\]/g;
