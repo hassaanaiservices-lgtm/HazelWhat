@@ -46,3 +46,7 @@ next-env.d.ts
 
 # Uploads
 public/uploads/
+
+# Standalone WhatsApp Test Utility
+/whatsapp-standalone-test/node_modules/
+/whatsapp-standalone-test/.auth_state/

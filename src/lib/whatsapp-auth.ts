@@ -62,25 +62,55 @@ export const useSupabaseAuthState = async (tenantId: string): Promise<{ state: A
       keys: {
         get: async (type, ids) => {
           const data: { [_: string]: SignalDataTypeMap[typeof type] } = {};
-          await Promise.all(
-            ids.map(async id => {
-              let value = await readData(`${type}-${id}`);
-              
+          if (ids.length === 0) return data;
+
+          try {
+            const keys = ids.map(id => `${type}-${id}`);
+            const { data: rows, error } = await client
+              .from("whatsapp_auth")
+              .select("key_id, key_data")
+              .eq("tenant_id", tenantId)
+              .in("key_id", keys);
+
+            if (error) {
+              console.error(`[SupabaseAuth] Bulk read error for type ${type}:`, error);
+              return data;
+            }
+
+            const rowMap = new Map<string, any>();
+            if (rows) {
+              rows.forEach((row: any) => {
+                rowMap.set(row.key_id, row.key_data);
+              });
+            }
+
+            for (const id of ids) {
+              const key = `${type}-${id}`;
+              const rawVal = rowMap.get(key);
+              let value = null;
+              if (rawVal) {
+                const rawJsonStr = JSON.stringify(rawVal);
+                value = JSON.parse(rawJsonStr, BufferJSON.reviver);
+              }
+
               if (type === 'app-state-sync-key' && value) {
-                 // Dynamic import of proto to handle reconstruction
-                 try {
-                   const { proto } = await import('@whiskeysockets/baileys');
-                   value = proto.Message.AppStateSyncKeyData.fromObject(value);
-                 } catch (e) {}
+                try {
+                  const { proto } = await import('@whiskeysockets/baileys');
+                  value = proto.Message.AppStateSyncKeyData.fromObject(value);
+                } catch (e) {}
               }
 
               data[id] = value;
-            })
-          );
+            }
+          } catch (e) {
+            console.error(`[SupabaseAuth] Failed bulk read for keys:`, e);
+          }
           return data;
         },
         set: async (data) => {
-          const tasks: Promise<void>[] = [];
+          const toWrite: { key: string; value: any }[] = [];
+          const toDelete: string[] = [];
+
           for (const category in data) {
             const categoryData = data[category as keyof typeof data];
             if (categoryData) {
@@ -88,13 +118,42 @@ export const useSupabaseAuthState = async (tenantId: string): Promise<{ state: A
                 const value = categoryData[id];
                 const key = `${category}-${id}`;
                 if (value) {
-                  tasks.push(writeData(value, key));
+                  toWrite.push({ key, value });
                 } else {
-                  tasks.push(removeData(key));
+                  toDelete.push(key);
                 }
               }
             }
           }
+
+          const tasks: Promise<any>[] = [];
+
+          if (toWrite.length > 0) {
+            const rows = toWrite.map(item => {
+              const jsonString = JSON.stringify(item.value, BufferJSON.replacer);
+              return {
+                tenant_id: tenantId,
+                key_id: item.key,
+                key_data: JSON.parse(jsonString)
+              };
+            });
+            tasks.push((async () => {
+              const { error } = await client.from("whatsapp_auth").upsert(rows);
+              if (error) console.error(`[SupabaseAuth] Bulk upsert error for ${toWrite.length} items:`, error);
+            })());
+          }
+
+          if (toDelete.length > 0) {
+            tasks.push((async () => {
+              const { error } = await client
+                .from("whatsapp_auth")
+                .delete()
+                .eq("tenant_id", tenantId)
+                .in("key_id", toDelete);
+              if (error) console.error(`[SupabaseAuth] Bulk delete error for ${toDelete.length} items:`, error);
+            })());
+          }
+
           await Promise.allSettled(tasks);
         }
       }
