@@ -669,6 +669,7 @@ export class WhatsAppManager {
         }
 
         if (connection === "close") {
+          console.log("[WhatsApp] Connection state: disconnected");
           // If we explicitly disconnected, do not reconnect
           if (globalForBaileys.baileysSession.status === "disconnected") {
             console.log("[Baileys] Socket closed after explicit disconnect. Skipping reconnect.");
@@ -694,7 +695,7 @@ export class WhatsAppManager {
 
             // Only clear creds if WhatsApp explicitly logged out device from phone AFTER repeated retries (5+ retries)
             if (statusCode === DisconnectReason.loggedOut && currentAttempts > 5) {
-              console.log("[Baileys] Device explicitly logged out from WhatsApp phone app after retries. Clearing credentials.");
+              console.log("[WhatsApp] Connection state: failing to connect (explicit logout from phone).");
               globalForBaileys.baileysSession.status = "disconnected";
               globalForBaileys.baileysSession.qrCode = null;
               globalForBaileys.reconnectAttempts = 0;
@@ -717,23 +718,23 @@ export class WhatsAppManager {
 
             if (!globalForBaileys.reconnectTimeout) {
               const backoffMs = Math.min(10000, Math.pow(2, Math.min(currentAttempts, 4)) * 1000);
-              console.log(`[Baileys] Scheduling auto-reconnect attempt #${currentAttempts} in ${backoffMs / 1000}s...`);
+              console.log(`[WhatsApp] Connection state: trying to connect... (attempt #${currentAttempts} scheduled in ${backoffMs / 1000}s)`);
 
               globalForBaileys.reconnectTimeout = setTimeout(() => {
                 globalForBaileys.reconnectTimeout = null;
                 this.startSession(onMessage).catch(err => {
-                  console.error(`[Baileys] Auto-reconnect attempt #${currentAttempts} failed:`, err);
+                  console.error(`[WhatsApp] Connection state: failing to connect. Auto-reconnect attempt #${currentAttempts} failed:`, err);
                 });
               }, backoffMs);
             }
           } else {
-            console.log("[Baileys] No saved credentials found. Setting status to disconnected.");
+            console.log("[WhatsApp] Connection state: disconnected (no saved credentials).");
             globalForBaileys.baileysSession.status = "disconnected";
             globalForBaileys.baileysSession.qrCode = null;
             globalForBaileys.reconnectAttempts = 0;
           }
         } else if (connection === "open") {
-          console.log("[Baileys] Connection established successfully!");
+          console.log("[WhatsApp] Connection state: connected successfully!");
           globalForBaileys.baileysSession.status = "connected";
           globalForBaileys.baileysSession.qrCode = null;
           globalForBaileys.reconnectAttempts = 0;

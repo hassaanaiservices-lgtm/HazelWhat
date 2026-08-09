@@ -543,6 +543,7 @@ export default function DashboardPage() {
   const [newOrderBanner, setNewOrderBanner] = useState<{ id: string; customerName: string; productName: string; amount?: string; time: string } | null>(null);
   const knownOrderIdsRef = useRef<Set<string>>(new Set());
   const isFirstOrderFetchRef = useRef<boolean>(true);
+  const lastLoggedStatusRef = useRef<string | null>(null);
 
   useEffect(() => {
     const storedSound = localStorage.getItem("hazel_order_sound_enabled");
@@ -833,6 +834,23 @@ export default function DashboardPage() {
       const data = await res.json();
       if (data.success && data.session) {
         setSessionData(data.session);
+        const currentStatus = data.session.status;
+        
+        if (currentStatus !== lastLoggedStatusRef.current) {
+          lastLoggedStatusRef.current = currentStatus;
+          if (currentStatus === "connected") {
+            console.log("[Client] WhatsApp status: connected successfully");
+          } else if (currentStatus === "disconnected") {
+            console.log("[Client] WhatsApp status: disconnected");
+          } else if (currentStatus === "connecting") {
+            console.log("[Client] WhatsApp status: trying to connect (awaiting scan)");
+          } else if (currentStatus === "error") {
+            console.log("[Client] WhatsApp status: failing to connect");
+          } else {
+            console.log(`[Client] WhatsApp status: ${currentStatus}`);
+          }
+        }
+
         if (data.session.status === "connected") {
           setStatus("connected");
         } else if (data.session.qrCode) {
