@@ -110,28 +110,14 @@ const TENANTS_SEED = [
 ];
 
 export async function GET(req: NextRequest) {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) {
-    return NextResponse.json({ error: "Supabase not configured" }, { status: 500 });
-  }
-
-  try {
-    const { data: tenants } = await supabase.from('tenants').select('id, business_name, status');
-    const { data: configs } = await supabase.from('tenant_configs').select('tenant_id, business_name');
-    
-    return NextResponse.json({
-      message: "Current database state",
-      tenants: tenants || [],
-      tenant_configs: configs || [],
-      tenants_count: tenants?.length || 0,
-      configs_count: configs?.length || 0,
-    });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
-  }
+  return executeSeed();
 }
 
 export async function POST(req: NextRequest) {
+  return executeSeed();
+}
+
+async function executeSeed() {
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: "Supabase not configured" }, { status: 500 });
