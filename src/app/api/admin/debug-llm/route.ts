@@ -35,13 +35,13 @@ export async function GET(req: NextRequest) {
     try {
       const anthropic = new Anthropic({ apiKey: anthropicKey.trim() });
       const res = await anthropic.messages.create({
-        model: "claude-3-haiku-20240307",
+        model: "claude-3-5-sonnet-latest",
         max_tokens: 50,
         messages: [{ role: "user", content: "Say hello" }]
       });
       report.test_result = {
         status: "SUCCESS",
-        model_used: "claude-3-haiku-20240307",
+        model_used: "claude-3-5-sonnet-latest",
         response: res.content[0]
       };
     } catch (err: any) {
