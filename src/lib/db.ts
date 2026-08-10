@@ -309,8 +309,8 @@ export class DB {
     if (!supabase) return [];
     try {
       let query = supabase.from('chat_messages').select('*').eq('phone', phoneNumber);
-      if (tenantId && tenantId !== 'admin') {
-        query = query.in('tenant_id', [tenantId, 'admin']);
+      if (tenantId) {
+        query = query.eq('tenant_id', tenantId);
       }
       const { data, error } = await query.order('timestamp', { ascending: true });
       if (error || !data) return [];
@@ -334,9 +334,8 @@ export class DB {
     if (!supabase) return {};
     try {
       let query = supabase.from('chat_messages').select('*');
-      if (tenantId && tenantId !== 'admin') {
-        // Include messages stored under this tenant OR under the legacy 'admin' bucket
-        query = query.in('tenant_id', [tenantId, 'admin']);
+      if (tenantId) {
+        query = query.eq('tenant_id', tenantId);
       }
       // If tenantId is null or 'admin', fetch everything (admin view)
       const { data, error } = await query.order('timestamp', { ascending: true });
@@ -549,8 +548,8 @@ export class DB {
     if (!supabase) return undefined;
     try {
       let query = supabase.from('customers').select('*').eq('phone', phone);
-      if (tenantId && tenantId !== 'admin') {
-        query = query.in('tenant_id', [tenantId, 'admin']);
+      if (tenantId) {
+        query = query.eq('tenant_id', tenantId);
       }
       const { data } = await query.limit(1);
       if (!data || data.length === 0) return undefined;
@@ -610,8 +609,8 @@ export class DB {
     if (!supabase) return [];
     try {
       let query = supabase.from('customers').select('*');
-      if (tenantId && tenantId !== 'admin') {
-        query = query.in('tenant_id', [tenantId, 'admin']);
+      if (tenantId) {
+        query = query.eq('tenant_id', tenantId);
       }
       const { data } = await query;
       return (data || []).map((c: any) => ({
