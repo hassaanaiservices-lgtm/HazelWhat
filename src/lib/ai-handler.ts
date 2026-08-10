@@ -33,19 +33,19 @@ function getEnvKey(keyName: string): string {
 
 function getApiKey(config: any): string {
   const keys = [
-    process.env["DEEPSEEK_API_KEY"],
-    getEnvKey("DEEPSEEK_API_KEY"),
-    config.apiKey,
-    config.anthropicApiKey,
-    config.openRouterApiKey,
-    process.env["API_KEY"],
-    getEnvKey("API_KEY"),
-    process.env["OPENAI_API_KEY"],
-    getEnvKey("OPENAI_API_KEY"),
     process.env["ANTHROPIC_API_KEY"],
     getEnvKey("ANTHROPIC_API_KEY"),
+    config.anthropicApiKey,
+    config.apiKey,
+    process.env["DEEPSEEK_API_KEY"],
+    getEnvKey("DEEPSEEK_API_KEY"),
+    config.openRouterApiKey,
+    process.env["OPENAI_API_KEY"],
+    getEnvKey("OPENAI_API_KEY"),
     process.env["OPENROUTER_API_KEY"],
     getEnvKey("OPENROUTER_API_KEY"),
+    process.env["API_KEY"],
+    getEnvKey("API_KEY"),
     process.env["Api key"],
     getEnvKey("Api key"),
     process.env["Api_key"],
@@ -418,15 +418,30 @@ async function callLLM(
 
   if (keyType === "anthropic") {
     const anthropic = new Anthropic({ apiKey: trimmed });
-    const res = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 2000,
-      system: systemPrompt,
-      messages: messages as any,
-      tools: tools.length > 0 ? tools : undefined,
-      temperature: temperature,
-    });
-    return res;
+    const anthropicModels = [
+      "claude-3-5-haiku-latest",
+      "claude-3-5-sonnet-latest",
+      "claude-3-haiku-20240307"
+    ];
+    let lastErr: any = null;
+    for (const model of anthropicModels) {
+      try {
+        console.log(`[callLLM] Attempting Anthropic model ${model}...`);
+        const res = await anthropic.messages.create({
+          model: model,
+          max_tokens: 2000,
+          system: systemPrompt,
+          messages: messages as any,
+          tools: tools.length > 0 ? tools : undefined,
+          temperature: temperature,
+        });
+        return res;
+      } catch (err: any) {
+        console.error(`[callLLM] Anthropic model ${model} error:`, err.message || err);
+        lastErr = err;
+      }
+    }
+    throw lastErr || new Error("Anthropic API call failed for all models.");
   } else if (keyType === "openrouter") {
     const models = [
       "anthropic/claude-haiku-4.5",
