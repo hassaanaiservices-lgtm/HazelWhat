@@ -419,12 +419,12 @@ async function callLLM(
   if (keyType === "anthropic") {
     const anthropic = new Anthropic({ apiKey: trimmed });
     const anthropicModels = [
+      "claude-sonnet-4-6",
+      "claude-haiku-4-5-20251001",
+      "claude-sonnet-4-5-20250929",
+      "claude-opus-4-6",
       "claude-3-5-sonnet-20241022",
-      "claude-3-5-haiku-20241022",
-      "claude-3-haiku-20240307",
-      "claude-3-sonnet-20240229",
-      "claude-3-7-sonnet-20250219",
-      "claude-3-5-sonnet-latest"
+      "claude-3-haiku-20240307"
     ];
     let lastErr: any = null;
     for (const model of anthropicModels) {
