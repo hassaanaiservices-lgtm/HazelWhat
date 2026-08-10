@@ -332,26 +332,48 @@ function convertAnthropicToolsToOpenAi(tools: any[]): any[] {
 function sanitizeLlmResponseText(text: string): string {
   if (!text || typeof text !== 'string') return "";
 
-  // 1. Remove <think>...</think> blocks completely
+  // 1. Remove <think>...</think> blocks completely (DeepSeek reasoning)
   let clean = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
 
-  // 2. Remove standalone reasoning sentences like "Let me check...", "Actually, there's no user message...", "Hmm, but the conversation..."
+  // 2. Remove incomplete <think> tags (if response was cut off mid-reasoning)
+  clean = clean.replace(/<think>[\s\S]*/gi, "");
+
+  // 3. Remove standalone reasoning/internal monologue sentences from DeepSeek
   const reasoningPatterns = [
-    /Let me check the conversation history.*/gi,
-    /Actually, there's no user message.*/gi,
-    /Hmm, but the conversation appears.*/gi,
-    /Wait - there's no customer message.*/gi,
-    /Since there's no user query.*/gi,
-    /Let me greet the customer.*/gi,
-    /Actually, looking at this more carefully.*/gi,
-    /Let me check if there is an actual user message.*/gi,
-    /I don't see an actual user message yet.*/gi,
-    /The conversation appears to be empty.*/gi
+    /^Let me check.*$/gim,
+    /^Actually,? (?:there's|looking|I|the).*$/gim,
+    /^Hmm,? (?:but|let|the|I).*$/gim,
+    /^Wait[,!\- ]+.*$/gim,
+    /^Since there's no.*$/gim,
+    /^I (?:don't see|need to|should|will).*(?:message|check|analyze|review|look).*$/gim,
+    /^The conversation (?:appears|seems|history).*$/gim,
+    /^Looking at (?:the|this).*$/gim,
+    /^OK(?:ay)?,? (?:so|let|the|I).*$/gim,
+    /^Now,? (?:let me|I'll|the).*$/gim,
+    /^First,? (?:let me|I'll|I need).*$/gim,
+    /^Based on (?:the system prompt|my instructions|the catalog).*$/gim,
+    /^The user (?:is asking|wants|said|seems).*$/gim,
+    /^I (?:see|notice) (?:that |the ).*$/gim,
+    /^So (?:the user|I should|let me).*$/gim,
   ];
 
   for (const pattern of reasoningPatterns) {
     clean = clean.replace(pattern, "");
   }
+
+  // 4. Remove any remaining lines that look like internal reasoning (starts with analysis language)
+  clean = clean.split('\n').filter(line => {
+    const trimmed = line.trim();
+    // Keep empty lines (they become paragraph breaks)
+    if (!trimmed) return true;
+    // Remove lines that are pure reasoning
+    if (/^(Alright|OK|Okay|Hmm|Wait|Let me|Actually|Now|First|So|Based on|Looking|I see|I notice|I need|I should|I will|The user|The conversation|Since there)/i.test(trimmed)) {
+      // But keep if it contains customer-facing content (emoji, pricing, product names)
+      if (/[🍕🔥✨😊👋❤️💰Rs\.]/.test(trimmed) || /\d{3,}/.test(trimmed)) return true;
+      return false;
+    }
+    return true;
+  }).join('\n');
 
   clean = clean.replace(/\n{3,}/g, "\n\n").trim();
   return clean;
@@ -858,21 +880,41 @@ Keep their history in mind and treat them like a valued returning customer.`;
     const botPurposeMode = config.botMode || "both";
     fullSystemPrompt += `\n\n=== BOT MODE: ${botPurposeMode.toUpperCase()} (ORDERS & APPOINTMENTS SUPPORTED) ===\n`;
 
-    fullSystemPrompt += `\n\n=== CONVERSATIONAL BEHAVIOR & INTEGRATION RULES ===
-1. HUMAN BRAND VOICE: You are an intelligent team member for ${activeBusinessName}. Be natural, smart, helpful, and direct.
-2. NO REPEATING GREETINGS: Check the chat history! If you have ALREADY greeted the customer in recent messages, DO NOT say "Walaikum Assalam" or repeat the initial greeting again! Directly answer their latest question.
-3. HANDLING MENU & PRODUCT INQUIRIES: When a user asks what products/pizzas you have, asks to see the menu, or says they want to eat (e.g., "pizza kon sa hai", "kya items hain", "pizza khana", "menu deikhao"):
-   - IMMEDIATELY answer their question by listing 2-4 popular items/pizzas from the Catalog along with their prices or flavors!
-   - ALWAYS call the send_product_card tool for 2-3 key products so visual cards are sent to the WhatsApp chat!
-4. SYSTEM PROMPT & CATALOG ACCURACY: Rely strictly on the Product Information & Catalog provided at the top. Quote EXACT names and prices from the catalog.
-5. PRODUCT CARDS: When presenting items, call send_product_card. Do NOT output raw image URLs or markdown image syntax in text.
-6. ORDER TAKING: When a customer asks for a product or wants to order, call place_order immediately with any details provided and ask naturally for missing details (size, flavor, address, phone).
-7. APPOINTMENTS: Call bookAppointment only if the user specifically requests a call or meeting.
-8. VARIATIONS & PRICING: If a product has variations (like different sizes), show the product card with price parameter set to "Hidden", then ask the customer for their desired size before confirming the price.
-9. PROACTIVE FOLLOW-UPS: Whenever you tell the user you will follow up or check back later, call the schedule_followup tool.
-10. CRM PROFILES: Use update_customer_profile when a user shares their name or strong buying interest.
-11. VOICE NOTES: When a user sends a voice note (marked with 🎤 [Voice Note]), answer their request directly and naturally.
-12. LANGUAGE MATCHING: Match the user's language (Urdu / Roman Urdu, Pashto, Punjabi, English) naturally.`;
+    fullSystemPrompt += `\n\n=== CRITICAL RULES FOR ORDERS & APPOINTMENT BOOKINGS ===
+1. When showing a product to the customer, you must ALWAYS call the send_product_card function with the correct product data.
+2. You must NEVER write product images, links, or image URLs in the text message! Always use send_product_card tool instead.
+3. If a product has SIZE VARIATIONS (Small, Medium, Large) with different prices, you MUST:
+   a. First call send_product_card with price set to "Hidden" (to show the card without a price)
+   b. Then ask the customer: "Konsa size chahiye? Small / Medium / Large?" and tell them each size's price.
+   c. After the customer picks a size, confirm the exact price from the catalog.
+4. BE CONVERSATIONAL AND NATURAL. You are a real team member for ${activeBusinessName}, not a robotic template machine.
+   - If a user just says "hi" or "AOA", reply with a SHORT warm greeting and ask how you can help. Do NOT immediately dump the full menu.
+   - If a user says "kia haal hai" or asks how you are, reply naturally like a human (e.g. "Main theek hoon, shukriya! Aap batao kaise madad karun?") — do NOT ignore the casual question.
+   - Keep replies SHORT (2-4 sentences). This is WhatsApp, not an email.
+5. NO REPEATING GREETINGS: Look at the recent chat history provided! If you have ALREADY greeted this customer, DO NOT say Walaikum Assalam again. Just answer their latest question directly.
+6. ORDER COLLECTION: When a customer wants to order something, follow these steps:
+   a. Confirm the product name and size/variation (ask if not specified)
+   b. Ask for delivery address
+   c. Ask for contact number
+   d. Ask for payment method (COD, JazzCash, EasyPaisa)
+   e. Call the place_order tool with ALL collected details
+   f. Confirm the order to the customer with a summary
+7. APPOINTMENTS & CALL BOOKINGS: When a customer wants to book a call, meeting, or appointment:
+   a. Ask what service/call type they need (e.g., Discovery Call, Consultation)
+   b. Call checkAvailability tool to get available time slots for their desired date
+   c. Present available slots and let them choose
+   d. Call bookAppointment tool with the confirmed details
+   e. Confirm the booking with date, time, and service name
+8. CATALOG ACCURACY: ONLY quote prices and products from the Product Information & Catalog provided above. NEVER invent products, prices, or services that are not in the catalog.
+9. PROACTIVE FOLLOW-UPS: If you promise to check back or follow up with the customer later, you MUST call schedule_followup tool with the appropriate time.
+10. CRM PROFILE UPDATES: When a customer tells you their name, shows strong buying interest, or reaches a milestone in the conversation, call update_customer_profile to save their info and update their pipeline stage.
+11. VOICE NOTES: When you receive a voice note (marked with 🎤 [Voice Note] followed by the transcription), respond directly to what they said. Treat the transcription as if the customer typed it.
+12. 4-LANGUAGE SUPPORT: Automatically detect the user's language and ALWAYS respond in the SAME language:
+   - Roman Urdu: "AOA! Shukriya contact karne ka."
+   - Urdu: "السلام علیکم! شکریہ"
+   - Pashto: "سلام! مننه"
+   - English: "Hello! Thanks for reaching out."
+   Keep vocabulary natural and local. Never mix languages awkwardly.`;
 
     if (config.enabledFeatures && config.enabledFeatures.length > 0) {
       fullSystemPrompt += "\n\n=== ADVANCED FEATURES ENABLED ===\n";
@@ -1215,7 +1257,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
     }
 
     if (!aiReply || !aiReply.trim()) {
-      aiReply = "Walaikum Assalam! Pizza Box Peshawar mein khushamdeed! 🍕 Main aapki order mein kya madad kar sakta hoon?";
+      aiReply = `AOA! ${activeBusinessName} mein khush amdeed! 😊 Main aapki kya madad kar sakta hoon?`;
     }
 
     const mediaRegex = /\[MEDIA:(.+?)\]/g;

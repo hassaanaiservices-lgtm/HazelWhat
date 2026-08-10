@@ -441,7 +441,7 @@ export class DB {
         console.warn('[DB/Supabase] getConfig query error:', cfgError.message);
       }
 
-      // Priority: tenant_configs > tenants table > Pizza Box default (if t-1004) > empty string
+      // Priority: tenant_configs > tenants table > Pizza Box default (if t-1004) > DEFAULT_CONFIG (never empty!)
       let systemPrompt = 
         (data?.system_prompt && data.system_prompt.trim() !== '') ? data.system_prompt :
         (tenantRecord?.systemPrompt && tenantRecord.systemPrompt.trim() !== '') ? tenantRecord.systemPrompt :
@@ -453,6 +453,7 @@ export class DB {
         (tenantRecord?.productKnowledgeBase && tenantRecord.productKnowledgeBase.trim() !== '') ? tenantRecord.productKnowledgeBase :
         '';
 
+      // Pizza Box specific fallback
       if (resolvedTenantId === 't-1004') {
         if (!systemPrompt || systemPrompt.trim() === '') {
           systemPrompt = PIZZA_BOX_DEFAULT_SYSTEM_PROMPT;
@@ -460,6 +461,12 @@ export class DB {
         if (!productInfo || productInfo.trim() === '') {
           productInfo = PIZZA_BOX_DEFAULT_KNOWLEDGE_BASE;
         }
+      }
+
+      // Ultimate fallback: NEVER leave systemPrompt empty for any tenant
+      if (!systemPrompt || systemPrompt.trim() === '') {
+        systemPrompt = DEFAULT_CONFIG.systemPrompt;
+        console.warn(`[DB/getConfig] WARNING: No system prompt found for ${resolvedTenantId}. Using DEFAULT_CONFIG fallback.`);
       }
 
       const products = (data?.products && data.products.length > 0)
