@@ -34,16 +34,34 @@ export async function GET(req: NextRequest) {
   if (anthropicKey) {
     try {
       const anthropic = new Anthropic({ apiKey: anthropicKey.trim() });
-      const res = await anthropic.messages.create({
-        model: "claude-3-5-sonnet-latest",
-        max_tokens: 50,
-        messages: [{ role: "user", content: "Say hello" }]
-      });
-      report.test_result = {
-        status: "SUCCESS",
-        model_used: "claude-3-5-sonnet-latest",
-        response: res.content[0]
-      };
+      const anthropicModels = [
+        "claude-3-5-sonnet-20241022",
+        "claude-3-5-haiku-20241022",
+        "claude-3-haiku-20240307",
+        "claude-3-sonnet-20240229",
+        "claude-3-7-sonnet-20250219",
+        "claude-3-5-sonnet-latest"
+      ];
+      let lastError: any = null;
+      for (const model of anthropicModels) {
+        try {
+          console.log(`[debug-llm] Trying ${model}...`);
+          const res = await anthropic.messages.create({
+            model: model,
+            max_tokens: 50,
+            messages: [{ role: "user", content: "Say hello" }]
+          });
+          report.test_result = {
+            status: "SUCCESS",
+            model_used: model,
+            response: res.content[0]
+          };
+          return NextResponse.json(report);
+        } catch (e: any) {
+          lastError = e;
+        }
+      }
+      throw lastError;
     } catch (err: any) {
       report.test_result = {
         status: "ERROR",
