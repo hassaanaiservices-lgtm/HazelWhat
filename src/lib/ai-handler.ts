@@ -445,6 +445,14 @@ async function callLLM(
         lastErr = err;
       }
     }
+    
+    // BACKWARD FALLBACK TO DEEPSEEK IF ANTHROPIC FAILS Completely
+    const deepseekKey = process.env.DEEPSEEK_API_KEY || getEnvKey("DEEPSEEK_API_KEY") || "";
+    if (deepseekKey) {
+      console.warn("[callLLM] Anthropic failed. Falling back to DeepSeek...");
+      return callLLM(deepseekKey, systemPrompt, messages, tools, temperature);
+    }
+    
     throw lastErr || new Error("Anthropic API call failed for all models.");
   } else if (keyType === "openrouter") {
     const models = [
