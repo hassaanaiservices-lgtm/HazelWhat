@@ -1347,7 +1347,7 @@ export class DB {
       try {
         const { fetchTenantsFromSupabase } = await import('./supabase');
         const fetched = await fetchTenantsFromSupabase();
-        if (fetched && fetched.length > 0) {
+        if (fetched) {
           DB.tenantsMemoryStore = fetched;
           return fetched;
         }
