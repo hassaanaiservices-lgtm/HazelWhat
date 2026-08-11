@@ -1343,35 +1343,19 @@ export class DB {
   ];
 
   static async getTenants(): Promise<Tenant[]> {
-    let supabaseTenants: Tenant[] = [];
     if (supabase) {
       try {
         const { fetchTenantsFromSupabase } = await import('./supabase');
         const fetched = await fetchTenantsFromSupabase();
         if (fetched && fetched.length > 0) {
-          supabaseTenants = fetched;
+          DB.tenantsMemoryStore = fetched;
+          return fetched;
         }
       } catch (e) {
         console.error('Failed to fetch tenants from Supabase:', e);
       }
     }
-    // Supabase always wins — only fall back to in-memory defaults for keys NOT in Supabase
-    const map = new Map<string, Tenant>();
-    DB.tenantsMemoryStore.forEach(t => map.set(t.id, t));
-    supabaseTenants.forEach(t => {
-      const existing = map.get(t.id);
-      // Deep merge: Supabase fields override memory, but keep memory fields not present in Supabase
-      map.set(t.id, {
-        ...existing,
-        ...t,
-        // Always prefer non-empty Supabase values for these critical fields
-        systemPrompt: (t.systemPrompt && t.systemPrompt.trim()) ? t.systemPrompt : (existing?.systemPrompt || ''),
-        knowledgeBase: (t.knowledgeBase && t.knowledgeBase.trim()) ? t.knowledgeBase : (existing?.knowledgeBase || ''),
-        productKnowledgeBase: (t.productKnowledgeBase && t.productKnowledgeBase.trim()) ? t.productKnowledgeBase : (existing?.productKnowledgeBase || ''),
-        products: (t.products && t.products.length > 0) ? t.products : (existing?.products || []),
-      });
-    });
-    return Array.from(map.values());
+    return DB.tenantsMemoryStore;
   }
 
   static async deleteTenant(tenantId: string): Promise<boolean> {
@@ -1472,10 +1456,7 @@ export class DB {
   }
 
   static async saveTenantsAsync(tenants: Tenant[]): Promise<boolean> {
-    const map = new Map<string, Tenant>();
-    DB.tenantsMemoryStore.forEach(t => map.set(t.id, t));
-    tenants.forEach(t => map.set(t.id, t));
-    DB.tenantsMemoryStore = Array.from(map.values());
+    DB.tenantsMemoryStore = tenants;
 
     if (!supabase) return true;
     try {
