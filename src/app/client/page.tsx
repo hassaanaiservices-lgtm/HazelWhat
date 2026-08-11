@@ -1811,8 +1811,16 @@ export default function DashboardPage() {
           <button onClick={() => setActiveTab('inbox')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'inbox' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
             <Inbox className={`h-4 w-4 ${activeTab === 'inbox' ? 'text-purple-600' : 'text-slate-400'}`} /> Inbox
           </button>
-          <button onClick={() => setActiveTab('orders')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'orders' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
-            <ShoppingCart className={`h-4 w-4 ${activeTab === 'orders' ? 'text-purple-600' : 'text-slate-400'}`} /> Orders
+          <button onClick={() => setActiveTab('orders')} className={`flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'orders' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+            <div className="flex items-center gap-3">
+              <ShoppingCart className={`h-4 w-4 ${activeTab === 'orders' ? 'text-purple-600' : 'text-slate-400'}`} />
+              <span>Orders</span>
+            </div>
+            {orders && orders.length > 0 && (
+              <span key={orders.length} className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-purple-600 px-1.5 text-[10px] font-bold text-white shadow-sm animate-pop-in">
+                {orders.length}
+              </span>
+            )}
           </button>
           <button onClick={() => setActiveTab('contacts')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'contacts' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
             <Users className={`h-4 w-4 ${activeTab === 'contacts' ? 'text-purple-600' : 'text-slate-400'}`} /> Contacts

@@ -1135,7 +1135,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
           let toolResult = "";
 
           if (toolCall.name === "checkAvailability") {
-            const booked = await DB.getAppointmentsByDate(args.date, customer?.tenantId);
+            const booked = await DB.getAppointmentsByDate(args.date, resolvedTenantId);
             const bookedTimes = booked.map(a => a.time);
             const allHours = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
             const available = allHours.filter(h => !bookedTimes.includes(h));
@@ -1143,12 +1143,12 @@ Keep their history in mind and treat them like a valued returning customer.`;
           } 
           else if (toolCall.name === "bookAppointment") {
             const userName = args.name || customer?.name || from;
-            const success = await DB.bookAppointment(from, userName, args.service, args.date, args.time, args.notes, customer?.tenantId);
-            await DB.updateCustomer(from, { pipelineStage: "completed", name: userName }, customer?.tenantId);
+            const success = await DB.bookAppointment(from, userName, args.service, args.date, args.time, args.notes, resolvedTenantId);
+            await DB.updateCustomer(from, { pipelineStage: "completed", name: userName }, resolvedTenantId);
             toolResult = JSON.stringify({ success: true, message: "Appointment/Call booked successfully and recorded in dashboard." });
           }
           else if (toolCall.name === "cancelAppointment") {
-            const success = await DB.cancelAppointment(from, args.date, args.time, customer?.tenantId);
+            const success = await DB.cancelAppointment(from, args.date, args.time, resolvedTenantId);
             toolResult = JSON.stringify({ success, message: success ? "Appointment cancelled successfully." : "No such appointment found to cancel." });
           }
           else if (toolCall.name === "send_product_card") {
@@ -1180,8 +1180,8 @@ Keep their history in mind and treat them like a valued returning customer.`;
                 customerName: customer?.name || from,
                 notes: args.notes
               };
-              await DB.addOrder(from, orderData, customer?.tenantId);
-              await DB.updateCustomer(from, { pipelineStage: "completed" }, customer?.tenantId);
+              await DB.addOrder(from, orderData, resolvedTenantId);
+              await DB.updateCustomer(from, { pipelineStage: "completed" }, resolvedTenantId);
               toolResult = JSON.stringify({ success: true, message: "Order placed and saved to database successfully. You may now confirm the final order details to the user." });
             } catch (err: any) {
               console.error("[AI Handler] place_order error:", err);
@@ -1190,7 +1190,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
           }
           else if (toolCall.name === "update_customer_profile") {
             try {
-              const customerRec = await DB.getCustomer(from, customer?.tenantId);
+              const customerRec = await DB.getCustomer(from, resolvedTenantId);
               const currentTags = customerRec?.tags || [];
               let newTags = [...currentTags];
 
@@ -1211,7 +1211,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
               if (args.name) updates.name = args.name;
               if (args.stage) updates.pipelineStage = args.stage;
 
-              await DB.updateCustomer(from, updates, customer?.tenantId);
+              await DB.updateCustomer(from, updates, resolvedTenantId);
               toolResult = JSON.stringify({ success: true, message: "Customer profile updated successfully." });
             } catch (err: any) {
               console.error("[AI Handler] update_customer_profile error:", err);
@@ -1220,7 +1220,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
           }
           else if (toolCall.name === "schedule_followup") {
             try {
-              await DB.cancelPendingFollowUps(from, customer?.tenantId);
+              await DB.cancelPendingFollowUps(from, resolvedTenantId);
               await DB.addScheduledFollowUp({
                 id: Math.random().toString(36).substring(2, 9),
                 phone: from,
@@ -1228,7 +1228,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
                 context: args.message_context,
                 status: "pending",
                 createdAt: new Date().toISOString()
-              }, customer?.tenantId);
+              }, resolvedTenantId);
               toolResult = JSON.stringify({ success: true, message: "Follow-up scheduled successfully in the database." });
             } catch (err: any) {
               console.error("[AI Handler] schedule_followup error:", err);

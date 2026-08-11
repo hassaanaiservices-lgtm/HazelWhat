@@ -43,3 +43,14 @@ body {
 .dash-gradient-badge {
   background: linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%);
 }
+
+@keyframes pop-in {
+  0% { transform: scale(0.6); opacity: 0; }
+  50% { transform: scale(1.25); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.animate-pop-in {
+  animation: pop-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
