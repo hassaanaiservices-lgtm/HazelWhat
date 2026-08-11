@@ -1321,7 +1321,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
 
       sentMsg = await WhatsAppManager.sendMessage(from, aiReply);
       console.log(`[AI Handler] Replied to ${from}: ${aiReply}`);
-      await DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: aiReply || "[Media Sent]" }, resolvedTenantId);
+      await DB.addChatMessage(from, { id: "ai_" + (sentMsg?.key?.id || ""), role: "assistant", content: aiReply || "[Media Sent]" }, resolvedTenantId);
     }
     
   } catch (error) {
