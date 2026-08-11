@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DB } from "@/lib/db";
 import { signJWT } from "@/lib/auth-session";
+import bcrypt from "bcryptjs";
 
 export const dynamic = 'force-dynamic';
 
@@ -29,11 +30,17 @@ export async function POST(request: NextRequest) {
     const cleanUsername = username.trim().toLowerCase();
     const rememberMe = remember !== false;
 
-    // 1. Check Super Admin Login (Hardcoded Fallback)
-    if (
-      (cleanUsername === "admin@hazelwhat.com" || cleanUsername === "admin") &&
-      (password === "admin123" || password === "AdminPass123")
-    ) {
+    // 1. Check Super Admin Login (using SUPER_ADMIN_PASSWORD env)
+    const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD;
+    if (!superAdminPassword) {
+      throw new Error("CRITICAL RUNTIME ERROR: SUPER_ADMIN_PASSWORD environment variable is not defined!");
+    }
+
+    const isSuperAdminUser = (cleanUsername === "admin@hazelwhat.com" || cleanUsername === "admin");
+    const superAdminPassHash = bcrypt.hashSync(superAdminPassword, 10);
+    const isSuperAdminPass = bcrypt.compareSync(password.trim(), superAdminPassHash);
+
+    if (isSuperAdminUser && isSuperAdminPass) {
       const sessionData = {
         role: "admin",
         tenantId: "admin",
@@ -61,12 +68,31 @@ export async function POST(request: NextRequest) {
       });
 
       if (adminMatch) {
-        const validPass = (adminMatch.password || "AdminPass123").trim();
+        const storedPass = (adminMatch.password || "").trim();
         const inputPass = password.trim();
-        const isMaster =
-          inputPass === "admin123" || inputPass === "AdminPass123" || inputPass === "123456";
+        
+        let passMatches = false;
+        const isBcrypt = storedPass.startsWith("$2a$") || storedPass.startsWith("$2b$") || storedPass.startsWith("$2y$");
 
-        if (inputPass === validPass || isMaster) {
+        if (isBcrypt) {
+          passMatches = bcrypt.compareSync(inputPass, storedPass);
+        } else {
+          // Legacy plaintext fallback
+          passMatches = inputPass === storedPass || inputPass.toLowerCase() === storedPass.toLowerCase();
+          if (passMatches) {
+            // Lazy migration: hash immediately and update DB
+            const hashed = bcrypt.hashSync(inputPass, 10);
+            adminMatch.password = hashed;
+            try {
+              await DB.savePartners([adminMatch]);
+              console.log(`[Auth Migration] Migrated plaintext password for partner: ${adminMatch.email}`);
+            } catch (err) {
+              console.error("[Auth Migration] Partner password migration failed:", err);
+            }
+          }
+        }
+
+        if (passMatches) {
           const sessionData = {
             role: "admin",
             tenantId: "admin",
@@ -99,25 +125,30 @@ export async function POST(request: NextRequest) {
 
     // Flexible & Robust Password Validation for Client Portal
     const inputPassword = password.trim();
-    const validPassword = (tenant.clientPassword || "").trim();
-    const fallbackPassword = `client${tenant.clientNumber}`.trim();
-    const isMasterPassword =
-      inputPassword.startsWith("HazelPass@") ||
-      inputPassword === "123456" ||
-      inputPassword === "admin123" ||
-      inputPassword === "AdminPass123" ||
-      inputPassword === "client123";
+    const storedPass = (tenant.clientPassword || "").trim();
 
-    const matchesValid =
-      validPassword &&
-      (inputPassword === validPassword ||
-        inputPassword.toLowerCase() === validPassword.toLowerCase());
-    const matchesFallback =
-      fallbackPassword &&
-      (inputPassword === fallbackPassword ||
-        inputPassword.toLowerCase() === fallbackPassword.toLowerCase());
+    let passMatches = false;
+    const isBcrypt = storedPass.startsWith("$2a$") || storedPass.startsWith("$2b$") || storedPass.startsWith("$2y$");
 
-    if (validPassword && !matchesValid && !matchesFallback && !isMasterPassword) {
+    if (isBcrypt) {
+      passMatches = bcrypt.compareSync(inputPassword, storedPass);
+    } else {
+      // Legacy plaintext fallback
+      passMatches = !!storedPass && (inputPassword === storedPass || inputPassword.toLowerCase() === storedPass.toLowerCase());
+      if (passMatches) {
+        // Lazy migration: hash immediately and update DB
+        const hashed = bcrypt.hashSync(inputPassword, 10);
+        tenant.clientPassword = hashed;
+        try {
+          await DB.saveTenants([tenant]);
+          console.log(`[Auth Migration] Migrated plaintext password for tenant: ${tenant.clientUsername}`);
+        } catch (err) {
+          console.error("[Auth Migration] Tenant password migration failed:", err);
+        }
+      }
+    }
+
+    if (!passMatches) {
       return NextResponse.json(
         { success: false, error: "Invalid username or password" },
         { status: 401 }

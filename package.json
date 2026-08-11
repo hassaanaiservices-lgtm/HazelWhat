@@ -15,6 +15,7 @@
     "@anthropic-ai/sdk": "^0.115.0",
     "@supabase/supabase-js": "^2.112.0",
     "@whiskeysockets/baileys": "^7.0.0-rc13",
+    "bcryptjs": "^3.0.3",
     "cheerio": "^1.2.0",
     "emoji-picker-react": "^4.19.1",
     "jimp": "^1.6.1",
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
