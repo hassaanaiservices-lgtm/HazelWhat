@@ -23,7 +23,13 @@ export async function POST(req: NextRequest) {
       sentMsg = await WhatsAppManager.sendMedia(to, buffer, mimetype, fileName, undefined, isVoiceNote);
       
       const displayContent = isVoiceNote ? "🎤 [Voice Note]" : `📎 [Attachment] ${fileName || ""}`;
-      await DB.addChatMessage(to, { id: "agent_" + (sentMsg?.key?.id || ""), role: "assistant", content: displayContent }, tenantId);
+      await DB.addChatMessage(to, { 
+        id: "agent_" + (sentMsg?.key?.id || ""), 
+        role: "assistant", 
+        content: displayContent,
+        mediaUrl: mediaBase64,
+        mediaType: mimetype
+      }, tenantId);
     } else {
       if (!content) {
         return NextResponse.json({ success: false, error: "Missing 'content'" }, { status: 400 });

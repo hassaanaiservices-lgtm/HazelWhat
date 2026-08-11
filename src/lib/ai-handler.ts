@@ -778,7 +778,12 @@ export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
         mediaType: audioMime
       }, resolvedTenantId);
     } else {
-      await DB.addChatMessage(from, { role: "user", content: hasImage ? `[Image] ${content}` : content }, resolvedTenantId);
+      await DB.addChatMessage(from, { 
+        role: "user", 
+        content: hasImage ? `[Image] ${content}` : content,
+        mediaUrl: base64Image ? `data:image/jpeg;base64,${base64Image}` : undefined,
+        mediaType: hasImage ? "image/jpeg" : undefined
+      }, resolvedTenantId);
     }
     
     const existingCustomer = await DB.getCustomer(from, resolvedTenantId);
@@ -1295,8 +1300,17 @@ Keep their history in mind and treat them like a valued returning customer.`;
         if (res.ok) {
           const buffer = Buffer.from(await res.arrayBuffer());
           const mimetype = res.headers.get('content-type') || 'image/jpeg';
-          await WhatsAppManager.sendMedia(from, buffer, mimetype);
+          const sentMsgObj = await WhatsAppManager.sendMedia(from, buffer, mimetype);
           console.log(`[AI Handler] Sent media to ${from}`);
+
+          const base64Media = buffer.toString('base64');
+          await DB.addChatMessage(from, {
+            id: "ai_" + (sentMsgObj?.key?.id || ""),
+            role: "assistant",
+            content: mimetype.startsWith('image/') ? `[Image]` : `📎 [Attachment]`,
+            mediaUrl: `data:${mimetype};base64,${base64Media}`,
+            mediaType: mimetype
+          }, resolvedTenantId);
         }
       } catch (e) {
         console.error(`[AI Handler] Failed to send media ${mediaUrl}:`, e);
