@@ -1374,6 +1374,47 @@ export class DB {
     return Array.from(map.values());
   }
 
+  static async deleteTenant(tenantId: string): Promise<boolean> {
+    if (!tenantId) return false;
+    try {
+      console.log(`[DB/deleteTenant] Permanently deleting tenant and all associated data for tenantId: ${tenantId}`);
+
+      // 1. Remove from in-memory store
+      DB.tenantsMemoryStore = DB.tenantsMemoryStore.filter(t => t.id !== tenantId);
+
+      // 2. Delete from Supabase tables
+      if (supabase) {
+        await Promise.allSettled([
+          supabase.from('tenants').delete().eq('id', tenantId),
+          supabase.from('tenant_configs').delete().eq('tenant_id', tenantId),
+          supabase.from('chat_messages').delete().eq('tenant_id', tenantId),
+          supabase.from('customers').delete().eq('tenant_id', tenantId),
+          supabase.from('appointments').delete().eq('tenant_id', tenantId),
+          supabase.from('orders').delete().eq('tenant_id', tenantId),
+          supabase.from('scheduled_follow_ups').delete().eq('tenant_id', tenantId),
+          supabase.from('promotion_logs').delete().eq('tenant_id', tenantId),
+          supabase.from('revival_campaigns').delete().eq('tenant_id', tenantId),
+          supabase.from('whatsapp_auth').delete().eq('tenant_id', tenantId)
+        ]);
+      }
+
+      // 3. Disconnect WhatsApp session if active for this tenant
+      try {
+        const { WhatsAppManager } = await import('./whatsapp');
+        if (WhatsAppManager.getActiveTenantId() === tenantId) {
+          await WhatsAppManager.softReset();
+        }
+      } catch (waErr) {
+        console.error('[DB/deleteTenant] Error clearing WhatsApp session:', waErr);
+      }
+
+      return true;
+    } catch (e) {
+      console.error('[DB/deleteTenant] Exception:', e);
+      return false;
+    }
+  }
+
   static async getTenantByUsername(username: string): Promise<Tenant | null> {
     if (!username) return null;
     const tenants = await DB.getTenants();

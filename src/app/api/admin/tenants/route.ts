@@ -41,3 +41,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { tenantId } = body;
+    if (!tenantId) {
+      return NextResponse.json({ success: false, error: "Missing tenantId" }, { status: 400 });
+    }
+    await DB.deleteTenant(tenantId);
+    return NextResponse.json({ 
+      success: true, 
+      tenants: await DB.getTenants(), 
+      partners: await DB.getPartners() 
+    });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}

@@ -185,6 +185,46 @@ export default function VoiceSaaSApp() {
   const [isGeneratingPairingCode, setIsGeneratingPairingCode] = useState(false);
   const [pairingError, setPairingError] = useState<string | null>(null);
 
+  // Delete Tenant Modal State
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingTenantId, setDeletingTenantId] = useState<string | null>(null);
+  const [deletingTenantName, setDeletingTenantName] = useState<string>('');
+  const [isDeletingTenant, setIsDeletingTenant] = useState(false);
+
+  const handleDeleteTenant = (tenantId: string, businessName: string) => {
+    setDeletingTenantId(tenantId);
+    setDeletingTenantName(businessName);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteTenant = async () => {
+    if (!deletingTenantId) return;
+    setIsDeletingTenant(true);
+    try {
+      const res = await fetch('/api/admin/tenants', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: deletingTenantId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        const newTenants = tenants.filter(t => t.id !== deletingTenantId);
+        setTenants(newTenants);
+        localStorage.setItem('hazel_admin_tenants', JSON.stringify(newTenants));
+        if (selectedTenantId === deletingTenantId) {
+          setSelectedTenantId(newTenants[0]?.id || '');
+          setClientSubTab('directory');
+        }
+      }
+    } catch (err) {
+      console.error("Failed to delete tenant:", err);
+    } finally {
+      setIsDeletingTenant(false);
+      setShowDeleteModal(false);
+      setDeletingTenantId(null);
+    }
+  };
+
   // Show/Hide API keys & credentials toggles
   const [showApiKeys, setShowApiKeys] = useState(false);
   const [showClientCredentials, setShowClientCredentials] = useState(false);
@@ -1328,6 +1368,13 @@ export default function VoiceSaaSApp() {
                                     >
                                       {t.status === 'active' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
                                     </button>
+                                    <button
+                                      onClick={() => handleDeleteTenant(t.id, t.name || t.businessName)}
+                                      title="Delete Account Permanently"
+                                      className="p-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 transition cursor-pointer"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
                                   </div>
                                 </td>
                               </tr>
@@ -1418,6 +1465,14 @@ export default function VoiceSaaSApp() {
                         <option value="active">🟢 Live Active</option>
                         <option value="suspended">🔴 Suspended</option>
                       </select>
+
+                      <button
+                        onClick={() => handleDeleteTenant(selectedTenant.id, selectedTenant.name || selectedTenant.businessName)}
+                        className="px-4 py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs font-bold uppercase tracking-wider rounded-xl transition flex items-center space-x-2 cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Delete Account</span>
+                      </button>
                     </div>
 
                     {/* SMART DYNAMIC SAVE BUTTON */}
@@ -2531,6 +2586,52 @@ export default function VoiceSaaSApp() {
           <div>
             <h4 className="font-extrabold text-sm tracking-tight">Client Published Live! 🚀</h4>
             <p className="text-xs text-emerald-100 font-medium">Status switched to Active. Client portal & WhatsApp AI bot are now live.</p>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: DELETE CLIENT CONFIRMATION ================= */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl text-center space-y-6">
+            <div className="w-14 h-14 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-8 h-8" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-slate-900">Delete Client Account?</h3>
+              <p className="text-xs text-slate-500 font-medium mt-2 leading-relaxed">
+                Are you sure you want to permanently delete <span className="font-bold text-slate-900">"{deletingTenantName}"</span>?
+                <br /><br />
+                <span className="text-rose-600 font-bold">⚠️ Warning:</span> This will permanently wipe all database chat history, customer lists, configs, orders, appointments, and disconnect their active WhatsApp session. This action cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex items-center space-x-3 pt-2">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeletingTenant}
+                className="flex-1 py-3 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteTenant}
+                disabled={isDeletingTenant}
+                className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/20 transition cursor-pointer flex items-center justify-center space-x-2"
+              >
+                {isDeletingTenant ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Permanently Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
