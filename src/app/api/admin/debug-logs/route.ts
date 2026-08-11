@@ -17,12 +17,12 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // 1. Fetch latest 20 chat messages
+    // 1. Fetch latest 100 chat messages
     const { data: messages, error: msgErr } = await supabase
       .from('chat_messages')
       .select('*')
       .order('timestamp', { ascending: false })
-      .limit(30);
+      .limit(100);
 
     // 2. Fetch latest 20 orders
     const { data: orders, error: orderErr } = await supabase
