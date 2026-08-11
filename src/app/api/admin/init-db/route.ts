@@ -1,3 +1,4 @@
+import { requireAdminSession } from "@/lib/auth-session";
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
@@ -186,7 +187,12 @@ CREATE TABLE IF NOT EXISTS whatsapp_auth (
 );
 `;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const session = await requireAdminSession(request);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   if (!supabase) {
     return NextResponse.json({ success: false, error: 'Supabase is not configured on this instance' }, { status: 400 });
   }

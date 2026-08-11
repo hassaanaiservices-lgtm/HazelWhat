@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { detectKeyType } from "@/lib/ai-handler";
+import { requireTenantSession } from "@/lib/auth-session";
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await requireTenantSession(request);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { apiKey } = await request.json();
 
     if (!apiKey || !apiKey.trim()) {

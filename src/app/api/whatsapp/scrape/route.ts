@@ -1,8 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { scrapeStore } from "@/lib/scraper";
+import { requireTenantSession } from "@/lib/auth-session";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    const session = await requireTenantSession(req);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { url, currency = "$" } = await req.json();
     if (!url) {
       return NextResponse.json({ success: false, error: "URL is required" }, { status: 400 });

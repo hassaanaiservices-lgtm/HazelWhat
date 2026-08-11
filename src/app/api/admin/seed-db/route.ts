@@ -1,3 +1,4 @@
+import { requireAdminSession } from "@/lib/auth-session";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { PIZZA_BOX_DEFAULT_SYSTEM_PROMPT, PIZZA_BOX_DEFAULT_KNOWLEDGE_BASE } from "@/lib/db";
@@ -110,10 +111,20 @@ const TENANTS_SEED = [
 ];
 
 export async function GET(req: NextRequest) {
+  const session = await requireAdminSession(req);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   return executeSeed();
 }
 
 export async function POST(req: NextRequest) {
+  const session = await requireAdminSession(req);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   return executeSeed();
 }
 

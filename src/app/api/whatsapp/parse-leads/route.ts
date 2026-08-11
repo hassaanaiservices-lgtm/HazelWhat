@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireTenantSession } from "@/lib/auth-session";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const PDFParser = require("pdf2json");
 
@@ -73,8 +74,13 @@ export function extractPhonesFromText(rawText: string): string[] {
   );
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    const session = await requireTenantSession(req);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { mediaBase64, mimetype, fileName } = await req.json();
     if (!mediaBase64) {
       return NextResponse.json({ success: false, error: "No file content provided." }, { status: 400 });

@@ -1,3 +1,4 @@
+import { requireAdminSession } from "@/lib/auth-session";
 import { NextRequest, NextResponse } from "next/server";
 import { DB } from "@/lib/db";
 
@@ -13,6 +14,11 @@ export const dynamic = 'force-dynamic';
  * Force-writes config directly to Supabase tenant_configs AND tenants table.
  */
 export async function GET(req: NextRequest) {
+  const session = await requireAdminSession(req);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const tenantId = req.nextUrl.searchParams.get('tenantId') || 't-1004';
   
   try {
@@ -68,6 +74,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await requireAdminSession(req);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
     const { tenantId = 't-1004', systemPrompt, productInfo, products } = body;

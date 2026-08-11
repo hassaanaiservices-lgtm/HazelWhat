@@ -1,9 +1,15 @@
-import { NextResponse } from "next/server";
+import { requireAdminSession } from "@/lib/auth-session";
+import { NextRequest, NextResponse } from "next/server";
 import { DB } from "@/lib/db";
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const session = await requireAdminSession(request);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const deepgramKey = process.env.DEEPGRAM_API_KEY || "";
     const openaiKey = process.env.OPENAI_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY || "";

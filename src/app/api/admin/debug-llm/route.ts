@@ -1,3 +1,4 @@
+import { requireAdminSession } from "@/lib/auth-session";
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { DB } from "@/lib/db";
@@ -9,6 +10,11 @@ export const dynamic = 'force-dynamic';
  * Tests what API keys are visible to Railway and executes a live test call.
  */
 export async function GET(req: NextRequest) {
+  const session = await requireAdminSession(req);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const anthropicKey = process.env.ANTHROPIC_API_KEY || "";
   const deepseekKey = process.env.DEEPSEEK_API_KEY || "";
   const openrouterKey = process.env.OPENROUTER_API_KEY || "";

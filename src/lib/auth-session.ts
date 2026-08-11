@@ -88,3 +88,19 @@ export async function getTenantIdFromRequest(request?: NextRequest): Promise<str
   const session = await getSessionFromCookies(request);
   return session?.tenantId;
 }
+
+export async function requireAdminSession(request: NextRequest): Promise<SessionUser | null> {
+  const session = await getSessionFromCookies(request);
+  if (session && session.role === "admin") {
+    return session;
+  }
+  return null;
+}
+
+export async function requireTenantSession(request: NextRequest): Promise<SessionUser | null> {
+  const session = await getSessionFromCookies(request);
+  if (session && (session.role === "admin" || session.role === "client") && session.tenantId) {
+    return session;
+  }
+  return null;
+}

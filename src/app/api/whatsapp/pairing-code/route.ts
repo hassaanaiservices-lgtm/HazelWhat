@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WhatsAppManager } from "@/lib/whatsapp";
+import { requireTenantSession } from "@/lib/auth-session";
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await requireTenantSession(req);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { phoneNumber } = await req.json();
     if (!phoneNumber) {
       return NextResponse.json({ success: false, error: "Phone number is required" }, { status: 400 });
