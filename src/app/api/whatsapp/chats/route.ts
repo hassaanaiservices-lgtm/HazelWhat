@@ -24,9 +24,9 @@ export async function GET(req: NextRequest) {
     if (session?.role === 'admin') {
       const queryTenantId = req.nextUrl.searchParams.get('tenantId');
       const targetTenantId = queryTenantId && queryTenantId !== 'admin' ? queryTenantId : undefined;
-      console.log(`${tag} Admin request — fetching all chats for tenantId:`, targetTenantId || 'all');
-      const allChats = await DB.getAllChats(targetTenantId);
-      const allCustomers = await DB.getAllCustomers(targetTenantId);
+      console.log(`${tag} Admin request — fetching chats for targetTenantId:`, targetTenantId || 'all');
+      const allChats = targetTenantId ? await DB.getAllChats(targetTenantId) : await DB.getAllChatsAdminAllTenants();
+      const allCustomers = targetTenantId ? await DB.getAllCustomers(targetTenantId) : await DB.getAllCustomersAdminAllTenants();
       console.log(`${tag} Admin — chats count: ${Object.keys(allChats).length}, customers: ${allCustomers.length}`);
       return NextResponse.json({ success: true, chats: allChats, customers: allCustomers });
     }
@@ -38,23 +38,9 @@ export async function GET(req: NextRequest) {
 
     // Tenant-isolated fetch
     console.log(`${tag} Fetching chats for tenantId: ${tenantId}`);
-    let chats = await DB.getAllChats(tenantId);
-    let customers = await DB.getAllCustomers(tenantId);
+    const chats = await DB.getAllChats(tenantId);
+    const customers = await DB.getAllCustomers(tenantId);
     console.log(`${tag} Primary fetch — chats: ${Object.keys(chats).length}, customers: ${customers.length}`);
-
-    // Fallback: legacy data stored under 'admin'
-    if (Object.keys(chats).length === 0) {
-      console.log(`${tag} No chats found for ${tenantId} — trying legacy fallback (tenant_id='admin')`);
-      const fallbackChats = await DB.getAllChats(null);
-      const fallbackCustomers = await DB.getAllCustomers(tenantId);
-      console.log(`${tag} Fallback fetch — chats: ${Object.keys(fallbackChats).length}, customers: ${fallbackCustomers.length}`);
-      if (Object.keys(fallbackChats).length > 0) {
-        chats = fallbackChats;
-        if (customers.length === 0) {
-          customers = fallbackCustomers;
-        }
-      }
-    }
 
     const { isSupabaseConfigured } = await import('@/lib/supabase');
     

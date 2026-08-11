@@ -6,8 +6,18 @@ import { getSessionFromCookies } from "@/lib/auth-session";
 export async function GET(req: NextRequest) {
   try {
     const session = await getSessionFromCookies(req);
-    const tenantId = session?.tenantId;
-    const orders = await DB.getOrders(tenantId);
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    let orders;
+    if (session.role === 'admin') {
+      const queryTenantId = req.nextUrl.searchParams.get('tenantId');
+      const targetTenantId = queryTenantId && queryTenantId !== 'admin' ? queryTenantId : undefined;
+      orders = targetTenantId ? await DB.getOrders(targetTenantId) : await DB.getOrdersAdminAllTenants();
+    } else {
+      orders = await DB.getOrders(session.tenantId);
+    }
     return NextResponse.json(orders);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -17,13 +27,25 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const session = await getSessionFromCookies(req);
-    const tenantId = session?.tenantId;
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const { id, status, notes, customerName } = await req.json();
     if (!id) {
       return NextResponse.json({ error: 'Missing id' }, { status: 400 });
     }
-    const orders = await DB.getOrders(tenantId);
+
+    let orders;
+    let targetTenantId = session.tenantId;
+    if (session.role === 'admin') {
+      orders = await DB.getOrdersAdminAllTenants();
+      const match = orders.find(o => o.id === id);
+      if (match?.tenantId) targetTenantId = match.tenantId;
+    } else {
+      orders = await DB.getOrders(session.tenantId);
+    }
+
     const order = orders.find(o => o.id === id);
     if (!order) {
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
@@ -34,7 +56,7 @@ export async function PATCH(req: NextRequest) {
     if (notes !== undefined) updates.notes = notes;
     if (customerName) updates.customerName = customerName;
 
-    await DB.updateOrder(id, updates, tenantId);
+    await DB.updateOrder(id, updates, targetTenantId);
 
     if (status && status !== order.status) {
       if (status === 'confirmed') {

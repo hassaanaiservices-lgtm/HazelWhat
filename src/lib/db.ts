@@ -231,7 +231,7 @@ export interface DbSchema {
   partners?: Partner[];
 }
 
-const DEFAULT_CONFIG: Config = {
+export const DEFAULT_CONFIG: Config = {
   systemPrompt: "You are a friendly, helpful AI team member. Engage warmly with customers, answer their questions accurately using the knowledge base and catalog, and assist them naturally.",
   productInfo: "",
   keywordReplies: [],
@@ -304,15 +304,137 @@ export const PIZZA_BOX_DEFAULT_KNOWLEDGE_BASE = `=== PIZZA BOX PESHAWAR MENU & P
 const DEFAULT_TENANT_ID = 'admin';
 
 export class DB {
+  // --- EXPLICIT ADMIN ALL-TENANTS METHODS ---
+  static async getAllChatsAdminAllTenants(): Promise<Record<string, ChatMessage[]>> {
+    if (!supabase) return {};
+    try {
+      const { data, error } = await supabase.from('chat_messages').select('*').order('timestamp', { ascending: true });
+      if (error || !data) return {};
+      const result: Record<string, ChatMessage[]> = {};
+      data.forEach((m: any) => {
+        if (!result[m.phone]) result[m.phone] = [];
+        result[m.phone].push({
+          id: m.message_id || m.id,
+          tenantId: m.tenant_id,
+          role: m.role,
+          content: m.content || '',
+          timestamp: m.timestamp || m.created_at,
+          status: m.status || 1,
+          mediaUrl: m.media_url,
+          mediaType: m.media_type
+        });
+      });
+      return result;
+    } catch (e) {
+      console.error('[DB/Admin] getAllChatsAdminAllTenants error:', e);
+      return {};
+    }
+  }
+
+  static async getAllCustomersAdminAllTenants(): Promise<Customer[]> {
+    if (!supabase) return [];
+    try {
+      const { data } = await supabase.from('customers').select('*');
+      return (data || []).map((c: any) => ({
+        phone: c.phone,
+        tenantId: c.tenant_id,
+        name: c.name || c.phone,
+        jid: c.jid,
+        preferences: c.preferences,
+        aiEnabled: c.ai_enabled !== false,
+        followUpLevel: c.follow_up_level || 0,
+        leadStatus: c.lead_status || 'none',
+        tags: c.tags || [],
+        pipelineStage: c.pipeline_stage || 'new',
+        isOptedOut: Boolean(c.is_opted_out),
+        optedOutAt: c.opted_out_at,
+        isLead: Boolean(c.is_lead),
+        pipelineStageSetByUser: Boolean(c.pipeline_stage_set_by_user),
+        leadCreatedAt: c.lead_created_at
+      }));
+    } catch (e) {
+      console.error('[DB/Admin] getAllCustomersAdminAllTenants error:', e);
+      return [];
+    }
+  }
+
+  static async getOrdersAdminAllTenants(): Promise<Order[]> {
+    if (!supabase) return [];
+    try {
+      const { data } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+      return (data || []).map((o: any) => ({
+        id: o.id,
+        tenantId: o.tenant_id,
+        phone: o.phone,
+        customerName: o.customer_name || o.phone,
+        productName: o.product_name,
+        productImageUrl: o.product_image_url,
+        size: o.size,
+        color: o.color,
+        deliveryAddress: o.delivery_address,
+        contactNumber: o.contact_number,
+        paymentMethod: o.payment_method,
+        price: o.price,
+        timestamp: o.created_at || o.timestamp,
+        status: o.status || 'pending',
+        recoveryStage: o.recovery_stage || 0,
+        notes: o.notes
+      }));
+    } catch (e) {
+      console.error('[DB/Admin] getOrdersAdminAllTenants error:', e);
+      return [];
+    }
+  }
+
+  static async getAllAppointmentsAdminAllTenants(): Promise<Appointment[]> {
+    if (!supabase) return [];
+    try {
+      const { data } = await supabase.from('appointments').select('*');
+      return (data || []).map((a: any) => ({
+        id: a.id,
+        tenantId: a.tenant_id,
+        phone: a.phone,
+        name: a.name || a.phone,
+        service: a.service || 'Discovery Call',
+        date: a.date,
+        time: a.time,
+        status: a.status || 'booked',
+        notes: a.notes
+      }));
+    } catch (e) {
+      console.error('[DB/Admin] getAllAppointmentsAdminAllTenants error:', e);
+      return [];
+    }
+  }
+
+  static async getAllScheduledFollowUpsAdminAllTenants(): Promise<ScheduledFollowUp[]> {
+    if (!supabase) return [];
+    try {
+      const { data } = await supabase.from('scheduled_follow_ups').select('*');
+      return (data || []).map((f: any) => ({
+        id: f.id,
+        tenantId: f.tenant_id,
+        phone: f.phone,
+        sendAt: f.send_at,
+        context: f.context,
+        status: f.status,
+        createdAt: f.created_at
+      }));
+    } catch (e) {
+      console.error('[DB/Admin] getAllScheduledFollowUpsAdminAllTenants error:', e);
+      return [];
+    }
+  }
+
   // --- CHATS ---
   static async getChats(phoneNumber: string, tenantId?: string | null): Promise<ChatMessage[]> {
     if (!supabase) return [];
+    if (!tenantId) {
+      console.error('[SECURITY] getChats called without tenantId — refusing to return unfiltered data');
+      return [];
+    }
     try {
-      let query = supabase.from('chat_messages').select('*').eq('phone', phoneNumber);
-      if (tenantId) {
-        query = query.eq('tenant_id', tenantId);
-      }
-      const { data, error } = await query.order('timestamp', { ascending: true });
+      const { data, error } = await supabase.from('chat_messages').select('*').eq('phone', phoneNumber).eq('tenant_id', tenantId).order('timestamp', { ascending: true });
       if (error || !data) return [];
       return data.map((m: any) => ({
         id: m.message_id || m.id,
@@ -332,18 +454,13 @@ export class DB {
 
   static async getAllChats(tenantId?: string | null): Promise<Record<string, ChatMessage[]>> {
     if (!supabase) return {};
+    if (!tenantId) {
+      console.error('[SECURITY] getAllChats called without tenantId — refusing to return unfiltered data');
+      return {};
+    }
     try {
-      let query = supabase.from('chat_messages').select('*');
-      if (tenantId) {
-        query = query.eq('tenant_id', tenantId);
-      }
-      // If tenantId is null or 'admin', fetch everything (admin view)
-      const { data, error } = await query.order('timestamp', { ascending: true });
-      if (error) {
-        console.error('[DB/Supabase] getAllChats query error:', error);
-        return {};
-      }
-      if (!data) return {};
+      const { data, error } = await supabase.from('chat_messages').select('*').eq('tenant_id', tenantId).order('timestamp', { ascending: true });
+      if (error || !data) return {};
 
       const result: Record<string, ChatMessage[]> = {};
       data.forEach((m: any) => {
@@ -366,11 +483,14 @@ export class DB {
     }
   }
 
-
   static async addChatMessage(phoneNumber: string, message: Omit<ChatMessage, "timestamp"> & { timestamp?: string; tenantId?: string }, tenantId?: string) {
     if (!supabase) return;
+    const resolvedTenantId = tenantId || message.tenantId;
+    if (!resolvedTenantId) {
+      console.error('[SECURITY] addChatMessage called without tenantId — refusing to insert under fallback');
+      return;
+    }
     try {
-      const resolvedTenantId = tenantId || message.tenantId || DEFAULT_TENANT_ID;
       await supabase.from('chat_messages').insert({
         message_id: message.id || Math.random().toString(36).substring(7),
         tenant_id: resolvedTenantId,
@@ -398,10 +518,12 @@ export class DB {
 
   static async getUnreadMessageIds(phone: string, tenantId?: string | null): Promise<string[]> {
     if (!supabase) return [];
+    if (!tenantId) {
+      console.error('[SECURITY] getUnreadMessageIds called without tenantId — refusing query');
+      return [];
+    }
     try {
-      let query = supabase.from('chat_messages').select('message_id, status').eq('phone', phone).eq('role', 'user').lt('status', 4);
-      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
-      const { data } = await query;
+      const { data } = await supabase.from('chat_messages').select('message_id, status').eq('phone', phone).eq('tenant_id', tenantId).eq('role', 'user').lt('status', 4);
       return (data || []).map((m: any) => m.message_id).filter(Boolean);
     } catch (e) {
       return [];
@@ -410,10 +532,12 @@ export class DB {
 
   static async markMessagesAsReadInDb(phone: string, messageIds: string[], tenantId?: string | null) {
     if (!supabase || messageIds.length === 0) return;
+    if (!tenantId) {
+      console.error('[SECURITY] markMessagesAsReadInDb called without tenantId — refusing update');
+      return;
+    }
     try {
-      let query = supabase.from('chat_messages').update({ status: 4 }).eq('phone', phone).in('message_id', messageIds);
-      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
-      await query;
+      await supabase.from('chat_messages').update({ status: 4 }).eq('phone', phone).eq('tenant_id', tenantId).in('message_id', messageIds);
     } catch (e) {
       console.error('[DB/Supabase] markMessagesAsReadInDb error:', e);
     }
@@ -422,14 +546,16 @@ export class DB {
   // --- CONFIG ---
   static async getConfig(tenantId?: string | null): Promise<Config> {
     if (!supabase) return DEFAULT_CONFIG;
+    if (!tenantId) {
+      console.error('[SECURITY] getConfig called without tenantId — refusing fallback');
+      return DEFAULT_CONFIG;
+    }
     try {
-      const resolvedTenantId = tenantId || DEFAULT_TENANT_ID;
+      const resolvedTenantId = tenantId;
 
-      // Load tenant record (from tenants table, Supabase wins)
       const allTenants = await DB.getTenants();
-      const tenantRecord = allTenants.find(t => t.id === resolvedTenantId) || allTenants[0] || null;
+      const tenantRecord = allTenants.find(t => t.id === resolvedTenantId) || null;
 
-      // Load tenant_configs row
       const { data, error: cfgError } = await supabase
         .from('tenant_configs')
         .select('*')
@@ -440,7 +566,6 @@ export class DB {
         console.warn('[DB/Supabase] getConfig query error:', cfgError.message);
       }
 
-      // Priority: tenant_configs > tenants table > Pizza Box default (if t-1004) > DEFAULT_CONFIG (never empty!)
       let systemPrompt = 
         (data?.system_prompt && data.system_prompt.trim() !== '') ? data.system_prompt :
         (tenantRecord?.systemPrompt && tenantRecord.systemPrompt.trim() !== '') ? tenantRecord.systemPrompt :
@@ -452,7 +577,6 @@ export class DB {
         (tenantRecord?.productKnowledgeBase && tenantRecord.productKnowledgeBase.trim() !== '') ? tenantRecord.productKnowledgeBase :
         '';
 
-      // Pizza Box specific fallback
       if (resolvedTenantId === 't-1004') {
         if (!systemPrompt || systemPrompt.trim() === '') {
           systemPrompt = PIZZA_BOX_DEFAULT_SYSTEM_PROMPT;
@@ -462,10 +586,8 @@ export class DB {
         }
       }
 
-      // Ultimate fallback: NEVER leave systemPrompt empty for any tenant
       if (!systemPrompt || systemPrompt.trim() === '') {
         systemPrompt = DEFAULT_CONFIG.systemPrompt;
-        console.warn(`[DB/getConfig] WARNING: No system prompt found for ${resolvedTenantId}. Using DEFAULT_CONFIG fallback.`);
       }
 
       const products = (data?.products && data.products.length > 0)
@@ -474,23 +596,16 @@ export class DB {
 
       const businessName = data?.business_name || tenantRecord?.businessName || tenantRecord?.name || (resolvedTenantId === 't-1004' ? 'Pizza Box' : 'our store');
 
-      // Auto-create tenant_configs row from tenants table if it is missing but tenants table has data
       if (!data && tenantRecord && (systemPrompt || productInfo)) {
-        console.log(`[DB/Supabase] tenant_configs missing for ${resolvedTenantId} — auto-seeding from tenants table...`);
-        supabase.from('tenant_configs').upsert({
+        await supabase.from('tenant_configs').upsert({
           tenant_id: resolvedTenantId,
           system_prompt: systemPrompt,
           product_info: productInfo,
           products: products,
           business_name: businessName,
           global_ai_enabled: true
-        }, { onConflict: 'tenant_id' }).then(({ error: seedErr }) => {
-          if (seedErr) console.error('[DB/Supabase] Auto-seed tenant_configs error:', seedErr.message);
-          else console.log(`[DB/Supabase] Auto-seeded tenant_configs for ${resolvedTenantId}`);
-        });
+        }, { onConflict: 'tenant_id' });
       }
-
-      console.log(`[DB/getConfig] Tenant: ${resolvedTenantId} | prompt: "${systemPrompt.substring(0,60)}" | products: ${products.length}`);
 
       return {
         systemPrompt,
@@ -516,13 +631,16 @@ export class DB {
 
   static async updateConfig(newConfig: Partial<Config>, tenantId?: string | null) {
     if (!supabase) return;
+    if (!tenantId) {
+      console.error('[SECURITY] updateConfig called without tenantId — refusing to update');
+      return;
+    }
     try {
-      const resolvedTenantId = tenantId || DEFAULT_TENANT_ID;
-      const existing = await DB.getConfig(resolvedTenantId);
+      const existing = await DB.getConfig(tenantId);
       const updated = { ...existing, ...newConfig };
 
       await supabase.from('tenant_configs').upsert({
-        tenant_id: resolvedTenantId,
+        tenant_id: tenantId,
         system_prompt: updated.systemPrompt,
         product_info: updated.productInfo,
         products: updated.products || [],
@@ -546,12 +664,12 @@ export class DB {
   // --- CUSTOMERS ---
   static async getCustomer(phone: string, tenantId?: string | null): Promise<Customer | undefined> {
     if (!supabase) return undefined;
+    if (!tenantId) {
+      console.error('[SECURITY] getCustomer called without tenantId — refusing to query across tenants');
+      return undefined;
+    }
     try {
-      let query = supabase.from('customers').select('*').eq('phone', phone);
-      if (tenantId) {
-        query = query.eq('tenant_id', tenantId);
-      }
-      const { data } = await query.limit(1);
+      const { data } = await supabase.from('customers').select('*').eq('phone', phone).eq('tenant_id', tenantId).limit(1);
       if (!data || data.length === 0) return undefined;
       const c = data[0];
       return {
@@ -578,8 +696,12 @@ export class DB {
 
   static async updateCustomer(phone: string, data: Partial<Customer>, tenantId?: string | null) {
     if (!supabase) return;
+    const resolvedTenantId = tenantId || data.tenantId;
+    if (!resolvedTenantId) {
+      console.error('[SECURITY] updateCustomer called without tenantId — refusing to update under fallback');
+      return;
+    }
     try {
-      const resolvedTenantId = tenantId || data.tenantId || DEFAULT_TENANT_ID;
       const existing = await DB.getCustomer(phone, resolvedTenantId);
       const merged = { ...existing, ...data, phone };
 
@@ -607,12 +729,12 @@ export class DB {
 
   static async getAllCustomers(tenantId?: string | null): Promise<Customer[]> {
     if (!supabase) return [];
+    if (!tenantId) {
+      console.error('[SECURITY] getAllCustomers called without tenantId — refusing to return unfiltered data');
+      return [];
+    }
     try {
-      let query = supabase.from('customers').select('*');
-      if (tenantId) {
-        query = query.eq('tenant_id', tenantId);
-      }
-      const { data } = await query;
+      const { data } = await supabase.from('customers').select('*').eq('tenant_id', tenantId);
       return (data || []).map((c: any) => ({
         phone: c.phone,
         tenantId: c.tenant_id,
@@ -638,10 +760,12 @@ export class DB {
   // --- APPOINTMENTS ---
   static async getAllAppointments(tenantId?: string | null): Promise<Appointment[]> {
     if (!supabase) return [];
+    if (!tenantId) {
+      console.error('[SECURITY] getAllAppointments called without tenantId — refusing query');
+      return [];
+    }
     try {
-      let query = supabase.from('appointments').select('*');
-      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
-      const { data } = await query;
+      const { data } = await supabase.from('appointments').select('*').eq('tenant_id', tenantId);
       return (data || []).map((a: any) => ({
         id: a.id,
         tenantId: a.tenant_id,
@@ -670,13 +794,16 @@ export class DB {
 
   static async bookAppointment(phone: string, name: string, service: string, date: string, time: string, notes?: string, tenantId?: string | null): Promise<boolean> {
     if (!supabase) return false;
+    if (!tenantId) {
+      console.error('[SECURITY] bookAppointment called without tenantId — refusing appointment creation');
+      return false;
+    }
     try {
-      const resolvedTenantId = tenantId || DEFAULT_TENANT_ID;
       const apptId = "APT-" + Math.random().toString(36).substring(2, 8).toUpperCase();
 
       await supabase.from('appointments').insert({
         id: apptId,
-        tenant_id: resolvedTenantId,
+        tenant_id: tenantId,
         phone,
         name: name || phone,
         service: service || "Discovery Call / Service",
@@ -686,7 +813,7 @@ export class DB {
         notes
       });
 
-      await DB.updateCustomer(phone, { name: name || phone }, resolvedTenantId);
+      await DB.updateCustomer(phone, { name: name || phone }, tenantId);
 
       const apptTitle = `📅 Appointment: ${service || "Discovery Call"} (${date} @ ${time})`;
       await DB.addOrder(phone, {
@@ -696,7 +823,7 @@ export class DB {
         price: "Service Booking",
         notes: notes || `Appointment booked for ${service || 'Service Call'}. Client scheduled for ${date} at ${time}.`,
         customerName: name || phone
-      }, resolvedTenantId);
+      }, tenantId);
 
       return true;
     } catch (e) {
@@ -707,15 +834,13 @@ export class DB {
 
   static async cancelAppointment(phone: string, date: string, time: string, tenantId?: string | null): Promise<boolean> {
     if (!supabase) return false;
+    if (!tenantId) {
+      console.error('[SECURITY] cancelAppointment called without tenantId — refusing update');
+      return false;
+    }
     try {
-      let query = supabase.from('appointments').update({ status: 'cancelled' }).eq('phone', phone).eq('date', date).eq('time', time);
-      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
-      await query;
-
-      let orderQuery = supabase.from('orders').update({ status: 'cancelled' }).eq('phone', phone).ilike('product_name', `%${date}%`);
-      if (tenantId && tenantId !== 'admin') orderQuery = orderQuery.eq('tenant_id', tenantId);
-      await orderQuery;
-
+      await supabase.from('appointments').update({ status: 'cancelled' }).eq('phone', phone).eq('date', date).eq('time', time).eq('tenant_id', tenantId);
+      await supabase.from('orders').update({ status: 'cancelled' }).eq('phone', phone).ilike('product_name', `%${date}%`).eq('tenant_id', tenantId);
       return true;
     } catch (e) {
       return false;
@@ -725,10 +850,12 @@ export class DB {
   // --- ORDERS ---
   static async getOrders(tenantId?: string | null): Promise<Order[]> {
     if (!supabase) return [];
+    if (!tenantId) {
+      console.error('[SECURITY] getOrders called without tenantId — refusing query');
+      return [];
+    }
     try {
-      let query = supabase.from('orders').select('*').order('created_at', { ascending: false });
-      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
-      const { data } = await query;
+      const { data } = await supabase.from('orders').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false });
       return (data || []).map((o: any) => ({
         id: o.id,
         tenantId: o.tenant_id,
@@ -752,12 +879,15 @@ export class DB {
     }
   }
 
-  static async addOrder(phone: string, data: { productName: string; productImageUrl?: string; size?: string; color?: string; deliveryAddress?: string; contactNumber?: string; paymentMethod?: string; price?: string; customerName?: string; notes?: string }, tenantId?: string | null): Promise<Order> {
-    const resolvedTenantId = tenantId || DEFAULT_TENANT_ID;
+  static async addOrder(phone: string, data: { productName: string; productImageUrl?: string; size?: string; color?: string; deliveryAddress?: string; contactNumber?: string; paymentMethod?: string; price?: string; customerName?: string; notes?: string }, tenantId?: string | null): Promise<Order | null> {
+    if (!tenantId) {
+      console.error('[SECURITY] addOrder called without tenantId — refusing order creation');
+      return null;
+    }
     const ordId = "ORD-" + Math.random().toString(36).substring(2, 8).toUpperCase();
     const newOrder: Order = {
       id: ordId,
-      tenantId: resolvedTenantId,
+      tenantId: tenantId,
       phone,
       customerName: data.customerName || phone,
       productName: data.productName,
@@ -778,7 +908,7 @@ export class DB {
       try {
         await supabase.from('orders').insert({
           id: newOrder.id,
-          tenant_id: resolvedTenantId,
+          tenant_id: tenantId,
           phone,
           customer_name: newOrder.customerName,
           product_name: newOrder.productName,
@@ -802,21 +932,24 @@ export class DB {
 
   static async updateOrder(orderId: string, updates: Partial<Order>, tenantId?: string | null) {
     if (!supabase) return;
+    if (!tenantId) {
+      console.error('[SECURITY] updateOrder called without tenantId — refusing update');
+      return;
+    }
     try {
       const payload: any = {};
       if (updates.status) payload.status = updates.status;
       if (updates.notes !== undefined) payload.notes = updates.notes;
       if (updates.customerName) payload.customer_name = updates.customerName;
 
-      let query = supabase.from('orders').update(payload).eq('id', orderId);
-      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
-      await query;
+      await supabase.from('orders').update(payload).eq('id', orderId).eq('tenant_id', tenantId);
     } catch (e) {
       console.error('[DB/Supabase] updateOrder error:', e);
     }
   }
 
   static async updateOrderStatus(id: string, status: Order["status"], tenantId?: string | null): Promise<boolean> {
+    if (!tenantId) return false;
     await DB.updateOrder(id, { status }, tenantId);
     return true;
   }
@@ -824,8 +957,12 @@ export class DB {
   // --- SCHEDULED FOLLOW-UPS ---
   static async addScheduledFollowUp(followUp: ScheduledFollowUp, tenantId?: string | null) {
     if (!supabase) return;
+    const resolvedTenantId = tenantId || followUp.tenantId;
+    if (!resolvedTenantId) {
+      console.error('[SECURITY] addScheduledFollowUp called without tenantId — refusing creation');
+      return;
+    }
     try {
-      const resolvedTenantId = tenantId || followUp.tenantId || DEFAULT_TENANT_ID;
       await supabase.from('scheduled_follow_ups').insert({
         id: followUp.id || Math.random().toString(36).substring(2, 8),
         tenant_id: resolvedTenantId,
@@ -842,10 +979,12 @@ export class DB {
 
   static async getPendingFollowUps(tenantId?: string | null): Promise<ScheduledFollowUp[]> {
     if (!supabase) return [];
+    if (!tenantId) {
+      console.error('[SECURITY] getPendingFollowUps called without tenantId — refusing query');
+      return [];
+    }
     try {
-      let query = supabase.from('scheduled_follow_ups').select('*').eq('status', 'pending');
-      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
-      const { data } = await query;
+      const { data } = await supabase.from('scheduled_follow_ups').select('*').eq('status', 'pending').eq('tenant_id', tenantId);
       return (data || []).map((f: any) => ({
         id: f.id,
         tenantId: f.tenant_id,
@@ -862,10 +1001,12 @@ export class DB {
 
   static async getAllScheduledFollowUps(tenantId?: string | null): Promise<ScheduledFollowUp[]> {
     if (!supabase) return [];
+    if (!tenantId) {
+      console.error('[SECURITY] getAllScheduledFollowUps called without tenantId — refusing query');
+      return [];
+    }
     try {
-      let query = supabase.from('scheduled_follow_ups').select('*');
-      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
-      const { data } = await query;
+      const { data } = await supabase.from('scheduled_follow_ups').select('*').eq('tenant_id', tenantId);
       return (data || []).map((f: any) => ({
         id: f.id,
         tenantId: f.tenant_id,
@@ -882,10 +1023,12 @@ export class DB {
 
   static async updateFollowUpStatus(id: string, status: "pending" | "sent" | "cancelled" | "failed", tenantId?: string | null) {
     if (!supabase) return;
+    if (!tenantId) {
+      console.error('[SECURITY] updateFollowUpStatus called without tenantId — refusing update');
+      return;
+    }
     try {
-      let query = supabase.from('scheduled_follow_ups').update({ status }).eq('id', id);
-      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
-      await query;
+      await supabase.from('scheduled_follow_ups').update({ status }).eq('id', id).eq('tenant_id', tenantId);
     } catch (e) {
       console.error('[DB/Supabase] updateFollowUpStatus error:', e);
     }
@@ -893,10 +1036,12 @@ export class DB {
 
   static async cancelPendingFollowUps(phone: string, tenantId?: string | null) {
     if (!supabase) return;
+    if (!tenantId) {
+      console.error('[SECURITY] cancelPendingFollowUps called without tenantId — refusing update');
+      return;
+    }
     try {
-      let query = supabase.from('scheduled_follow_ups').update({ status: 'cancelled' }).eq('phone', phone).eq('status', 'pending');
-      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
-      await query;
+      await supabase.from('scheduled_follow_ups').update({ status: 'cancelled' }).eq('phone', phone).eq('status', 'pending').eq('tenant_id', tenantId);
     } catch (e) {
       console.error('[DB/Supabase] cancelPendingFollowUps error:', e);
     }
@@ -905,10 +1050,12 @@ export class DB {
   // --- PROMOTIONS ---
   static async getPromotionLogs(tenantId?: string | null): Promise<PromotionLog[]> {
     if (!supabase) return [];
+    if (!tenantId) {
+      console.error('[SECURITY] getPromotionLogs called without tenantId — refusing query');
+      return [];
+    }
     try {
-      let query = supabase.from('promotion_logs').select('*').order('timestamp', { ascending: false });
-      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
-      const { data } = await query;
+      const { data } = await supabase.from('promotion_logs').select('*').eq('tenant_id', tenantId).order('timestamp', { ascending: false });
       return (data || []).map((p: any) => ({
         id: p.id,
         tenantId: p.tenant_id,
@@ -925,8 +1072,12 @@ export class DB {
 
   static async addPromotionLog(log: PromotionLog, tenantId?: string | null) {
     if (!supabase) return;
+    const resolvedTenantId = tenantId || log.tenantId;
+    if (!resolvedTenantId) {
+      console.error('[SECURITY] addPromotionLog called without tenantId — refusing log creation');
+      return;
+    }
     try {
-      const resolvedTenantId = tenantId || log.tenantId || DEFAULT_TENANT_ID;
       await supabase.from('promotion_logs').insert({
         id: log.id || Math.random().toString(36).substring(7),
         tenant_id: resolvedTenantId,
@@ -944,10 +1095,12 @@ export class DB {
   // --- REVIVAL CAMPAIGNS ---
   static async getRevivalCampaigns(tenantId?: string | null): Promise<RevivalCampaign[]> {
     if (!supabase) return [];
+    if (!tenantId) {
+      console.error('[SECURITY] getRevivalCampaigns called without tenantId — refusing query');
+      return [];
+    }
     try {
-      let query = supabase.from('revival_campaigns').select('*').order('created_at', { ascending: false });
-      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
-      const { data } = await query;
+      const { data } = await supabase.from('revival_campaigns').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false });
       return (data || []).map((c: any) => ({
         id: c.id,
         tenantId: c.tenant_id,
@@ -983,14 +1136,19 @@ export class DB {
   }
 
   static async getActiveCampaign(tenantId?: string | null): Promise<RevivalCampaign | null> {
+    if (!tenantId) return null;
     const campaigns = await DB.getRevivalCampaigns(tenantId);
     return campaigns.find(c => c.status === 'active') || null;
   }
 
   static async addRevivalCampaign(campaign: RevivalCampaign, tenantId?: string | null) {
     if (!supabase) return;
+    const resolvedTenantId = tenantId || campaign.tenantId;
+    if (!resolvedTenantId) {
+      console.error('[SECURITY] addRevivalCampaign called without tenantId — refusing creation');
+      return;
+    }
     try {
-      const resolvedTenantId = tenantId || campaign.tenantId || DEFAULT_TENANT_ID;
       await supabase.from('revival_campaigns').insert({
         id: campaign.id,
         tenant_id: resolvedTenantId,
@@ -1026,6 +1184,10 @@ export class DB {
 
   static async updateRevivalCampaign(id: string, updates: Partial<RevivalCampaign>, tenantId?: string | null) {
     if (!supabase) return;
+    if (!tenantId) {
+      console.error('[SECURITY] updateRevivalCampaign called without tenantId — refusing update');
+      return;
+    }
     try {
       const payload: any = {};
       if (updates.status) payload.status = updates.status;
@@ -1038,9 +1200,7 @@ export class DB {
       if (updates.optedOutPhones) payload.opted_out_phones = updates.optedOutPhones;
       if (updates.leadProgress) payload.lead_progress = updates.leadProgress;
 
-      let query = supabase.from('revival_campaigns').update(payload).eq('id', id);
-      if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
-      await query;
+      await supabase.from('revival_campaigns').update(payload).eq('id', id).eq('tenant_id', tenantId);
     } catch (e) {
       console.error('[DB/Supabase] updateRevivalCampaign error:', e);
     }

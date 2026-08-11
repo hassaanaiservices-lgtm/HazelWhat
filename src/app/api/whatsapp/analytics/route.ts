@@ -1,18 +1,44 @@
 import { NextResponse } from 'next/server';
-import { DB } from '@/lib/db';
+import { DB, DEFAULT_CONFIG } from '@/lib/db';
 import { getSessionFromCookies } from "@/lib/auth-session";
 
 export async function GET(req: any) {
 
   try {
     const session = await getSessionFromCookies(req);
-    const tenantId = session?.tenantId;
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
 
+    let config, chats, orders, appointments, scheduledFollowUps, allCustomers;
 
-    const config = await DB.getConfig(tenantId);
-    const chats = await DB.getAllChats(tenantId);
-    const orders = await DB.getOrders(tenantId);
-    const appointments = await DB.getAllAppointments(tenantId);
+    if (session.role === 'admin') {
+      const queryTenantId = req.nextUrl?.searchParams?.get('tenantId');
+      const targetTenantId = queryTenantId && queryTenantId !== 'admin' ? queryTenantId : undefined;
+      if (targetTenantId) {
+        config = await DB.getConfig(targetTenantId);
+        chats = await DB.getAllChats(targetTenantId);
+        orders = await DB.getOrders(targetTenantId);
+        appointments = await DB.getAllAppointments(targetTenantId);
+        scheduledFollowUps = await DB.getAllScheduledFollowUps(targetTenantId);
+        allCustomers = await DB.getAllCustomers(targetTenantId);
+      } else {
+        config = DEFAULT_CONFIG;
+        chats = await DB.getAllChatsAdminAllTenants();
+        orders = await DB.getOrdersAdminAllTenants();
+        appointments = await DB.getAllAppointmentsAdminAllTenants();
+        scheduledFollowUps = await DB.getAllScheduledFollowUpsAdminAllTenants();
+        allCustomers = await DB.getAllCustomersAdminAllTenants();
+      }
+    } else {
+      const tenantId = session.tenantId;
+      config = await DB.getConfig(tenantId);
+      chats = await DB.getAllChats(tenantId);
+      orders = await DB.getOrders(tenantId);
+      appointments = await DB.getAllAppointments(tenantId);
+      scheduledFollowUps = await DB.getAllScheduledFollowUps(tenantId);
+      allCustomers = await DB.getAllCustomers(tenantId);
+    }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -84,10 +110,7 @@ export async function GET(req: any) {
       .map(entry => ({ name: entry[0], count: entry[1] }));
 
     // Compute Follow-ups sent:
-    const scheduledFollowUps = await DB.getAllScheduledFollowUps(tenantId);
     const sentScheduledCount = scheduledFollowUps.filter(f => f.status === 'sent').length;
-
-    const allCustomers = await DB.getAllCustomers(tenantId);
     const sentSequenceCount = allCustomers.reduce((sum, c) => sum + (c.followUpLevel || 0), 0);
 
     const sentRecoveryCount = orders.reduce((sum, o) => sum + (o.recoveryStage || 0), 0);

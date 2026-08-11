@@ -14,9 +14,12 @@ async function getTenantIdFromSession(req?: any): Promise<string | undefined> {
 }
 
 
-export async function GET() {
+export async function GET(req: any) {
   try {
-    const tenantId = await getTenantIdFromSession();
+    const tenantId = await getTenantIdFromSession(req);
+    if (!tenantId) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
     const logs = await DB.getPromotionLogs(tenantId);
     return NextResponse.json({ success: true, promotions: logs });
   } catch (error: any) {
