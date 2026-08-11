@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { verifyJWT } from '@/lib/auth-session';
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const adminCookie = request.cookies.get('hazel_admin_session');
   const clientCookie = request.cookies.get('hazel_client_session');
@@ -33,8 +34,8 @@ export function middleware(request: NextRequest) {
 
     // Validate admin role
     try {
-      const session = JSON.parse(adminCookie.value);
-      if (session.role !== 'admin') {
+      const session = await verifyJWT(adminCookie.value);
+      if (!session || session.role !== 'admin') {
         // Not an admin - clear bad cookie and redirect
         const res = NextResponse.redirect(new URL('/login?portal=admin', request.url));
         res.cookies.delete('hazel_admin_session');
@@ -58,8 +59,8 @@ export function middleware(request: NextRequest) {
 
     // Validate client role
     try {
-      const session = JSON.parse(clientCookie.value);
-      if (session.role !== 'client') {
+      const session = await verifyJWT(clientCookie.value);
+      if (!session || session.role !== 'client') {
         const res = NextResponse.redirect(new URL('/login?portal=client', request.url));
         res.cookies.delete('hazel_client_session');
         return res;
@@ -80,8 +81,8 @@ export function middleware(request: NextRequest) {
       try {
         const params = request.nextUrl.searchParams;
         if (params.get('portal') === 'admin') {
-          const session = JSON.parse(adminCookie.value);
-          if (session.role === 'admin') {
+          const session = await verifyJWT(adminCookie.value);
+          if (session && session.role === 'admin') {
             return NextResponse.redirect(new URL('/admin', request.url));
           }
         }
@@ -94,8 +95,8 @@ export function middleware(request: NextRequest) {
         const params = request.nextUrl.searchParams;
         const portal = params.get('portal');
         if (!portal || portal === 'client') {
-          const session = JSON.parse(clientCookie.value);
-          if (session.role === 'client') {
+          const session = await verifyJWT(clientCookie.value);
+          if (session && session.role === 'client') {
             return NextResponse.redirect(new URL('/client', request.url));
           }
         }

@@ -1,4 +1,12 @@
 import { NextRequest } from "next/server";
+import * as jose from "jose";
+
+const SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET) {
+  throw new Error("CRITICAL STARTUP ERROR: SESSION_SECRET environment variable is not defined!");
+}
+
+const secretKey = new TextEncoder().encode(SESSION_SECRET);
 
 export interface SessionUser {
   role: "admin" | "client";
@@ -9,11 +17,20 @@ export interface SessionUser {
   email?: string;
 }
 
-function parseCookieValue(value: string | undefined): any | null {
-  if (!value) return null;
+export async function signJWT(payload: any, maxAge: number): Promise<string> {
+  return await new jose.SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(Date.now() / 1000) + maxAge)
+    .sign(secretKey);
+}
+
+export async function verifyJWT(token: string | undefined): Promise<any | null> {
+  if (!token) return null;
   try {
-    return JSON.parse(value);
-  } catch {
+    const { payload } = await jose.jwtVerify(token, secretKey);
+    return payload;
+  } catch (err) {
     return null;
   }
 }
@@ -23,26 +40,19 @@ export async function getSessionFromCookies(request?: NextRequest): Promise<Sess
     // PRIMARY: Read directly from NextRequest cookies (reliable in all Next.js route handlers)
     if (request?.cookies) {
       const clientCookieVal = request.cookies.get("hazel_client_session")?.value;
-      const clientSession = parseCookieValue(clientCookieVal);
+      const clientSession = await verifyJWT(clientCookieVal);
       if (clientSession?.role === "client" && clientSession?.tenantId) {
         return clientSession as SessionUser;
       }
 
       const adminCookieVal = request.cookies.get("hazel_admin_session")?.value;
-      const adminSession = parseCookieValue(adminCookieVal);
+      const adminSession = await verifyJWT(adminCookieVal);
       if (adminSession?.role === "admin") {
         const queryTenantId = request.nextUrl?.searchParams?.get("tenantId");
         return {
           ...adminSession,
           tenantId: queryTenantId || adminSession.tenantId || "admin"
         } as SessionUser;
-      }
-
-      // Old unified cookie fallback
-      const oldCookieVal = request.cookies.get("hazel_session")?.value;
-      const oldSession = parseCookieValue(oldCookieVal);
-      if (oldSession?.tenantId) {
-        return oldSession as SessionUser;
       }
     }
 
@@ -52,24 +62,18 @@ export async function getSessionFromCookies(request?: NextRequest): Promise<Sess
       const cookieStore = await cookies();
 
       const clientCookieVal = cookieStore.get("hazel_client_session")?.value;
-      const clientSession = parseCookieValue(clientCookieVal);
+      const clientSession = await verifyJWT(clientCookieVal);
       if (clientSession?.role === "client" && clientSession?.tenantId) {
         return clientSession as SessionUser;
       }
 
       const adminCookieVal = cookieStore.get("hazel_admin_session")?.value;
-      const adminSession = parseCookieValue(adminCookieVal);
+      const adminSession = await verifyJWT(adminCookieVal);
       if (adminSession?.role === "admin") {
         return {
           ...adminSession,
           tenantId: adminSession.tenantId || "admin"
         } as SessionUser;
-      }
-
-      const oldCookieVal = cookieStore.get("hazel_session")?.value;
-      const oldSession = parseCookieValue(oldCookieVal);
-      if (oldSession?.tenantId) {
-        return oldSession as SessionUser;
       }
     } catch (innerErr) {
       // next/headers not available in this context — that's fine

@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DB } from "@/lib/db";
+import { signJWT } from "@/lib/auth-session";
 
 export const dynamic = 'force-dynamic';
 
-const COOKIE_OPTS = (remember: boolean) => ({
-  httpOnly: false,
-  path: "/",
-  maxAge: remember ? 60 * 60 * 24 * 30 : 60 * 60 * 24,
-  sameSite: "lax" as const,
-  secure: process.env.NODE_ENV === "production",
-});
+const getCookieOptsAndMaxAge = (remember: boolean) => {
+  const maxAge = remember ? 60 * 60 * 24 * 30 : 60 * 60 * 24;
+  return {
+    opts: {
+      httpOnly: true,
+      path: "/",
+      maxAge,
+      sameSite: "lax" as const,
+      secure: process.env.NODE_ENV === "production",
+    },
+    maxAge
+  };
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,8 +43,10 @@ export async function POST(request: NextRequest) {
         accessLevel: "read_write",
       };
 
+      const { opts, maxAge } = getCookieOptsAndMaxAge(rememberMe);
+      const jwtToken = await signJWT(sessionData, maxAge);
       const res = NextResponse.json({ success: true, user: sessionData, redirectTo: "/admin" });
-      res.cookies.set("hazel_admin_session", JSON.stringify(sessionData), COOKIE_OPTS(rememberMe));
+      res.cookies.set("hazel_admin_session", jwtToken, opts);
       return res;
     }
 
@@ -67,8 +76,10 @@ export async function POST(request: NextRequest) {
             accessLevel: adminMatch.accessLevel || "read_write",
           };
 
+          const { opts, maxAge } = getCookieOptsAndMaxAge(rememberMe);
+          const jwtToken = await signJWT(sessionData, maxAge);
           const res = NextResponse.json({ success: true, user: sessionData, redirectTo: "/admin" });
-          res.cookies.set("hazel_admin_session", JSON.stringify(sessionData), COOKIE_OPTS(rememberMe));
+          res.cookies.set("hazel_admin_session", jwtToken, opts);
           return res;
         }
       }
@@ -143,8 +154,10 @@ export async function POST(request: NextRequest) {
       email: tenant.email,
     };
 
+    const { opts, maxAge } = getCookieOptsAndMaxAge(rememberMe);
+    const jwtToken = await signJWT(sessionData, maxAge);
     const res = NextResponse.json({ success: true, user: sessionData, redirectTo: "/client" });
-    res.cookies.set("hazel_client_session", JSON.stringify(sessionData), COOKIE_OPTS(rememberMe));
+    res.cookies.set("hazel_client_session", jwtToken, opts);
     return res;
 
   } catch (err: any) {
