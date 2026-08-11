@@ -31,6 +31,37 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(report);
   }
 
+  if (deepseekKey) {
+    try {
+      console.log(`[debug-llm] Trying DeepSeek...`);
+      const res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${deepseekKey.trim()}`
+        },
+        body: JSON.stringify({
+          model: "deepseek-chat",
+          messages: [{ role: "user", content: "Say hello" }],
+          max_tokens: 50
+        })
+      });
+      const data = await res.json();
+      report.test_result = {
+        status: res.ok ? "SUCCESS" : "ERROR",
+        status_code: res.status,
+        response: data
+      };
+      return NextResponse.json(report);
+    } catch (e: any) {
+      report.test_result = {
+        status: "ERROR",
+        error_message: e.message
+      };
+      return NextResponse.json(report);
+    }
+  }
+
   if (anthropicKey) {
     try {
       const anthropic = new Anthropic({ apiKey: anthropicKey.trim() });
