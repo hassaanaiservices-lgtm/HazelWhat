@@ -33,15 +33,20 @@ function getEnvKey(keyName: string): string {
 
 function getApiKey(config: any): string {
   const keys = [
+    // 1. Tenant-specific keys (configured in dashboard)
+    config?.apiKey,
+    config?.anthropicApiKey,
+    config?.openaiApiKey,
+    config?.openRouterApiKey,
+    config?.deepgramApiKey,
+
+    // 2. Global fallback environment variables
     process.env["DEEPSEEK_API_KEY"],
     getEnvKey("DEEPSEEK_API_KEY"),
-    config.apiKey,
     process.env["API_KEY"],
     getEnvKey("API_KEY"),
     process.env["ANTHROPIC_API_KEY"],
     getEnvKey("ANTHROPIC_API_KEY"),
-    config.anthropicApiKey,
-    config.openRouterApiKey,
     process.env["OPENAI_API_KEY"],
     getEnvKey("OPENAI_API_KEY"),
     process.env["OPENROUTER_API_KEY"],
