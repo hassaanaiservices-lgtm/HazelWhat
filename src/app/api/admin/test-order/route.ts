@@ -37,15 +37,22 @@ export async function GET(req: NextRequest) {
   };
 
   try {
-    const { data, error } = await supabase
+    const { data: cols, error: colErr } = await supabase
+      .rpc('get_table_columns', { table_name: 'orders' });
+
+    // If RPC doesn't exist, let's query columns via HTTP or a different way.
+    // Let's do a raw select of 1 row to see the keys of the returned object
+    const { data: oneRow } = await supabase
       .from('orders')
-      .insert(testOrder)
-      .select();
+      .select('*')
+      .limit(1);
+
+    const keys = oneRow && oneRow.length > 0 ? Object.keys(oneRow[0]) : [];
 
     return NextResponse.json({
-      success: !error,
-      error: error || null,
-      inserted: data || null
+      keys,
+      error: colErr || null,
+      raw_data: oneRow
     });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
