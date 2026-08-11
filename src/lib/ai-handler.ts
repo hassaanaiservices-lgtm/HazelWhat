@@ -593,6 +593,13 @@ function isDuplicateMessage(msgId: string): boolean {
   return false;
 }
 
+interface LockQueue {
+  promise: Promise<void>;
+  pendingCount: number;
+}
+
+const customerLocks = new Map<string, LockQueue>();
+
 export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
   try {
     const remoteJid = msg?.key?.remoteJid;
@@ -615,6 +622,46 @@ export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
       }
     }
     from = from?.replace("@s.whatsapp.net", "");
+    if (!from) return;
+
+    // Acquire lock/queue for this customer phone number
+    let queue = customerLocks.get(from);
+    if (!queue) {
+      queue = {
+        promise: Promise.resolve(),
+        pendingCount: 0
+      };
+      customerLocks.set(from, queue);
+    }
+
+    queue.pendingCount++;
+    const previousPromise = queue.promise;
+    let resolveLock: () => void;
+    const currentPromise = new Promise<void>((resolve) => {
+      resolveLock = resolve;
+    });
+    queue.promise = currentPromise;
+
+    try {
+      await previousPromise;
+      await processWhatsAppMessage(msg, from, inputTenantId);
+    } finally {
+      resolveLock!();
+      const currentQueue = customerLocks.get(from);
+      if (currentQueue) {
+        currentQueue.pendingCount--;
+        if (currentQueue.pendingCount <= 0) {
+          customerLocks.delete(from);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("[AI Handler] handleWhatsAppMessage outer error:", error);
+  }
+}
+
+async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: string) {
+  try {
     const interactiveResponse = msg.message?.interactiveResponseMessage;
     let content = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || "";
     
@@ -1339,7 +1386,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
     }
     
   } catch (error) {
-    console.error("[AI Handler] OUTER Error processing message:", error);
+    console.error("[AI Handler] processWhatsAppMessage error:", error);
   }
 }
 
