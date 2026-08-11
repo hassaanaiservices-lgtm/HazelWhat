@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+// @ts-ignore
 import { Client } from "pg";
 
 export const dynamic = 'force-dynamic';
@@ -25,15 +26,19 @@ export async function GET(req: NextRequest) {
   try {
     await client.connect();
     
-    // Run ALTER TABLE query
-    console.log("[Migration] Running ALTER TABLE orders...");
-    const res = await client.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS recovery_stage INT DEFAULT 0;");
+    // Run ALTER TABLE query for recovery_stage
+    console.log("[Migration] Adding recovery_stage to orders...");
+    await client.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS recovery_stage INT DEFAULT 0;");
+    
+    // Run ALTER TABLE query for timestamp
+    console.log("[Migration] Adding timestamp to orders...");
+    const res = await client.query("ALTER TABLE orders ADD COLUMN IF NOT EXISTS timestamp TIMESTAMPTZ DEFAULT NOW();");
     
     await client.end();
     
     return NextResponse.json({
       success: true,
-      message: "Database migration executed successfully! Column 'recovery_stage' added to table 'orders'.",
+      message: "Database migration executed successfully! Added missing columns 'recovery_stage' and 'timestamp' to the 'orders' table.",
       result: res
     });
   } catch (err: any) {
