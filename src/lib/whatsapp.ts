@@ -22,7 +22,12 @@ const globalForBaileys = global as unknown as {
   activeTenantId?: string | null;
   lastError?: string | null;
   lastStatusCode?: number | null;
+  sessionConnectedAt?: number | null;
 };
+
+if (globalForBaileys.sessionConnectedAt === undefined) {
+  globalForBaileys.sessionConnectedAt = Date.now();
+}
 
 if (!globalForBaileys.baileysSession) {
   globalForBaileys.baileysSession = { status: "disconnected", qrCode: null, qrGeneratedAt: null, sock: null };
@@ -113,6 +118,7 @@ export class WhatsAppManager {
       try {
         const config = await DB.getConfig();
         const now = Date.now();
+        const sessionConnectedAt = globalForBaileys.sessionConnectedAt || Date.now();
         const { generateContextualFollowUp, generateScheduledFollowUp } = await import('./ai-handler');
         
         // --- SYSTEM A: Proactive AI-Scheduled Follow-ups ---
@@ -147,6 +153,15 @@ export class WhatsAppManager {
           const phone = order.phone;
           const messages = chats[phone];
           if (!messages || messages.length === 0) continue;
+
+          // Only recover if there is active customer interaction since session connected
+          const userMessages = messages.filter(m => m.role === 'user');
+          if (userMessages.length === 0) continue;
+          const lastUserMessage = userMessages[userMessages.length - 1];
+          if (new Date(lastUserMessage.timestamp).getTime() < sessionConnectedAt) {
+            console.log(`[System C Recovery] Skipping ${phone}: Last user message was before the active session connected.`);
+            continue;
+          }
           
           const lastMessage = messages[messages.length - 1];
           // We only recover order if the bot was the last to speak (waiting for details)
@@ -223,6 +238,18 @@ export class WhatsAppManager {
         for (const phone in chats) {
           const messages = chats[phone];
           if (!messages || messages.length === 0) continue;
+
+          // Only follow up if there is active customer interaction since session connected
+          const userMessages = messages.filter(m => m.role === 'user');
+          if (userMessages.length === 0) {
+            console.log(`  -> Skipping ${phone}: No user message in history.`);
+            continue;
+          }
+          const lastUserMessage = userMessages[userMessages.length - 1];
+          if (new Date(lastUserMessage.timestamp).getTime() < sessionConnectedAt) {
+            console.log(`  -> Skipping ${phone}: Last user message was before the active session connected.`);
+            continue;
+          }
           
           const customer = await DB.getCustomer(phone);
           const tenantId = customer?.tenantId || 'admin';
@@ -803,6 +830,7 @@ export class WhatsAppManager {
             clearTimeout(globalForBaileys.reconnectTimeout);
             globalForBaileys.reconnectTimeout = null;
           }
+          globalForBaileys.sessionConnectedAt = Date.now();
 
           // Auto-resolve active tenant from the connected phone number
           WhatsAppManager.resolveActiveTenantFromSocket().catch(err => {
