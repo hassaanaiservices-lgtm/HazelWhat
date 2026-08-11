@@ -769,10 +769,6 @@ export default function DashboardPage() {
       fetchChats();
       fetchOrders();
       fetchSession();
-      // Only fetch config if user is not currently saving
-      if (!savingConfig && !savingKB && !savingKeywords && !savingFollowUps) {
-        fetchConfig();
-      }
     }, 4000);
 
     return () => clearInterval(pollInterval);
