@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { WhatsAppManager } from "./whatsapp";
-import { DB, DB_DIR, formatProductsToCatalog } from "./db";
+import { DB, DB_DIR, formatProductsToCatalog, ChatMessage } from "./db";
 import dns from "dns";
 import fs from "fs";
 import path from "path";
@@ -411,6 +411,42 @@ function convertOpenAiResponseToAnthropic(message: any): any[] {
   return content;
 }
 
+export async function callLLMWithFallback(
+  config: any,
+  systemPrompt: string,
+  messages: any[],
+  tools: any[] = [],
+  temperature: number = 0.7
+): Promise<{ res: any; provider: string }> {
+  const deepseekKey = config?.openaiApiKey || process.env.DEEPSEEK_API_KEY || getEnvKey("DEEPSEEK_API_KEY") || "";
+  const anthropicKey = config?.anthropicApiKey || process.env.ANTHROPIC_API_KEY || getEnvKey("ANTHROPIC_API_KEY") || "";
+
+  if (deepseekKey) {
+    try {
+      console.log("[callLLMWithFallback] Attempting primary LLM (DeepSeek)...");
+      const res = await callLLM(deepseekKey, systemPrompt, messages, tools, temperature);
+      console.log("[callLLMWithFallback] Provider used: deepseek");
+      return { res, provider: "deepseek" };
+    } catch (err: any) {
+      console.error("[callLLMWithFallback] Primary LLM (DeepSeek) failed:", err.message || err);
+      if (anthropicKey) {
+        console.warn("[callLLMWithFallback] Falling back to backup LLM (Anthropic)...");
+        const res = await callLLM(anthropicKey, systemPrompt, messages, tools, temperature);
+        console.log("[callLLMWithFallback] Provider used: anthropic-fallback");
+        return { res, provider: "anthropic-fallback" };
+      }
+      throw err;
+    }
+  } else if (anthropicKey) {
+    console.log("[callLLMWithFallback] No DeepSeek key configured. Attempting Anthropic...");
+    const res = await callLLM(anthropicKey, systemPrompt, messages, tools, temperature);
+    console.log("[callLLMWithFallback] Provider used: anthropic");
+    return { res, provider: "anthropic" };
+  } else {
+    throw new Error("No API keys configured.");
+  }
+}
+
 async function callLLM(
   apiKey: string,
   systemPrompt: string,
@@ -425,9 +461,6 @@ async function callLLM(
     const anthropic = new Anthropic({ apiKey: trimmed });
     const anthropicModels = [
       "claude-sonnet-4-6",
-      "claude-haiku-4-5-20251001",
-      "claude-sonnet-4-5-20250929",
-      "claude-opus-4-6",
       "claude-3-5-sonnet-20241022",
       "claude-3-haiku-20240307"
     ];
@@ -449,13 +482,6 @@ async function callLLM(
         console.error(`[callLLM] Anthropic model ${model} error:`, err.message || err);
         lastErr = err;
       }
-    }
-    
-    // BACKWARD FALLBACK TO DEEPSEEK IF ANTHROPIC FAILS Completely
-    const deepseekKey = process.env.DEEPSEEK_API_KEY || getEnvKey("DEEPSEEK_API_KEY") || "";
-    if (deepseekKey) {
-      console.warn("[callLLM] Anthropic failed. Falling back to DeepSeek...");
-      return callLLM(deepseekKey, systemPrompt, messages, tools, temperature);
     }
     
     throw lastErr || new Error("Anthropic API call failed for all models.");
@@ -1108,10 +1134,13 @@ Keep their history in mind and treat them like a valued returning customer.`;
       }
     ];
 
+    let usedProvider = "unknown";
     try {
       await WhatsAppManager.sendTyping(from);
-      console.log(`[AI Handler] Requesting completion using unified callLLM...`);
-      let res = await callLLM(apiKey, fullSystemPrompt, recentHistory, tools);
+      console.log(`[AI Handler] Requesting completion using unified callLLMWithFallback...`);
+      const fallbackResult = await callLLMWithFallback(config, fullSystemPrompt, recentHistory, tools);
+      usedProvider = fallbackResult.provider;
+      let res = fallbackResult.res;
 
       let textContent = "";
       for (const block of res.content) {
@@ -1121,7 +1150,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
       }
       aiReply = textContent || aiReply;
 
-      const toolUses = res.content.filter(block => block.type === 'tool_use');
+      const toolUses = res.content.filter((block: any) => block.type === 'tool_use');
       
       if (toolUses.length > 0) {
         console.log("[AI Handler] AI requested tool calls:", JSON.stringify(toolUses));
@@ -1254,7 +1283,9 @@ Keep their history in mind and treat them like a valued returning customer.`;
         } as any);
 
         console.log("[AI Handler] Sending tool results back to AI...");
-        res = await callLLM(apiKey, fullSystemPrompt, recentHistory, tools);
+        const fallbackResult2 = await callLLMWithFallback(config, fullSystemPrompt, recentHistory, tools);
+        usedProvider = fallbackResult2.provider;
+        res = fallbackResult2.res;
 
         textContent = "";
         for (const block of res.content) {
@@ -1266,6 +1297,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
       }
       
       debugLog(`SUCCESS: Unified LLM generated reply: "${aiReply.substring(0, 60)}..."`);
+      console.log(`[AI Handler] Unified LLM generated reply successfully. Provider used: ${usedProvider}`);
     } catch (apiErr: any) {
       const errorDetail = apiErr.message || JSON.stringify(apiErr);
       console.error(`[AI Handler] Unified LLM API ERROR CAUGHT:`, errorDetail);
@@ -1279,7 +1311,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
       await DB.recordApiAlert('Conversational LLM', alertType, alertMsg);
 
       aiReply = "I'm currently experiencing a high volume of requests and having some technical difficulties. A human agent will be with you shortly, or you can try again later!";
-      const diagnostics = `[DIAGNOSTIC - API ERROR] Unified LLM call failed.\n- Key Type: ${detectKeyType(apiKey)}\n- Last Error: ${errorDetail}`;
+      const diagnostics = `[DIAGNOSTIC - API ERROR] Unified LLM call failed.\n- Provider: ${usedProvider}\n- Last Error: ${errorDetail}`;
       await DB.addChatMessage(from, { role: "assistant", content: diagnostics }, resolvedTenantId);
     }
 
@@ -1367,7 +1399,6 @@ Keep their history in mind and treat them like a valued returning customer.`;
 
 export async function shouldSendFollowUp(phone: string, followUpPrompt?: string, tenantId?: string): Promise<{ shouldFollowUp: boolean; reason: string }> {
   const config = await DB.getConfig(tenantId);
-  const apiKey = getApiKey(config);
 
   const history = await DB.getChats(phone, tenantId);
   const customer = await DB.getCustomer(phone, tenantId);
@@ -1389,10 +1420,6 @@ export async function shouldSendFollowUp(phone: string, followUpPrompt?: string,
     if (lastUserMsgTime <= orderTime) {
       return { shouldFollowUp: false, reason: `Deal completed: Customer confirmed order #${completedOrder.id}` };
     }
-  }
-
-  if (!apiKey) {
-    return { shouldFollowUp: true, reason: "No API key configured for AI evaluation, defaulting to send." };
   }
 
   const recentHistory = history
@@ -1419,7 +1446,7 @@ Respond STRICTLY with JSON only in this exact format:
 {"shouldFollowUp": boolean, "reason": "brief 1-sentence explanation"}`;
 
   try {
-    const res = await callLLM(apiKey, systemPrompt, recentHistory, []);
+    const { res } = await callLLMWithFallback(config, systemPrompt, recentHistory, []);
     let textContent = "";
     for (const block of res.content) {
       if (block.type === 'text') textContent += block.text;
@@ -1438,11 +1465,6 @@ Respond STRICTLY with JSON only in this exact format:
 
 export async function generateContextualFollowUp(phone: string, followUpPrompt?: string, tenantId?: string): Promise<string> {
   const config = await DB.getConfig(tenantId);
-  const apiKey = getApiKey(config);
-
-  if (!apiKey) {
-    return (followUpPrompt && followUpPrompt.trim()) || "Hi! Just checking in to see if you have any questions or if you'd like to proceed?";
-  }
 
   const history = await DB.getChats(phone, tenantId);
   const recentHistory = history.filter((m: any) => m.role === 'user' || m.role === 'assistant').slice(-6).map((m: any) => ({ role: m.role, content: m.content }));
@@ -1456,7 +1478,7 @@ export async function generateContextualFollowUp(phone: string, followUpPrompt?:
   }
 
   try {
-    const res = await callLLM(apiKey, systemPrompt, recentHistory, []);
+    const { res } = await callLLMWithFallback(config, systemPrompt, recentHistory, []);
     let textContent = "";
     for (const block of res.content) {
       if (block.type === 'text') {
@@ -1472,11 +1494,6 @@ export async function generateContextualFollowUp(phone: string, followUpPrompt?:
 
 export async function generateScheduledFollowUp(phone: string, contextNote: string, tenantId?: string): Promise<string> {
   const config = await DB.getConfig(tenantId);
-  const apiKey = getApiKey(config);
-
-  if (!apiKey) {
-    return `Hi! Following up on what we discussed: ${contextNote}`;
-  }
 
   const history = await DB.getChats(phone, tenantId);
   const recentHistory = history.filter((m: any) => m.role === 'user' || m.role === 'assistant').slice(-5).map((m: any) => ({ role: m.role, content: m.content }));
@@ -1485,7 +1502,7 @@ export async function generateScheduledFollowUp(phone: string, contextNote: stri
   systemPrompt += `\n\nContext for this follow-up: ${contextNote}\n\nInstruction: Look at the chat history and the context note above. Craft a natural, friendly, and highly relevant follow-up message fulfilling your promise to the user.`;
 
   try {
-    const res = await callLLM(apiKey, systemPrompt, recentHistory, []);
+    const { res } = await callLLMWithFallback(config, systemPrompt, recentHistory, []);
     let textContent = "";
     for (const block of res.content) {
       if (block.type === 'text') {
