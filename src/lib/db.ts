@@ -726,7 +726,7 @@ export class DB {
   static async getOrders(tenantId?: string | null): Promise<Order[]> {
     if (!supabase) return [];
     try {
-      let query = supabase.from('orders').select('*').order('timestamp', { ascending: false });
+      let query = supabase.from('orders').select('*').order('created_at', { ascending: false });
       if (tenantId && tenantId !== 'admin') query = query.eq('tenant_id', tenantId);
       const { data } = await query;
       return (data || []).map((o: any) => ({
@@ -742,7 +742,7 @@ export class DB {
         contactNumber: o.contact_number,
         paymentMethod: o.payment_method,
         price: o.price,
-        timestamp: o.timestamp || o.created_at,
+        timestamp: o.created_at || o.timestamp,
         status: o.status || 'pending',
         recoveryStage: o.recovery_stage || 0,
         notes: o.notes
@@ -790,9 +790,8 @@ export class DB {
           payment_method: newOrder.paymentMethod,
           price: newOrder.price,
           status: newOrder.status,
-          recovery_stage: 0,
           notes: newOrder.notes,
-          timestamp: newOrder.timestamp
+          created_at: newOrder.timestamp
         });
       } catch (e) {
         console.error('[DB/Supabase] addOrder error:', e);
@@ -806,7 +805,6 @@ export class DB {
     try {
       const payload: any = {};
       if (updates.status) payload.status = updates.status;
-      if (updates.recoveryStage !== undefined) payload.recovery_stage = updates.recoveryStage;
       if (updates.notes !== undefined) payload.notes = updates.notes;
       if (updates.customerName) payload.customer_name = updates.customerName;
 
