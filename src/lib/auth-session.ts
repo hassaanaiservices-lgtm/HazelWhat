@@ -1,12 +1,13 @@
 import { NextRequest } from "next/server";
 import * as jose from "jose";
 
-const SESSION_SECRET = process.env.SESSION_SECRET;
-if (!SESSION_SECRET) {
-  throw new Error("CRITICAL STARTUP ERROR: SESSION_SECRET environment variable is not defined!");
+function getSecretKey() {
+  const SESSION_SECRET = process.env.SESSION_SECRET;
+  if (!SESSION_SECRET) {
+    throw new Error("CRITICAL RUNTIME ERROR: SESSION_SECRET environment variable is not defined!");
+  }
+  return new TextEncoder().encode(SESSION_SECRET);
 }
-
-const secretKey = new TextEncoder().encode(SESSION_SECRET);
 
 export interface SessionUser {
   role: "admin" | "client";
@@ -18,6 +19,7 @@ export interface SessionUser {
 }
 
 export async function signJWT(payload: any, maxAge: number): Promise<string> {
+  const secretKey = getSecretKey();
   return await new jose.SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -28,6 +30,7 @@ export async function signJWT(payload: any, maxAge: number): Promise<string> {
 export async function verifyJWT(token: string | undefined): Promise<any | null> {
   if (!token) return null;
   try {
+    const secretKey = getSecretKey();
     const { payload } = await jose.jwtVerify(token, secretKey);
     return payload;
   } catch (err) {
