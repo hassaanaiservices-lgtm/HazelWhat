@@ -978,7 +978,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
     // Filter out system messages and sanitize past assistant refusal messages so LLM never gets primed by past errors!
     let recentHistory = history
       .filter((m: any) => m.role === 'user' || m.role === 'assistant')
-      .slice(-10)
+      .slice(-200)
       .map((m: any) => {
         let textContent = m.content || "";
         if (m.role === 'assistant' && (
