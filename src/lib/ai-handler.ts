@@ -157,51 +157,6 @@ async function transcribeAudioWithDeepgram(buffer: Buffer, apiKey: string, mimet
   }
 }
 
-async function generateSpeechWithDeepgram(text: string, apiKey: string, voice = "aura-asteria-en"): Promise<Buffer | null> {
-  if (!apiKey || !apiKey.trim() || !text || !text.trim()) return null;
-  try {
-    const cleanText = text.replace(/[*_~`#]/g, '').trim();
-    if (!cleanText) return null;
-
-    console.log(`[Deepgram TTS] Synthesizing OGG Opus speech for: "${cleanText.substring(0, 60)}..." using voice ${voice}`);
-    let res = await fetch(`https://api.deepgram.com/v1/speak?model=${encodeURIComponent(voice)}&container=ogg&encoding=opus`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Token ${apiKey.trim()}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ text: cleanText })
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.warn(`[Deepgram TTS] OGG Opus primary error (${res.status}):`, errText);
-      // Fallback attempt without explicit container parameters
-      res = await fetch(`https://api.deepgram.com/v1/speak?model=${encodeURIComponent(voice)}`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Token ${apiKey.trim()}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ text: cleanText })
-      });
-    }
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error(`[Deepgram TTS] API error (${res.status}):`, errText);
-      return null;
-    }
-
-    const arrayBuffer = await res.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    console.log(`[Deepgram TTS] Speech synthesis successful: generated ${buffer.length} bytes.`);
-    return buffer;
-  } catch (err) {
-    console.error("[Deepgram TTS] Exception during speech synthesis:", err);
-    return null;
-  }
-}
 
 async function transcribeAudioWithOpenAI(buffer: Buffer, apiKey: string, mimetype = "audio/ogg"): Promise<string> {
   if (!apiKey || !apiKey.trim() || !apiKey.startsWith("sk-")) return "";
@@ -744,7 +699,7 @@ export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
     }
 
     const config = await DB.getConfig(resolvedTenantId);
-    const { apiKey: deepgramApiKey, voice: deepgramVoice } = await getDeepgramSettings(config);
+    const { apiKey: deepgramApiKey } = await getDeepgramSettings(config);
 
     let voiceTranscript = "";
     if (hasAudio && audioBuffer) {
@@ -1364,32 +1319,9 @@ Keep their history in mind and treat them like a valued returning customer.`;
         aiReply = "Hello! Thank you for your voice note. I am glad to assist you! How can I help you with our product catalog, pricing, or placing an order today?";
       }
 
-      let voiceSent = false;
-
-      // If user sent a voice note AND Deepgram API Key is configured, reply with a voice note!
-      if (hasAudio && deepgramApiKey) {
-        console.log(`[AI Handler] Synthesizing Deepgram TTS voice note reply for ${from}...`);
-        const ttsBuffer = await generateSpeechWithDeepgram(aiReply, deepgramApiKey, deepgramVoice);
-        if (ttsBuffer) {
-          sentMsg = await WhatsAppManager.sendMedia(from, ttsBuffer, "audio/ogg; codecs=opus", "voice_note.opus", aiReply, true);
-          const base64Tts = ttsBuffer.toString("base64");
-          await DB.addChatMessage(from, {
-            id: sentMsg?.key?.id,
-            role: "assistant",
-            content: aiReply,
-            mediaUrl: `data:audio/ogg;base64,${base64Tts}`,
-            mediaType: "audio/ogg"
-          }, resolvedTenantId);
-          voiceSent = true;
-          console.log(`[AI Handler] Replied to ${from} with native OGG Opus Voice Note!`);
-        }
-      }
-
-      if (!voiceSent) {
-        sentMsg = await WhatsAppManager.sendMessage(from, aiReply);
-        console.log(`[AI Handler] Replied to ${from}: ${aiReply}`);
-        await DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: aiReply || "[Media Sent]" }, resolvedTenantId);
-      }
+      sentMsg = await WhatsAppManager.sendMessage(from, aiReply);
+      console.log(`[AI Handler] Replied to ${from}: ${aiReply}`);
+      await DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: aiReply || "[Media Sent]" }, resolvedTenantId);
     }
     
   } catch (error) {
