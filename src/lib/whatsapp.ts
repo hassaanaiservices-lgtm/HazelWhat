@@ -52,6 +52,33 @@ export class WhatsAppManager {
   static getActiveTenantId(): string | null {
     return globalForBaileys.activeTenantId || null;
   }
+
+  static async resolveActiveTenantFromSocket(): Promise<string | null> {
+    try {
+      const sockUserId = globalForBaileys.baileysSession?.sock?.user?.id;
+      if (!sockUserId) {
+        return null;
+      }
+      const cleanPhone = sockUserId.split("@")[0].split(":")[0].replace(/[^0-9]/g, "");
+      const tenants = await DB.getTenants();
+      const matchedTenant = tenants.find(t => {
+        const tPhone = (t.phoneNumber || "").replace(/[^0-9]/g, "");
+        return tPhone && (tPhone === cleanPhone || cleanPhone.endsWith(tPhone) || tPhone.endsWith(cleanPhone));
+      });
+      if (matchedTenant) {
+        globalForBaileys.activeTenantId = matchedTenant.id;
+        console.log(`[WhatsApp] resolveActiveTenantFromSocket resolved connected phone: ${cleanPhone} -> ${matchedTenant.id}`);
+        return matchedTenant.id;
+      } else {
+        console.log(`[WhatsApp] resolveActiveTenantFromSocket: No tenant matches connected phone number: ${cleanPhone}`);
+        return null;
+      }
+    } catch (err) {
+      console.error("[WhatsApp] Error in resolveActiveTenantFromSocket:", err);
+      return null;
+    }
+  }
+
   static startAutoSync() {
     if (globalForBaileys.autoSyncInterval) {
       clearInterval(globalForBaileys.autoSyncInterval);
@@ -778,25 +805,9 @@ export class WhatsAppManager {
           }
 
           // Auto-resolve active tenant from the connected phone number
-          if (sock.user?.id) {
-            const cleanPhone = sock.user.id.split("@")[0].split(":")[0].replace(/[^0-9]/g, "");
-            console.log(`[Baileys] Socket opened. Connected user ID: ${sock.user.id} (Phone: ${cleanPhone})`);
-            
-            DB.getTenants().then(tenants => {
-              const matchedTenant = tenants.find(t => {
-                const tPhone = (t.phoneNumber || "").replace(/[^0-9]/g, "");
-                return tPhone && (tPhone === cleanPhone || cleanPhone.endsWith(tPhone) || tPhone.endsWith(cleanPhone));
-              });
-              if (matchedTenant) {
-                globalForBaileys.activeTenantId = matchedTenant.id;
-                console.log(`[WhatsApp] Auto-resolved active tenant from connected phone: ${cleanPhone} -> ${matchedTenant.id}`);
-              } else {
-                console.log(`[WhatsApp] No tenant matches connected phone number: ${cleanPhone}`);
-              }
-            }).catch(err => {
-              console.error("[WhatsApp] Error resolving active tenant on connection open:", err);
-            });
-          }
+          WhatsAppManager.resolveActiveTenantFromSocket().catch(err => {
+            console.error("[WhatsApp] Error resolving active tenant on connection open:", err);
+          });
         }
       });
 

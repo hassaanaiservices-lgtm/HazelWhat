@@ -667,6 +667,9 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     
     // Resolve Tenant ID early!
     let resolvedTenantId = inputTenantId || WhatsAppManager.getActiveTenantId() || undefined;
+    if (!resolvedTenantId) {
+      resolvedTenantId = (await WhatsAppManager.resolveActiveTenantFromSocket()) || undefined;
+    }
     if (!resolvedTenantId && from) {
       const cust = await DB.getCustomer(from);
       if (cust?.tenantId && cust.tenantId !== 'admin') {
@@ -674,13 +677,9 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
       }
     }
     if (!resolvedTenantId) {
-      const tenants = await DB.getTenants();
-      if (tenants && tenants.length > 0) {
-        const clientTenant = tenants.find(t => t.id !== 'admin');
-        resolvedTenantId = clientTenant ? clientTenant.id : tenants[0].id;
-      }
+      console.error(`[AI Handler] Failed to resolve active tenant ID for message from ${from}. Dropping message.`);
+      return;
     }
-    resolvedTenantId = resolvedTenantId || 't-1004';
 
     if (interactiveResponse?.nativeFlowResponseMessage?.name === "quick_reply") {
       try {
@@ -911,10 +910,10 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     let aiReply = "I'm sorry, I didn't quite catch that. Could you rephrase?";
     
     // Fetch active Tenant record from DB by resolvedTenantId
-    let activeTenant = await DB.getTenantById(resolvedTenantId);
+    const activeTenant = await DB.getTenantById(resolvedTenantId);
     if (!activeTenant) {
-      const tenants = (await DB.getTenants()) || [];
-      activeTenant = tenants.find(t => t.id === resolvedTenantId) || tenants[0];
+      console.error(`[AI Handler] No tenant record found for resolvedTenantId: ${resolvedTenantId}. Dropping message.`);
+      return;
     }
     
     const activeSystemPrompt = config.systemPrompt || activeTenant?.systemPrompt || "";

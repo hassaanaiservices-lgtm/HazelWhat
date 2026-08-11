@@ -3,10 +3,6 @@ export async function register() {
     try {
       const { WhatsAppManager } = await import("@/lib/whatsapp");
       const { handleWhatsAppMessage } = await import("@/lib/ai-handler");
-      const { migrateOrphanedRecordsToClientTenant } = await import("@/lib/supabase");
-
-      console.log("[Server Startup] Migrating orphaned chat records to t-1004...");
-      await migrateOrphanedRecordsToClientTenant("t-1004");
 
       console.log("[Server Startup] Auto-initializing WhatsApp Manager on boot...");
       WhatsAppManager.startSession(async (msg) => {
