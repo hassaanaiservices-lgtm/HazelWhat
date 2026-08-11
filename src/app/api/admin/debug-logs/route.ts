@@ -24,19 +24,19 @@ export async function GET(req: NextRequest) {
       .order('timestamp', { ascending: false })
       .limit(30);
 
-    // 2. Fetch latest 10 API alerts
-    const { data: alerts, error: alertErr } = await supabase
-      .from('api_alerts')
+    // 2. Fetch latest 20 orders
+    const { data: orders, error: orderErr } = await supabase
+      .from('orders')
       .select('*')
       .order('timestamp', { ascending: false })
       .limit(20);
 
     return NextResponse.json({
       latest_messages: messages || [],
-      latest_alerts: alerts || [],
+      latest_orders: orders || [],
       errors: {
         msgErr: msgErr?.message || null,
-        alertErr: alertErr?.message || null
+        orderErr: orderErr?.message || null
       }
     });
   } catch (e: any) {
