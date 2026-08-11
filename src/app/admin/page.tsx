@@ -306,6 +306,61 @@ export default function VoiceSaaSApp() {
     }
   };
 
+  // Local Backup State & Recovery Handlers
+  const [hasLocalBackup, setHasLocalBackup] = useState(false);
+  const [backupCount, setBackupCount] = useState(0);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('hazel_admin_tenants');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > tenants.length) {
+            setHasLocalBackup(true);
+            setBackupCount(parsed.length);
+          } else {
+            setHasLocalBackup(false);
+          }
+        }
+      } catch (e) {}
+    }
+  }, [tenants]);
+
+  const handleRestoreBackup = () => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = localStorage.getItem('hazel_admin_tenants');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setTenants(parsed);
+          setSelectedTenantId(parsed[0].id || '');
+          setIsDirty(true);
+          alert(`Restored ${parsed.length} tenants from browser local backup. Please review and click "Save Client Setup" at the bottom to save them permanently to the database.`);
+        }
+      }
+    } catch (e: any) {
+      alert("Failed to restore backup: " + e.message);
+    }
+  };
+
+  const handleLoadSeedDefaults = async () => {
+    if (!confirm("This will load/overwrite the default templates for Trend Aura, Pizza Box, and other testing clients in the database. Proceed?")) return;
+    try {
+      const res = await fetch('/api/admin/seed-db', { method: 'POST' });
+      const data = await res.json();
+      if (data.message) {
+        alert("Database seeded successfully! Reloading page to update...");
+        window.location.reload();
+      } else {
+        alert("Failed to seed database: " + JSON.stringify(data));
+      }
+    } catch (e: any) {
+      alert("Error seeding database: " + e.message);
+    }
+  };
+
   const selectedTenant = tenants.find(t => t.id === selectedTenantId) || tenants[0] || defaultFallbackTenant;
 
   const fetchTenants = async () => {
@@ -976,6 +1031,24 @@ export default function VoiceSaaSApp() {
                   Yearly
                 </button>
               </div>
+
+              {hasLocalBackup && (
+                <button
+                  onClick={handleRestoreBackup}
+                  className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold flex items-center space-x-2 shadow-md shadow-amber-600/20 transition-all cursor-pointer animate-pulse"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Restore Browser Backup ({backupCount})</span>
+                </button>
+              )}
+
+              <button
+                onClick={handleLoadSeedDefaults}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center space-x-2 border border-slate-300 transition-all cursor-pointer"
+              >
+                <Bot className="w-4 h-4" />
+                <span>Load Seed Defaults</span>
+              </button>
 
               <button
                 onClick={() => setShowAddTenant(true)}
