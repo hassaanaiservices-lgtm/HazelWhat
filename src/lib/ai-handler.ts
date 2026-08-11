@@ -329,7 +329,7 @@ function sanitizeLlmResponseText(text: string): string {
     // Remove lines that are pure reasoning
     if (/^(Alright|OK|Okay|Hmm|Wait|Let me|Actually|Now|First|So|Based on|Looking|I see|I notice|I need|I should|I will|The user|The conversation|Since there)/i.test(trimmed)) {
       // But keep if it contains customer-facing content (emoji, pricing, product names)
-      if (/[🍕🔥✨😊👋❤️💰Rs\.]/.test(trimmed) || /\d{3,}/.test(trimmed)) return true;
+      if (/[🍕🔥✨😊👋❤️💰]/.test(trimmed) || /Rs\.?\s?\d/.test(trimmed) || /\d{3,}/.test(trimmed)) return true;
       return false;
     }
     return true;
@@ -960,7 +960,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
       }
     }
 
-    const history = await DB.getChats(from, activeTenant?.id);
+    const history = await DB.getChats(from, resolvedTenantId);
     // Filter out system messages and sanitize past assistant refusal messages so LLM never gets primed by past errors!
     let recentHistory = history
       .filter((m: any) => m.role === 'user' || m.role === 'assistant')
