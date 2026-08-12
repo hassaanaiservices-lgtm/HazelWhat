@@ -77,10 +77,17 @@ export async function GET(request: NextRequest) {
 
     const alerts = await DB.getApiAlerts();
 
+    let circuits = {};
+    try {
+      const { getAllCircuitStatuses } = await import("@/lib/ai-handler");
+      circuits = getAllCircuitStatuses();
+    } catch (e) {}
+
     return NextResponse.json({
       success: true,
       deepgram: deepgramStatus,
       llm: llmStatus,
+      circuits,
       alerts
     });
   } catch (err: any) {

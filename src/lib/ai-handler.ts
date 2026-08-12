@@ -366,6 +366,211 @@ function convertOpenAiResponseToAnthropic(message: any): any[] {
   return content;
 }
 
+export class ProviderError extends Error {
+  status?: number;
+  provider: string;
+  rawError?: any;
+
+  constructor(message: string, status?: number, provider = "unknown", rawError?: any) {
+    super(message);
+    this.name = "ProviderError";
+    this.status = status;
+    this.provider = provider;
+    this.rawError = rawError;
+  }
+}
+
+export function isRetryableProviderError(err: unknown): boolean {
+  if (!err) return false;
+
+  // 1. Anthropic SDK explicit error classes
+  if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
+    return false;
+  }
+
+  if (
+    err instanceof Anthropic.RateLimitError ||
+    err instanceof Anthropic.InternalServerError ||
+    err instanceof Anthropic.APIConnectionError ||
+    err instanceof Anthropic.APIConnectionTimeoutError
+  ) {
+    return true;
+  }
+
+  // 2. Status code extraction
+  let status: number | undefined = undefined;
+  if (err instanceof Anthropic.APIError) {
+    status = err.status;
+  } else if (err instanceof ProviderError) {
+    status = err.status;
+  } else if (typeof (err as any)?.status === "number") {
+    status = (err as any).status;
+  } else if (typeof (err as any)?.statusCode === "number") {
+    status = (err as any).statusCode;
+  } else if (typeof (err as any)?.response?.status === "number") {
+    status = (err as any).response.status;
+  }
+
+  if (status === 401 || status === 402 || status === 403) {
+    return false;
+  }
+
+  // 3. Inspect message content for permanent error indicators
+  let messageStr = "";
+  if (err instanceof Error) {
+    messageStr = err.message;
+  } else if (typeof err === "string") {
+    messageStr = err;
+  } else {
+    messageStr = JSON.stringify(err);
+  }
+  const msg = messageStr.toLowerCase();
+
+  const nonRetryableKeywords = [
+    "invalid api key",
+    "invalid_api_key",
+    "authentication_error",
+    "invalid key",
+    "incorrect api key",
+    "insufficient_quota",
+    "insufficient balance",
+    "insufficient credits",
+    "insufficient credit",
+    "quota exceeded",
+    "out of credits",
+    "credit balance",
+    "payment required",
+    "billing",
+    "account deactivated",
+    "disabled account",
+    "unauthorized",
+    "permission denied"
+  ];
+
+  for (const keyword of nonRetryableKeywords) {
+    if (msg.includes(keyword)) {
+      return false;
+    }
+  }
+
+  // Explicit retryable status codes: 429, 500, 502, 503, 529
+  if (status === 429 || status === 500 || status === 502 || status === 503 || status === 529) {
+    return true;
+  }
+
+  if (
+    msg.includes("timeout") ||
+    msg.includes("fetch failed") ||
+    msg.includes("network error") ||
+    msg.includes("econnreset") ||
+    msg.includes("etimedout") ||
+    msg.includes("rate limit") ||
+    msg.includes("overloaded")
+  ) {
+    return true;
+  }
+
+  // HTTP 4xx client errors (except 429) are generally non-retryable
+  if (typeof status === "number" && status >= 400 && status < 500 && status !== 429) {
+    return false;
+  }
+
+  return true;
+}
+
+export type LLMProviderName = "deepseek" | "anthropic" | "openrouter";
+
+export interface CircuitState {
+  provider: LLMProviderName;
+  state: "closed" | "open" | "half-open";
+  consecutiveFailures: number;
+  lastFailureTime: number;
+  lastErrorReason: string;
+}
+
+export const CIRCUIT_COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes
+
+const providerCircuits: Record<LLMProviderName, CircuitState> = {
+  deepseek: { provider: "deepseek", state: "closed", consecutiveFailures: 0, lastFailureTime: 0, lastErrorReason: "" },
+  anthropic: { provider: "anthropic", state: "closed", consecutiveFailures: 0, lastFailureTime: 0, lastErrorReason: "" },
+  openrouter: { provider: "openrouter", state: "closed", consecutiveFailures: 0, lastFailureTime: 0, lastErrorReason: "" }
+};
+
+export function getCircuitStatus(provider: LLMProviderName): CircuitState {
+  const circuit = providerCircuits[provider] || {
+    provider,
+    state: "closed",
+    consecutiveFailures: 0,
+    lastFailureTime: 0,
+    lastErrorReason: ""
+  };
+
+  // Check if open circuit cooldown has expired
+  if (circuit.state === "open" && Date.now() - circuit.lastFailureTime >= CIRCUIT_COOLDOWN_MS) {
+    circuit.state = "half-open";
+    console.log(`[Circuit Breaker] ${provider.toUpperCase()} cooldown (15m) expired. Entering HALF-OPEN state for 1 test request.`);
+  }
+
+  return { ...circuit };
+}
+
+export function getAllCircuitStatuses(): Record<LLMProviderName, CircuitState> {
+  return {
+    deepseek: getCircuitStatus("deepseek"),
+    anthropic: getCircuitStatus("anthropic"),
+    openrouter: getCircuitStatus("openrouter")
+  };
+}
+
+export function isProviderAvailable(provider: LLMProviderName): boolean {
+  const status = getCircuitStatus(provider);
+  return status.state === "closed" || status.state === "half-open";
+}
+
+export function recordProviderSuccess(provider: LLMProviderName): void {
+  const circuit = providerCircuits[provider];
+  if (!circuit) return;
+
+  if (circuit.state === "open" || circuit.state === "half-open") {
+    console.log(`🟢 [PROVIDER RECOVERED] ${provider.toUpperCase()} operations resumed. Circuit CLOSED.`);
+    DB.recordApiAlert(`${provider.toUpperCase()} LLM`, "circuit_closed", `${provider.toUpperCase()} provider recovered and circuit closed.`);
+  }
+
+  circuit.state = "closed";
+  circuit.consecutiveFailures = 0;
+  circuit.lastErrorReason = "";
+}
+
+export function recordProviderFailure(provider: LLMProviderName, err: unknown): void {
+  const circuit = providerCircuits[provider];
+  if (!circuit) return;
+
+  const isRetryable = isRetryableProviderError(err);
+  const statusStr = (err as any)?.status ? ` (HTTP ${(err as any).status})` : "";
+  const msgStr = (err as any)?.message || String(err);
+  const reason = `${msgStr}${statusStr}`;
+
+  circuit.consecutiveFailures++;
+  circuit.lastErrorReason = reason;
+
+  // Open circuit immediately on non-retryable errors (auth, bad key, zero balance)
+  if (!isRetryable) {
+    const wasOpen = circuit.state === "open";
+    circuit.state = "open";
+    circuit.lastFailureTime = Date.now();
+
+    if (!wasOpen) {
+      console.error(`🚨 [PROVIDER DOWN] ${provider.toUpperCase()} failed with non-retryable error: ${reason}. Circuit OPENED for 15 minutes.`);
+      DB.recordApiAlert(`${provider.toUpperCase()} LLM`, "circuit_open", `Circuit OPENED for 15m due to non-retryable error: ${reason}`);
+    }
+  } else if (circuit.state === "half-open") {
+    // Half-open test attempt failed -> re-open circuit
+    circuit.state = "open";
+    circuit.lastFailureTime = Date.now();
+    console.error(`🚨 [PROVIDER DOWN] ${provider.toUpperCase()} half-open test failed: ${reason}. Circuit RE-OPENED for 15 minutes.`);
+  }
+}
+
 export async function callLLMWithFallback(
   config: any,
   systemPrompt: string,
@@ -376,29 +581,59 @@ export async function callLLMWithFallback(
   const deepseekKey = config?.openaiApiKey || process.env.DEEPSEEK_API_KEY || getEnvKey("DEEPSEEK_API_KEY") || "";
   const anthropicKey = config?.anthropicApiKey || process.env.ANTHROPIC_API_KEY || getEnvKey("ANTHROPIC_API_KEY") || "";
 
-  if (deepseekKey) {
+  const deepseekAvailable = deepseekKey && isProviderAvailable("deepseek");
+  const anthropicAvailable = anthropicKey && isProviderAvailable("anthropic");
+
+  if (!deepseekAvailable && !anthropicAvailable) {
+    const dsStatus = getCircuitStatus("deepseek");
+    const antStatus = getCircuitStatus("anthropic");
+    const errMsg = `All configured LLM providers are currently unavailable or circuit-open. ` +
+      `(DeepSeek: ${dsStatus.state} - "${dsStatus.lastErrorReason || "No key"}", ` +
+      `Anthropic: ${antStatus.state} - "${antStatus.lastErrorReason || "No key"})`;
+    console.error(`[callLLMWithFallback] ${errMsg}`);
+    throw new Error(errMsg);
+  }
+
+  if (deepseekAvailable) {
     try {
       console.log("[callLLMWithFallback] Attempting primary LLM (DeepSeek)...");
       const res = await callLLM(deepseekKey, systemPrompt, messages, tools, temperature);
+      recordProviderSuccess("deepseek");
       console.log("[callLLMWithFallback] Provider used: deepseek");
       return { res, provider: "deepseek" };
     } catch (err: any) {
       console.error("[callLLMWithFallback] Primary LLM (DeepSeek) failed:", err.message || err);
-      if (anthropicKey) {
+      recordProviderFailure("deepseek", err);
+
+      if (anthropicAvailable) {
         console.warn("[callLLMWithFallback] Falling back to backup LLM (Anthropic)...");
-        const res = await callLLM(anthropicKey, systemPrompt, messages, tools, temperature);
-        console.log("[callLLMWithFallback] Provider used: anthropic-fallback");
-        return { res, provider: "anthropic-fallback" };
+        try {
+          const res = await callLLM(anthropicKey, systemPrompt, messages, tools, temperature);
+          recordProviderSuccess("anthropic");
+          console.log("[callLLMWithFallback] Provider used: anthropic-fallback");
+          return { res, provider: "anthropic-fallback" };
+        } catch (anthropicErr: any) {
+          console.error("[callLLMWithFallback] Backup LLM (Anthropic) failed:", anthropicErr.message || anthropicErr);
+          recordProviderFailure("anthropic", anthropicErr);
+          throw anthropicErr;
+        }
       }
       throw err;
     }
-  } else if (anthropicKey) {
-    console.log("[callLLMWithFallback] No DeepSeek key configured. Attempting Anthropic...");
-    const res = await callLLM(anthropicKey, systemPrompt, messages, tools, temperature);
-    console.log("[callLLMWithFallback] Provider used: anthropic");
-    return { res, provider: "anthropic" };
+  } else if (anthropicAvailable) {
+    console.log("[callLLMWithFallback] DeepSeek unavailable/circuit-open. Attempting Anthropic...");
+    try {
+      const res = await callLLM(anthropicKey, systemPrompt, messages, tools, temperature);
+      recordProviderSuccess("anthropic");
+      console.log("[callLLMWithFallback] Provider used: anthropic");
+      return { res, provider: "anthropic" };
+    } catch (err: any) {
+      console.error("[callLLMWithFallback] Anthropic LLM failed:", err.message || err);
+      recordProviderFailure("anthropic", err);
+      throw err;
+    }
   } else {
-    throw new Error("No API keys configured.");
+    throw new Error("No API keys configured or all providers circuit-open.");
   }
 }
 
@@ -436,6 +671,10 @@ async function callLLM(
       } catch (err: any) {
         console.error(`[callLLM] Anthropic model ${model} error:`, err.message || err);
         lastErr = err;
+        if (!isRetryableProviderError(err)) {
+          console.warn(`[callLLM] Non-retryable Anthropic error (${err.status || err.message}). Stopping model fallback loop.`);
+          break;
+        }
       }
     }
     
@@ -470,6 +709,10 @@ async function callLLM(
       } catch (err: any) {
         console.error(`[callLLM] OpenRouter model ${model} failed:`, err.message || err);
         lastError = err;
+        if (!isRetryableProviderError(err)) {
+          console.warn(`[callLLM] Non-retryable OpenRouter error (${err.status || err.message}). Stopping model loop.`);
+          break;
+        }
       }
     }
     throw lastError || new Error("OpenRouter models failed");
@@ -478,7 +721,6 @@ async function callLLM(
     const openAiMessages = convertAnthropicMessagesToOpenAi(messages, systemPrompt);
     const openAiTools = convertAnthropicToolsToOpenAi(tools);
 
-    // Clean openAiMessages: convert content array to string and replace image_url with [Image Attachment]
     const cleanedMessages = openAiMessages.map(msg => {
       if (Array.isArray(msg.content)) {
         const textParts = [];
@@ -505,7 +747,6 @@ async function callLLM(
       try {
         console.log(`[callLLM] DeepSeek API attempt ${attempt} of ${attempts}...`);
         
-        // Timeout after 15 seconds to prevent hanging
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
 
@@ -529,12 +770,21 @@ async function callLLM(
 
         if (!res.ok) {
           const errText = await res.text();
-          throw new Error(`Status ${res.status}: ${errText}`);
+          let jsonMsg = errText;
+          try {
+            const parsed = JSON.parse(errText);
+            jsonMsg = parsed?.error?.message || parsed?.message || errText;
+          } catch (e) {}
+          throw new ProviderError(`DeepSeek API Error (${res.status}): ${jsonMsg}`, res.status, "deepseek", errText);
         }
         break;
       } catch (err: any) {
         console.error(`[callLLM] DeepSeek attempt ${attempt} failed:`, err.message || err);
         lastError = err;
+        if (!isRetryableProviderError(err)) {
+          console.warn(`[callLLM] Non-retryable DeepSeek error (${err.status || err.message}). Stopping retry loop immediately.`);
+          break;
+        }
         if (attempt < attempts) {
           const delay = attempt * 1000;
           await new Promise(resolve => setTimeout(resolve, delay));
