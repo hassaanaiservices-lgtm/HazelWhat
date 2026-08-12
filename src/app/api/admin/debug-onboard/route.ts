@@ -57,16 +57,57 @@ export async function GET(request: NextRequest) {
       conversationalLeadsCount: 0,
     };
 
-    const { upsertTenantToSupabase } = await import('@/lib/supabase');
-    const tenantOk = await upsertTenantToSupabase(testTenant);
-    
+    const { error: upsertError } = await supabase.from('tenants').upsert({
+      id: `t-${nextClientNum}`,
+      client_number: nextClientNum,
+      name: 'Debug Test Client',
+      business_name: 'Debug Business LLC',
+      phone_number: '+92 300 0000000',
+      email: 'debug_client@business.com',
+      status: 'active' as const,
+      installation_fee: 1000,
+      monthly_subscription_fee: 500,
+      currency: 'PKR' as const,
+      payment_status: 'paid' as const,
+      allocated_minutes: 800,
+      used_minutes: 0,
+      client_username: `debug_user_${Math.floor(100 + Math.random() * 900)}`,
+      client_password: `HazelPass@${Math.floor(1000 + Math.random() * 9000)}`,
+      system_prompt: 'Debug Prompt',
+      knowledge_base: 'Debug KB',
+      product_knowledge_base: 'Debug PKB',
+      products: [],
+      followup_mechanism: 'Debug follow-up',
+      llm_model: 'gpt-4o-mini' as const,
+      temperature: 0.7,
+      deepgram_voice: 'aura-asteria-en',
+      deepgram_api_key: '',
+      openai_api_key: '',
+      omnivoice_api_key: '',
+      omnivoice_number: '+1 (555) 123-4567',
+      created_at: new Date().toISOString(),
+      troubleshoot: {
+        webhookConnected: true,
+        deepgramApiValid: true,
+        llmApiValid: true,
+        whatsappSessionActive: true,
+        serviceBlocked: false,
+      },
+      promotions_sent: 0,
+      revival_leads_active: 0,
+      conversational_leads_count: 0,
+    });
+
+    const tenantOk = !upsertError;
+
     // Clean up
     await supabase.from('tenants').delete().eq('id', `t-${nextClientNum}`);
 
     return NextResponse.json({ 
       success: true, 
       tenantOk,
-      message: "Debug tenant onboard upsert completed. Check tenantOk boolean status."
+      upsertError: upsertError ? { message: upsertError.message, details: upsertError.details, code: upsertError.code } : null,
+      message: "Debug tenant onboard upsert completed."
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
