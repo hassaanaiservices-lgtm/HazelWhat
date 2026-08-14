@@ -24,8 +24,8 @@ function getSupabaseAdmin() {
 
 const TENANTS_SEED = [
   {
-    id: 'admin',
-    client_number: '0000',
+    id: 't-1005',
+    client_number: '1005',
     name: 'Admin',
     business_name: 'HazelWhat Admin',
     phone_number: '',
@@ -37,8 +37,8 @@ const TENANTS_SEED = [
     payment_status: 'paid',
     allocated_minutes: 9999,
     used_minutes: 0,
-    client_username: 'admin',
-    client_password: 'admin',
+    client_username: 'adminclient',
+    client_password: 'Adm1nCl1ent$2026!',
   },
   {
     id: 't-1003',
@@ -174,7 +174,7 @@ async function executeSeed() {
     const { error: adminCfgError } = await supabase
       .from('tenant_configs')
       .upsert({
-        tenant_id: 'admin',
+        tenant_id: 't-1005',
         system_prompt: '',
         product_info: '',
         business_name: 'HazelWhat Admin',
