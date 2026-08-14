@@ -425,13 +425,20 @@ export default function VoiceSaaSApp() {
         setPartners(newPartners);
         localStorage.setItem('hazel_admin_partners', JSON.stringify(newPartners));
       }
-      await fetch('/api/admin/tenants', {
+      const res = await fetch('/api/admin/tenants', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tenants: newTenants, partners: newPartners || partners })
       });
-    } catch (e) {
+      const data = await res.json();
+      if (!res.ok || data.success === false) {
+        const errMsg = data.error || 'Failed to persist tenant changes to database.';
+        console.error('Persist tenants error:', errMsg);
+        alert(`⚠️ Tenant Save Error: ${errMsg}`);
+      }
+    } catch (e: any) {
       console.error('Failed to persist tenants:', e);
+      alert(`⚠️ Network Error persisting tenants: ${e.message}`);
     }
   };
 

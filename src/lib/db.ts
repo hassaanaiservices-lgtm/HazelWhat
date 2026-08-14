@@ -1452,34 +1452,69 @@ export class DB {
   }
 
   static async saveTenants(tenants: Tenant[]): Promise<boolean> {
-    return DB.saveTenantsAsync(tenants);
+    const res = await DB.saveTenantsAsync(tenants);
+    return res.success;
   }
 
-  static async saveTenantsAsync(tenants: Tenant[]): Promise<boolean> {
+  static async saveTenantsAsync(tenants: Tenant[]): Promise<{
+    success: boolean;
+    results: { tenantId: string; success: boolean; error?: string }[];
+    error?: string;
+  }> {
     DB.tenantsMemoryStore = tenants;
 
-    if (!supabase) return true;
+    if (!supabase) {
+      return {
+        success: true,
+        results: tenants.map(t => ({ tenantId: t.id, success: true }))
+      };
+    }
+
     try {
       const { upsertTenantToSupabase } = await import('./supabase');
-      const results = await Promise.all(tenants.map(async (t) => {
-        const tenantOk = await upsertTenantToSupabase(t);
-        try {
-          await supabase.from('tenant_configs').upsert({
-            tenant_id: t.id,
-            system_prompt: t.systemPrompt || '',
-            product_info: t.knowledgeBase || t.productKnowledgeBase || '',
-            products: t.products || [],
-            business_name: t.businessName || t.name || 'My Business'
-          }, { onConflict: 'tenant_id' });
-        } catch (e) {
-          console.error('[DB/Supabase] Sync tenant_configs error:', e);
+
+      const settledResults = await Promise.allSettled(
+        tenants.map(async (t) => {
+          const tenantOk = await upsertTenantToSupabase(t);
+          if (!tenantOk) {
+            throw new Error(`Failed to upsert tenant ${t.id} (${t.name || t.businessName}) to Supabase`);
+          }
+          try {
+            await supabase.from('tenant_configs').upsert({
+              tenant_id: t.id,
+              system_prompt: t.systemPrompt || '',
+              product_info: t.knowledgeBase || t.productKnowledgeBase || '',
+              products: t.products || [],
+              business_name: t.businessName || t.name || 'My Business'
+            }, { onConflict: 'tenant_id' });
+          } catch (e: any) {
+            console.error(`[DB/Supabase] Sync tenant_configs error for ${t.id}:`, e);
+          }
+          return t.id;
+        })
+      );
+
+      const perTenantResults = settledResults.map((res, idx) => {
+        const tenantId = tenants[idx].id;
+        if (res.status === 'fulfilled') {
+          return { tenantId, success: true };
+        } else {
+          return { tenantId, success: false, error: res.reason?.message || 'Failed to save tenant' };
         }
-        return tenantOk;
-      }));
-      return results.every(Boolean);
-    } catch (err) {
+      });
+
+      const overallSuccess = perTenantResults.every(r => r.success);
+      return {
+        success: overallSuccess,
+        results: perTenantResults
+      };
+    } catch (err: any) {
       console.error('[DB/Supabase] saveTenantsAsync error:', err);
-      return false;
+      return {
+        success: false,
+        results: tenants.map(t => ({ tenantId: t.id, success: false, error: err.message })),
+        error: err.message
+      };
     }
   }
 
