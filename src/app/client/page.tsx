@@ -2903,16 +2903,114 @@ export default function DashboardPage() {
               
 
 
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">System Prompt / Persona</label>
-                <textarea 
-                  value={config.systemPrompt}
-                  onChange={(e) => setConfig({ ...config, systemPrompt: e.target.value })}
-                  className="w-full h-32 p-4 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800"
-                  placeholder="Tell the AI how to act..."
-                />
+              {/* Dedicated Business Knowledge Base & FAQs Card */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                      <BookOpen className="w-5 h-5 text-purple-600" />
+                      <span>Business Knowledge Base & FAQs</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                      Store rules, delivery charges, return policies, payment options, and FAQs. Indexed by the Hybrid Engine to answer customers with 0 API tokens.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      type="button"
+                      onClick={saveKnowledgeBase}
+                      disabled={savingKB}
+                      className={`px-5 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-purple-500/20 active:scale-95 ${
+                        kbSaveSuccess
+                          ? "bg-emerald-600 text-white"
+                          : "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white"
+                      }`}
+                    >
+                      {savingKB ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : kbSaveSuccess ? (
+                        <>
+                          <CheckCircle2 className="h-3.5 w-3.5 text-yellow-300 animate-bounce" />
+                          <span>Saved!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-3.5 w-3.5" />
+                          <span>Save Knowledge Base</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Store Information & Common Q&As</label>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[11px] font-extrabold text-slate-400 mr-1">Quick Templates:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const snippet = "\n\n[DELIVERY & SHIPPING]\n- Standard Delivery: Rs. 250 (2-4 business days nationwide)\n- Free shipping on orders above Rs. 5,000";
+                          setConfig({ ...config, productInfo: (config.productInfo || "") + snippet });
+                        }}
+                        className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-[11px] font-bold transition cursor-pointer"
+                      >
+                        + Delivery Info
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const snippet = "\n\n[RETURN & EXCHANGE POLICY]\n- 7 Days hassle-free exchange policy.\n- Items must be unworn with original tags attached.";
+                          setConfig({ ...config, productInfo: (config.productInfo || "") + snippet });
+                        }}
+                        className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-[11px] font-bold transition cursor-pointer"
+                      >
+                        + Return Policy
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const snippet = "\n\n[PAYMENT METHODS]\n- Cash on Delivery (COD)\n- Bank Transfer / JazzCash / EasyPaisa";
+                          setConfig({ ...config, productInfo: (config.productInfo || "") + snippet });
+                        }}
+                        className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-[11px] font-bold transition cursor-pointer"
+                      >
+                        + Payment Methods
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const snippet = "\n\n[BUSINESS HOURS & LOCATION]\n- Operating Hours: Monday to Saturday, 10:00 AM - 9:00 PM\n- Store Address: [Insert Address Here]";
+                          setConfig({ ...config, productInfo: (config.productInfo || "") + snippet });
+                        }}
+                        className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-[11px] font-bold transition cursor-pointer"
+                      >
+                        + Hours & Location
+                      </button>
+                    </div>
+                  </div>
+                  <textarea 
+                    id="productInfoInput"
+                    rows={6}
+                    value={config.productInfo || ""}
+                    onChange={(e) => setConfig({ ...config, productInfo: e.target.value })}
+                    className="w-full p-4 text-xs bg-slate-50 border border-slate-200/80 rounded-2xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800 leading-relaxed placeholder:text-slate-400"
+                    placeholder="Write your business FAQs, store policies, delivery details, exchange rules, and general information here...
+
+Example:
+Q: What are your delivery charges?
+A: Delivery is Rs. 250 nationwide. Free delivery on orders over Rs. 5000.
+
+Q: How long does delivery take?
+A: 2 to 4 working days."
+                  />
+                </div>
               </div>
-              
+
               {/* Website Auto-Scraper & Product Catalog Module */}
               <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
                 <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-5">
