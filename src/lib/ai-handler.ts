@@ -850,6 +850,220 @@ interface LockQueue {
 
 const customerLocks = new Map<string, LockQueue>();
 
+interface HybridMatchResult {
+  matched: boolean;
+  reply?: string;
+  source?: "sequential_flow" | "manual_keyword" | "knowledge_base_faq" | "product_catalog";
+}
+
+/**
+ * Dynamic Hybrid Engine Router
+ * Automatically derives keyword rules from Knowledge Base (productInfo/knowledgeBase) & Product Catalog (products).
+ * Manages 0-token Sequential Chatbot Flows & instant rule-based responses.
+ */
+async function processHybridEngine(
+  from: string,
+  content: string,
+  config: any,
+  activeTenant: any,
+  customer: any,
+  tenantId: string
+): Promise<HybridMatchResult> {
+  const lowerContent = content.toLowerCase().trim();
+
+  // 1. LAYER 0: Sequential Chatbot Flow Machine
+  const preferencesNote = customer?.preferences || "";
+  const flowStateMatch = preferencesNote.match(/\[FLOW_STATE:\s*([A-Z_]+)(?::(.*))?\]/);
+  
+  if (flowStateMatch) {
+    const currentState = flowStateMatch[1];
+    const stateDataRaw = flowStateMatch[2] || "";
+    let stateData: any = {};
+    try { if (stateDataRaw) stateData = JSON.parse(stateDataRaw); } catch(e) {}
+
+    // Global cancellation check for sequential flow
+    if (["cancel", "exit", "stop", "menu", "main menu"].includes(lowerContent)) {
+      const updatedNotes = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim();
+      await DB.updateCustomer(from, { preferences: updatedNotes }, tenantId);
+      return {
+        matched: true,
+        reply: "Flow cancelled. How else can I assist you today?",
+        source: "sequential_flow"
+      };
+    }
+
+    if (currentState === "AWAITING_ORDER_NAME") {
+      const name = content.trim();
+      stateData.name = name;
+      const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_ADDRESS:${JSON.stringify(stateData)}]`;
+      await DB.updateCustomer(from, { name, preferences: newNote }, tenantId);
+      return {
+        matched: true,
+        reply: `Thank you, ${name}! Please provide your complete delivery address (House/Street #, City).`,
+        source: "sequential_flow"
+      };
+    }
+
+    if (currentState === "AWAITING_ORDER_ADDRESS") {
+      const address = content.trim();
+      stateData.address = address;
+      const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_PAYMENT:${JSON.stringify(stateData)}]`;
+      await DB.updateCustomer(from, { preferences: newNote }, tenantId);
+      return {
+        matched: true,
+        reply: `Address noted!\n\nHow would you like to pay?\n1. Cash on Delivery (COD)\n2. Online Transfer (JazzCash / EasyPaisa / Bank)\n\nPlease reply with 1 or 2.`,
+        source: "sequential_flow"
+      };
+    }
+
+    if (currentState === "AWAITING_ORDER_PAYMENT") {
+      const input = lowerContent;
+      let paymentMethod = "Cash on Delivery";
+      if (input.includes("2") || input.includes("online") || input.includes("transfer") || input.includes("bank") || input.includes("jazz") || input.includes("easy")) {
+        paymentMethod = "Online Transfer";
+      }
+
+      const productName = stateData.productName || "Product Order";
+      const customerName = stateData.name || customer?.name || "Customer";
+      const deliveryAddress = stateData.address || "As provided";
+
+      await DB.addOrder(from, {
+        productName,
+        customerName,
+        deliveryAddress,
+        paymentMethod
+      }, tenantId);
+
+      const cleanedNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim();
+      await DB.updateCustomer(from, { 
+        preferences: cleanedNote,
+        followUpLevel: 999,
+        leadStatus: "cold",
+        pipelineStage: "completed"
+      }, tenantId);
+
+      return {
+        matched: true,
+        reply: `🎉 *Order Confirmed!*\n\n📦 *Item:* ${productName}\n👤 *Name:* ${customerName}\n📍 *Address:* ${deliveryAddress}\n💳 *Payment:* ${paymentMethod}\n\nOur team will process your order shortly. Thank you!`,
+        source: "sequential_flow"
+      };
+    }
+  }
+
+  // Check for trigger words to initiate sequential order flow
+  if (lowerContent === "order now" || lowerContent === "place order" || lowerContent === "buy now") {
+    const stateData = { productName: "Product Inquiry" };
+    const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_NAME:${JSON.stringify(stateData)}]`;
+    await DB.updateCustomer(from, { preferences: newNote }, tenantId);
+    return {
+      matched: true,
+      reply: "Great! To place your order, please reply with your Full Name:",
+      source: "sequential_flow"
+    };
+  }
+
+  // 2. SAFETY GUARD: Bypass rule engine for complex inquiries
+  const isComplex = lowerContent.length > 130 || 
+    (lowerContent.match(/\?/g) || []).length > 1 ||
+    ["discount", "bargain", "complaint", "broken", "wrong", "cancel", "return my money", "faulty", "different"].some(w => lowerContent.includes(w));
+
+  if (isComplex) {
+    return { matched: false };
+  }
+
+  // 3. LAYER 1A: Manual Keyword Rules
+  const manualMatch = config.keywordReplies?.find((k: any) => 
+    k.keyword.trim() !== "" && lowerContent.includes(k.keyword.toLowerCase())
+  );
+  if (manualMatch) {
+    return {
+      matched: true,
+      reply: manualMatch.reply,
+      source: "manual_keyword"
+    };
+  }
+
+  // 4. LAYER 1B: Auto-Derived Knowledge Base FAQ Indexer
+  const kbText = [
+    config.productInfo || "",
+    activeTenant?.knowledgeBase || "",
+    activeTenant?.productKnowledgeBase || ""
+  ].filter(Boolean).join("\n");
+
+  if (kbText) {
+    const kbLines = kbText.split("\n");
+    const faqEntries: { triggers: string[]; response: string }[] = [];
+
+    kbLines.forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+
+      const headerMatch = trimmed.match(/^[-*#]*\s*(location|address|timing|working hours|opening hours|delivery fee|delivery charges|return policy|refund policy|payment methods|bank account|jazzcash|easypaisa|cod|cash on delivery):\s*(.*)$/i);
+      
+      if (headerMatch) {
+        const key = headerMatch[1].toLowerCase();
+        const value = headerMatch[2] || trimmed;
+        
+        let triggers: string[] = [];
+        if (key.includes("location") || key.includes("address")) {
+          triggers = ["location", "address", "dukaan kahan", "shop location", "address kya hai", "kahan h", "dukan kahan", "where is your shop"];
+        } else if (key.includes("timing") || key.includes("hours") || key.includes("opening")) {
+          triggers = ["timing", "time", "working hours", "opening time", "closing time", "kab khulti", "time kya hai", "open hours"];
+        } else if (key.includes("delivery")) {
+          triggers = ["delivery fee", "delivery charges", "delivery kitni", "delivery kitne", "shipping fee", "delivery rate"];
+        } else if (key.includes("return") || key.includes("refund")) {
+          triggers = ["return policy", "refund policy", "exchange policy", "wapas", "return kaise"];
+        } else if (key.includes("payment") || key.includes("cod") || key.includes("bank") || key.includes("jazz") || key.includes("easy")) {
+          triggers = ["payment method", "payment options", "jazzcash", "easypaisa", "bank account", "how to pay", "cod available"];
+        }
+
+        if (triggers.length > 0) {
+          faqEntries.push({ triggers, response: value });
+        }
+      }
+    });
+
+    for (const faq of faqEntries) {
+      if (faq.triggers.some(trig => lowerContent.includes(trig))) {
+        return {
+          matched: true,
+          reply: faq.response,
+          source: "knowledge_base_faq"
+        };
+      }
+    }
+  }
+
+  // 5. LAYER 1C: Auto-Derived Product Catalog Indexer
+  const products: any[] = (config.products && config.products.length > 0) ? config.products : (activeTenant?.products || []);
+  const currency = activeTenant?.currency || config.storeCurrency || "PKR";
+
+  if (products.length > 0) {
+    for (const prod of products) {
+      if (!prod.title) continue;
+      const titleLower = prod.title.toLowerCase().trim();
+      
+      // Match if user asks price or details for exact product
+      const isProductMatch = lowerContent.includes(titleLower);
+      const isPriceQuery = ["price", "rate", "kitne ka", "kitne ki", "cost", "details", "kitna"].some(w => lowerContent.includes(w));
+
+      if (isProductMatch && (isPriceQuery || lowerContent === titleLower)) {
+        let reply = `📦 *${prod.title}*\n💵 *Price:* ${currency} ${prod.price}`;
+        if (prod.description) reply += `\n📝 ${prod.description}`;
+        if (prod.link) reply += `\n🔗 *View Product:* ${prod.link}`;
+        
+        return {
+          matched: true,
+          reply,
+          source: "product_catalog"
+        };
+      }
+    }
+  }
+
+  return { matched: false };
+}
+
 export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
   try {
     const remoteJid = msg?.key?.remoteJid;
@@ -1131,14 +1345,15 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     }
 
 
-    const matchedKeyword = config.keywordReplies?.find(k => 
-      k.keyword.trim() !== "" && lowerContent.includes(k.keyword.toLowerCase())
-    );
+    const activeTenant = await DB.getTenantById(resolvedTenantId);
 
-    if (matchedKeyword) {
-      console.log(`[AI Handler] Keyword matched: ${matchedKeyword.keyword}`);
-      const sentMsg = await WhatsAppManager.sendMessage(from, matchedKeyword.reply);
-      await DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: matchedKeyword.reply }, resolvedTenantId);
+    // Execute Dynamic Hybrid Engine (Sequential Flow + KB/Catalog Indexer + Keyword Matcher)
+    const hybridResult = await processHybridEngine(from, content, config, activeTenant, customer, resolvedTenantId);
+
+    if (hybridResult.matched && hybridResult.reply) {
+      console.log(`[AI Handler] Hybrid Engine matched via [${hybridResult.source}]. 0 Tokens used!`);
+      const sentMsg = await WhatsAppManager.sendMessage(from, hybridResult.reply);
+      await DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: hybridResult.reply }, resolvedTenantId);
       return;
     }
 
@@ -1159,8 +1374,6 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
 
     let aiReply = "I'm sorry, I didn't quite catch that. Could you rephrase?";
     
-    // Fetch active Tenant record from DB by resolvedTenantId
-    const activeTenant = await DB.getTenantById(resolvedTenantId);
     if (!activeTenant) {
       console.error(`[AI Handler] No tenant record found for resolvedTenantId: ${resolvedTenantId}. Dropping message.`);
       return;
