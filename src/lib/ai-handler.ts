@@ -117,7 +117,7 @@ async function transcribeAudioWithDeepgram(buffer: Buffer, apiKey: string, mimet
     const cleanMime = (mimetype || "audio/ogg").split(';')[0].trim() || "audio/ogg";
     console.log(`[Deepgram STT] Transcribing ${buffer.length} bytes of audio (${cleanMime})...`);
     
-    // First try nova-2 with detect_language=true & smart_format=true
+    // Primary attempt: model=nova-2 with detect_language=true & smart_format=true & punctuate=true
     let res = await fetch("https://api.deepgram.com/v1/listen?model=nova-2&detect_language=true&smart_format=true&punctuate=true", {
       method: "POST",
       headers: {
@@ -127,11 +127,11 @@ async function transcribeAudioWithDeepgram(buffer: Buffer, apiKey: string, mimet
       body: new Uint8Array(buffer)
     });
 
+    // Secondary attempt: Fallback with explicit language=ur support or general model
     if (!res.ok) {
       const errText = await res.text();
       console.warn(`[Deepgram STT] First attempt error (${res.status}):`, errText);
-      // Retry without model restriction and with octet-stream header for maximum format/codec compatibility
-      res = await fetch("https://api.deepgram.com/v1/listen?smart_format=true&detect_language=true", {
+      res = await fetch("https://api.deepgram.com/v1/listen?model=general&language=ur&smart_format=true&punctuate=true", {
         method: "POST",
         headers: {
           "Authorization": `Token ${apiKey.trim()}`,
@@ -1019,11 +1019,11 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
       }
       
       if (voiceTranscript) {
-        content = voiceTranscript;
+        content = `[Customer Voice Note Transcribed]: "${voiceTranscript}"`;
         console.log(`[AI Handler] Voice transcribed successfully! Content set to: "${content}"`);
       } else if (!content) {
-        content = "Hi! I sent a voice note inquiring about your products, pricing, and availability.";
-        console.log(`[AI Handler] No STT available — using fallback voice content for AI processing.`);
+        content = "[Customer sent a Voice Note]: (The audio was unclear or silent. Politely ask the customer to resend their audio or specify what they need.)";
+        console.log(`[AI Handler] STT yielded empty transcript — using polite clarification instruction for AI.`);
       }
     }
 
