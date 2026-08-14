@@ -1674,6 +1674,19 @@ export default function VoiceSaaSApp() {
                       
                       <div className="flex items-center gap-2">
                         <button
+                          type="button"
+                          onClick={async () => {
+                            await persistTenants(tenants);
+                            setCopiedCredsNotice("Credentials Saved to Database Successfully!");
+                            setTimeout(() => setCopiedCredsNotice(null), 3000);
+                          }}
+                          className="text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-1.5 rounded-xl flex items-center space-x-1.5 cursor-pointer shadow-md active:scale-95 transition"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          <span>Save Credentials</span>
+                        </button>
+
+                        <button
                           onClick={() => setShowClientCredentials(!showClientCredentials)}
                           className="text-xs font-bold text-purple-700 bg-white border border-purple-200 px-3 py-1.5 rounded-xl hover:bg-purple-50 flex items-center space-x-1 cursor-pointer transition shadow-sm"
                         >
@@ -1713,6 +1726,7 @@ export default function VoiceSaaSApp() {
                           type="text"
                           value={selectedTenant.clientUsername || ''}
                           onChange={e => handleUpdateTenantConfig({ clientUsername: e.target.value })}
+                          onBlur={() => persistTenants(tenants)}
                           className="w-full p-3.5 bg-white border border-purple-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm"
                         />
                       </div>
@@ -1732,6 +1746,7 @@ export default function VoiceSaaSApp() {
                           type={showClientCredentials ? 'text' : 'password'}
                           value={selectedTenant.clientPassword || ''}
                           onChange={e => handleUpdateTenantConfig({ clientPassword: e.target.value })}
+                          onBlur={() => persistTenants(tenants)}
                           className="w-full p-3.5 bg-white border border-purple-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm"
                         />
                       </div>

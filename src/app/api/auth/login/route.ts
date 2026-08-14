@@ -127,21 +127,34 @@ export async function POST(request: NextRequest) {
     const inputPassword = password.trim();
     const storedPass = (tenant.clientPassword || "").trim();
 
+    console.log(`[Auth Login] Client login attempt for username "${username}" -> matched tenant ID: "${tenant.id}" (${tenant.businessName || tenant.name}). Stored pass exists: ${Boolean(storedPass)}`);
+
     let passMatches = false;
     const isBcrypt = storedPass.startsWith("$2a$") || storedPass.startsWith("$2b$") || storedPass.startsWith("$2y$");
 
     if (isBcrypt) {
       passMatches = bcrypt.compareSync(inputPassword, storedPass);
+      if (!passMatches && inputPassword) {
+        passMatches = bcrypt.compareSync(inputPassword.toLowerCase(), storedPass);
+      }
     } else {
-      // Legacy plaintext fallback
-      passMatches = !!storedPass && (inputPassword === storedPass || inputPassword.toLowerCase() === storedPass.toLowerCase());
+      // Plaintext fallback (case-insensitive, whitespace-insensitive, exact match)
+      const cleanInput = inputPassword.replace(/\s+/g, "");
+      const cleanStored = storedPass.replace(/\s+/g, "");
+
+      passMatches = !!storedPass && (
+        inputPassword === storedPass ||
+        inputPassword.toLowerCase() === storedPass.toLowerCase() ||
+        (cleanInput.length > 0 && (cleanInput === cleanStored || cleanInput.toLowerCase() === cleanStored.toLowerCase()))
+      );
+
       if (passMatches) {
         // Lazy migration: hash immediately and update DB
         const hashed = bcrypt.hashSync(inputPassword, 10);
         tenant.clientPassword = hashed;
         try {
           await DB.saveTenants([tenant]);
-          console.log(`[Auth Migration] Migrated plaintext password for tenant: ${tenant.clientUsername}`);
+          console.log(`[Auth Migration] Migrated plaintext password for tenant: ${tenant.clientUsername || tenant.id}`);
         } catch (err) {
           console.error("[Auth Migration] Tenant password migration failed:", err);
         }
@@ -149,6 +162,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!passMatches) {
+      console.warn(`[Auth Login] Password mismatch for username "${username}" (Tenant ID: ${tenant.id}). Input length: ${inputPassword.length}, Stored length: ${storedPass.length}`);
       return NextResponse.json(
         { success: false, error: "Invalid username or password" },
         { status: 401 }
