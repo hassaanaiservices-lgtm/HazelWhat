@@ -1348,8 +1348,11 @@ export class DB {
         const { fetchTenantsFromSupabase } = await import('./supabase');
         const fetched = await fetchTenantsFromSupabase();
         if (fetched) {
-          DB.tenantsMemoryStore = fetched;
-          return fetched;
+          const fetchedIds = new Set(fetched.map(t => t.id));
+          const preservedDefaults = DB.tenantsMemoryStore.filter(t => !fetchedIds.has(t.id));
+          const merged = [...fetched, ...preservedDefaults];
+          DB.tenantsMemoryStore = merged;
+          return merged;
         }
       } catch (e) {
         console.error('Failed to fetch tenants from Supabase:', e);
