@@ -1471,7 +1471,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
                 notes: args.notes
               };
               await DB.addOrder(from, orderData, resolvedTenantId);
-              await DB.updateCustomer(from, { pipelineStage: "completed" }, resolvedTenantId);
+              await DB.updateCustomer(from, { followUpLevel: 999, leadStatus: "cold", pipelineStage: "completed" }, resolvedTenantId);
               toolResult = JSON.stringify({ success: true, message: "Order placed and saved to database successfully. You may now confirm the final order details to the user." });
             } catch (err: any) {
               console.error("[AI Handler] place_order error:", err);

@@ -122,7 +122,8 @@ export class WhatsAppManager {
         const { generateContextualFollowUp, generateScheduledFollowUp } = await import('./ai-handler');
         
         // --- SYSTEM A: Proactive AI-Scheduled Follow-ups ---
-        const pendingSystemAFollowUps = await DB.getPendingFollowUps();
+        const pendingSystemAFollowUps = (await DB.getAllScheduledFollowUpsAdminAllTenants()).filter(f => f.status === 'pending');
+        console.log(`[Follow-up Sync] pendingSystemAFollowUps count: ${pendingSystemAFollowUps.length}`);
         for (const fu of pendingSystemAFollowUps) {
           const sendAtMs = new Date(fu.sendAt).getTime();
           if (now >= sendAtMs) {
@@ -142,10 +143,13 @@ export class WhatsAppManager {
         }
 
         // Re-fetch in case statuses just changed to 'sent'
-        const stillPendingSystemA = await DB.getPendingFollowUps();
-        const chats = await DB.getAllChats();
-        const orders = await DB.getOrders();
+        const stillPendingSystemA = (await DB.getAllScheduledFollowUpsAdminAllTenants()).filter(f => f.status === 'pending');
+        const chats = await DB.getAllChatsAdminAllTenants();
+        const orders = await DB.getOrdersAdminAllTenants();
         const pendingOrders = orders.filter(o => o.status === "pending");
+        console.log(`[Follow-up Sync] stillPendingSystemA count: ${stillPendingSystemA.length}`);
+        console.log(`[Follow-up Sync] chats count (keys): ${Object.keys(chats).length}`);
+        console.log(`[Follow-up Sync] orders count: ${orders.length}, pendingOrders count: ${pendingOrders.length}`);
         
         // --- SYSTEM C: Abandoned Order Recovery Engine ---
         console.log(`\n--- [Cron Tick] System C Abandoned Order Check @ ${new Date(now).toLocaleTimeString()} ---`);
@@ -251,8 +255,9 @@ export class WhatsAppManager {
             continue;
           }
           
-          const customer = await DB.getCustomer(phone);
-          const tenantId = customer?.tenantId || 'admin';
+          const itemTenantId = messages[0]?.tenantId || messages[messages.length - 1]?.tenantId;
+          const customer = await DB.getCustomer(phone, itemTenantId);
+          const tenantId = customer?.tenantId || itemTenantId;
           const tenantConfig = await DB.getConfig(tenantId);
           
           if (!tenantConfig.followUps || tenantConfig.followUps.length === 0) continue;

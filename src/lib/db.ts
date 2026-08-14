@@ -240,13 +240,13 @@ export const DEFAULT_CONFIG: Config = {
   timezone: "UTC",
   workingHours: "9:00 AM - 5:00 PM",
   followUps: [
-    { enabled: true, delayMinutes: 60, delayValue: 1, unit: "hours" },
-    { enabled: true, delayMinutes: 1440, delayValue: 1, unit: "days" },
-    { enabled: true, delayMinutes: 2880, delayValue: 2, unit: "days" },
-    { enabled: true, delayMinutes: 4320, delayValue: 3, unit: "days" },
-    { enabled: true, delayMinutes: 7200, delayValue: 5, unit: "days" },
-    { enabled: true, delayMinutes: 10080, delayValue: 7, unit: "days" },
-    { enabled: true, delayMinutes: 14400, delayValue: 10, unit: "days" }
+    { enabled: true, delayMinutes: 60, delayValue: 1, unit: "hours", message: "Gentle check-in to see if they have any questions about the products or need help placing their order." },
+    { enabled: true, delayMinutes: 1440, delayValue: 1, unit: "days", message: "Helpful nudge asking if they would like to complete their order today or need any recommendations." },
+    { enabled: true, delayMinutes: 2880, delayValue: 2, unit: "days", message: "Address potential questions or hesitations, offering to clarify details or customize their order." },
+    { enabled: true, delayMinutes: 4320, delayValue: 3, unit: "days", message: "Create gentle urgency by mentioning high demand or limited availability for popular items." },
+    { enabled: true, delayMinutes: 7200, delayValue: 5, unit: "days", message: "Share social proof and popular customer favorites to re-ignite interest in placing an order." },
+    { enabled: true, delayMinutes: 10080, delayValue: 7, unit: "days", message: "Offer a special perk like complimentary delivery or extra dip/side to encourage completing the order today." },
+    { enabled: true, delayMinutes: 14400, delayValue: 10, unit: "days", message: "Final low-pressure check-in letting them know we are always here whenever they are ready to order." }
   ]
 };
 
