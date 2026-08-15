@@ -1097,10 +1097,10 @@ export default function DashboardPage() {
   const disconnectAndDeleteChats = async () => {
     if (!confirm("Are you sure? This will disconnect your WhatsApp device AND permanently delete ALL chat history, contacts, and orders for this account. This cannot be undone.")) return;
     try {
-      // First delete all chats & customers
-      await fetch("/api/whatsapp/chats", { method: "DELETE" });
-      // Then disconnect session
+      // First disconnect session to stop any incoming sync/writes
       await fetch("/api/whatsapp/session", { method: "DELETE" });
+      // Then delete all chats & customers
+      await fetch("/api/whatsapp/chats", { method: "DELETE" });
       setStatus("idle");
       setSessionData(null);
       setQrCode(null);
