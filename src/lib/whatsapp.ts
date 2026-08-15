@@ -110,6 +110,10 @@ export class WhatsAppManager {
   }
 
   static startFollowUpsSync() {
+    if (process.env.DISABLE_LOCAL_WHATSAPP === 'true') {
+      console.log("[WhatsApp] Follow-up sync skipped: DISABLE_LOCAL_WHATSAPP is true.");
+      return;
+    }
     if (globalForBaileys.followUpInterval) {
       clearInterval(globalForBaileys.followUpInterval);
     }
@@ -345,6 +349,10 @@ export class WhatsAppManager {
   }
 
   static startRevivalSync() {
+    if (process.env.DISABLE_LOCAL_WHATSAPP === 'true') {
+      console.log("[WhatsApp] Revival sync skipped: DISABLE_LOCAL_WHATSAPP is true.");
+      return;
+    }
     if (globalForBaileys.revivalInterval) {
       clearInterval(globalForBaileys.revivalInterval);
     }
@@ -609,20 +617,26 @@ export class WhatsAppManager {
   }
 
   static startSessionWatchdog() {
+    if (process.env.DISABLE_LOCAL_WHATSAPP === 'true') {
+      console.log("[WhatsApp] Session watchdog skipped: DISABLE_LOCAL_WHATSAPP is true.");
+      return;
+    }
     if (globalForBaileys.watchdogInterval) {
       clearInterval(globalForBaileys.watchdogInterval);
     }
     // Check session health every 30 seconds
     globalForBaileys.watchdogInterval = setInterval(async () => {
       try {
-        const authFolder = AUTH_FOLDER;
-        const credsFile = path.join(authFolder, "creds.json");
-        const hasSavedCreds = fs.existsSync(credsFile);
+        const tenantId = this.getActiveTenantId() || "default";
+        const hasSupabaseCreds = await DB.hasSavedCredentials(tenantId);
+        const localCredsFile = path.join(DB_DIR, `.baileys_auth_${tenantId}`, "creds.json");
+        const hasLocalCreds = fs.existsSync(localCredsFile);
+        const hasSavedCreds = hasLocalCreds || hasSupabaseCreds;
 
         const currentStatus = globalForBaileys.baileysSession?.status;
         const sock = globalForBaileys.baileysSession?.sock;
 
-        // If credentials exist on disk but status is disconnected or socket is null, auto-reconnect
+        // If credentials exist but status is disconnected or socket is null, auto-reconnect
         if (hasSavedCreds && (currentStatus === "disconnected" || !sock) && !globalForBaileys.startPromise) {
           console.log("[Watchdog] Saved credentials found but WhatsApp is disconnected. Healing connection...");
           const { handleWhatsAppMessage } = await import("./ai-handler");
