@@ -75,26 +75,28 @@ export async function GET(request: NextRequest) {
   }
 
   // Table 5: orders
+  const testOrderUuid = crypto.randomUUID();
   try {
-    const { error } = await anonSupabase.from('orders').insert({ id: 'ord-test-rls-audit', tenant_id: 't-1004', phone: '000000', product_name: 'test' });
+    const { error } = await anonSupabase.from('orders').insert({ id: testOrderUuid, tenant_id: 't-1004', phone: '000000', product_name: 'test' });
     if (error) {
       auditResults['orders'] = { rls_blocked: error.code === '42501', error: error.message };
     } else {
       auditResults['orders'] = { rls_blocked: false };
-      await anonSupabase.from('orders').delete().eq('id', 'ord-test-rls-audit');
+      await anonSupabase.from('orders').delete().eq('id', testOrderUuid);
     }
   } catch (e: any) {
     auditResults['orders'] = { rls_blocked: true, error: e.message };
   }
 
   // Table 6: appointments
+  const testApptUuid = crypto.randomUUID();
   try {
-    const { error } = await anonSupabase.from('appointments').insert({ id: 'apt-test-rls-audit', tenant_id: 't-1004', phone: '000000' });
+    const { error } = await anonSupabase.from('appointments').insert({ id: testApptUuid, tenant_id: 't-1004', phone: '000000' });
     if (error) {
       auditResults['appointments'] = { rls_blocked: error.code === '42501', error: error.message };
     } else {
       auditResults['appointments'] = { rls_blocked: false };
-      await anonSupabase.from('appointments').delete().eq('id', 'apt-test-rls-audit');
+      await anonSupabase.from('appointments').delete().eq('id', testApptUuid);
     }
   } catch (e: any) {
     auditResults['appointments'] = { rls_blocked: true, error: e.message };

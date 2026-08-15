@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { Tenant, Partner } from './multitenant-store';
 import { ProductItem } from './scraper';
@@ -799,7 +800,7 @@ export class DB {
       return false;
     }
     try {
-      const apptId = "APT-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+      const apptId = randomUUID();
 
       await supabase.from('appointments').insert({
         id: apptId,
@@ -884,7 +885,7 @@ export class DB {
       console.error('[SECURITY] addOrder called without tenantId — refusing order creation');
       return null;
     }
-    const ordId = "ORD-" + Math.random().toString(36).substring(2, 8).toUpperCase();
+    const ordId = randomUUID();
     const newOrder: Order = {
       id: ordId,
       tenantId: tenantId,
