@@ -349,26 +349,8 @@ export class WhatsAppManager {
   }
 
   static startRevivalSync() {
-    if (process.env.DISABLE_LOCAL_WHATSAPP === 'true') {
-      console.log("[WhatsApp] Revival sync skipped: DISABLE_LOCAL_WHATSAPP is true.");
-      return;
-    }
-    if (globalForBaileys.revivalInterval) {
-      clearInterval(globalForBaileys.revivalInterval);
-    }
-    // Check every 10 seconds for active campaigns to support responsive delays
-    globalForBaileys.revivalInterval = setInterval(async () => {
-      // Prevent overlapping processing
-      if (globalForBaileys.revivalProcessing) return;
-      globalForBaileys.revivalProcessing = true;
-      try {
-        await this.processRevivalCampaign();
-      } catch (e) {
-        console.error("[Revival] Processing error:", e);
-      } finally {
-        globalForBaileys.revivalProcessing = false;
-      }
-    }, 10000);
+    // Revival has been disabled completely.
+    return;
   }
 
   static async processRevivalCampaign() {

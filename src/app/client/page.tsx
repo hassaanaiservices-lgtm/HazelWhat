@@ -1858,8 +1858,8 @@ export default function DashboardPage() {
           <button onClick={() => setActiveTab('promotions')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'promotions' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
             <Clock className={`h-4 w-4 ${activeTab === 'promotions' ? 'text-purple-600' : 'text-slate-400'}`} /> Follow Ups
           </button>
-          <button onClick={() => setActiveTab('leads-revival')} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeTab === 'leads-revival' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
-            <RefreshCw className={`h-4 w-4 ${activeTab === 'leads-revival' ? 'text-purple-600' : 'text-slate-400'}`} /> Leads Revival
+          <button disabled title="Lead Revival is currently disabled" className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all opacity-50 cursor-not-allowed ${activeTab === 'leads-revival' ? 'bg-purple-50/80 text-purple-700 font-extrabold shadow-sm border-r-2 border-purple-600' : 'text-slate-600'}`}>
+            <RefreshCw className={`h-4 w-4 ${activeTab === 'leads-revival' ? 'text-purple-600' : 'text-slate-400'}`} /> Leads Revival (Disabled)
           </button>
         </div>
 
@@ -1996,10 +1996,11 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => setActiveTab('leads-revival')}
-                  className="bg-white hover:bg-purple-50 text-purple-900 font-extrabold px-5 py-3 rounded-2xl text-xs transition shadow-lg flex items-center gap-2 cursor-pointer border border-white/30"
+                  disabled
+                  title="Lead Revival is currently disabled"
+                  className="bg-white/50 text-purple-900/50 font-extrabold px-5 py-3 rounded-2xl text-xs transition shadow flex items-center gap-2 cursor-not-allowed border border-white/30"
                 >
-                  <RefreshCw className="h-4 w-4 text-purple-600" />
+                  <RefreshCw className="h-4 w-4 text-purple-600/50" />
                   <span>Manage Lead Revival</span>
                 </button>
                 <button
