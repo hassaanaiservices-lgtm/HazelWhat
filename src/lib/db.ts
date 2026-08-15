@@ -942,6 +942,16 @@ export class DB {
       if (updates.status) payload.status = updates.status;
       if (updates.notes !== undefined) payload.notes = updates.notes;
       if (updates.customerName) payload.customer_name = updates.customerName;
+      if (updates.recoveryStage !== undefined) payload.recovery_stage = updates.recoveryStage;
+      if (updates.deliveryAddress !== undefined) payload.delivery_address = updates.deliveryAddress;
+      if (updates.paymentMethod !== undefined) payload.payment_method = updates.paymentMethod;
+      if (updates.price !== undefined) payload.price = updates.price;
+      if (updates.productImageUrl !== undefined) payload.product_image_url = updates.productImageUrl;
+      if (updates.contactNumber !== undefined) payload.contact_number = updates.contactNumber;
+      if (updates.size !== undefined) payload.size = updates.size;
+      if (updates.color !== undefined) payload.color = updates.color;
+      if (updates.productName !== undefined) payload.product_name = updates.productName;
+      if (updates.phone !== undefined) payload.phone = updates.phone;
 
       await supabase.from('orders').update(payload).eq('id', orderId).eq('tenant_id', tenantId);
     } catch (e) {
