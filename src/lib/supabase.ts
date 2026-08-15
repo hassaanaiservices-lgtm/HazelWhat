@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { Tenant, CallLog } from './multitenant-store';
+import bcrypt from 'bcryptjs';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -132,6 +133,11 @@ export async function fetchTenantsFromSupabase(): Promise<Tenant[] | null> {
 export async function upsertTenantToSupabase(tenant: Tenant): Promise<boolean> {
   if (!supabase) return false;
   try {
+    let formattedPassword = (tenant.clientPassword && tenant.clientPassword.trim()) ? tenant.clientPassword.trim() : null;
+    if (formattedPassword && !formattedPassword.startsWith('$2a$') && !formattedPassword.startsWith('$2b$') && !formattedPassword.startsWith('$2y$')) {
+      formattedPassword = bcrypt.hashSync(formattedPassword, 10);
+    }
+
     const payload = {
       id: tenant.id,
       client_number: tenant.clientNumber,
@@ -147,7 +153,7 @@ export async function upsertTenantToSupabase(tenant: Tenant): Promise<boolean> {
       allocated_minutes: tenant.allocatedMinutes,
       used_minutes: tenant.usedMinutes,
       client_username: (tenant.clientUsername && tenant.clientUsername.trim()) ? tenant.clientUsername.trim() : null,
-      client_password: (tenant.clientPassword && tenant.clientPassword.trim()) ? tenant.clientPassword.trim() : null,
+      client_password: formattedPassword,
       system_prompt: tenant.systemPrompt,
       knowledge_base: tenant.knowledgeBase,
       product_knowledge_base: tenant.productKnowledgeBase,
