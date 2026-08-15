@@ -372,20 +372,21 @@ export default function VoiceSaaSApp() {
         if (Array.isArray(data.partners) && data.partners.length > 0) {
           setPartners(data.partners);
         }
-        setSelectedTenantId(data.tenants[0].id);
+        if (!selectedTenantId) {
+          setSelectedTenantId(data.tenants[0].id);
+        }
+        // Update local storage to keep client cache in sync with server
+        try {
+          localStorage.setItem('hazel_admin_tenants', JSON.stringify(data.tenants));
+          if (data.partners) localStorage.setItem('hazel_admin_partners', JSON.stringify(data.partners));
+        } catch (err) {}
       } else {
         const stored = localStorage.getItem('hazel_admin_tenants');
         if (stored) {
           const parsed = JSON.parse(stored);
           if (Array.isArray(parsed) && parsed.length > 0) {
             setTenants(parsed);
-            setSelectedTenantId(parsed[0].id);
-            // Sync local state to server DB
-            await fetch('/api/admin/tenants', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ tenants: parsed })
-            });
+            if (!selectedTenantId) setSelectedTenantId(parsed[0].id);
           }
         }
         const storedPartners = localStorage.getItem('hazel_admin_partners');
@@ -401,12 +402,7 @@ export default function VoiceSaaSApp() {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
           setTenants(parsed);
-          setSelectedTenantId(parsed[0].id);
-          fetch('/api/admin/tenants', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tenants: parsed })
-          }).catch(console.error);
+          if (!selectedTenantId) setSelectedTenantId(parsed[0].id);
         }
       }
     }
