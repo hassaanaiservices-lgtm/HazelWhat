@@ -1094,6 +1094,24 @@ export default function DashboardPage() {
     }
   };
 
+  const disconnectAndDeleteChats = async () => {
+    if (!confirm("Are you sure? This will disconnect your WhatsApp device AND permanently delete ALL chat history, contacts, and orders for this account. This cannot be undone.")) return;
+    try {
+      // First delete all chats & customers
+      await fetch("/api/whatsapp/chats", { method: "DELETE" });
+      // Then disconnect session
+      await fetch("/api/whatsapp/session", { method: "DELETE" });
+      setStatus("idle");
+      setSessionData(null);
+      setQrCode(null);
+      setChats({});
+      setCustomers({});
+      setOrders([]);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const toggleChatAi = async (enabled: boolean) => {
     if (!selectedChat) return;
     setCustomers(prev => ({
@@ -2881,9 +2899,24 @@ export default function DashboardPage() {
                       <p className="text-sm text-purple-700 font-bold">+{sessionData.phoneNumber}</p>
                     )}
                   </div>
-                  <button onClick={disconnectSession} className="text-sm font-bold text-rose-500 bg-rose-50 hover:bg-rose-100 w-full py-3 rounded-xl transition-colors mt-4">
-                    Disconnect Device
-                  </button>
+                  <div className="w-full space-y-3 pt-2">
+                    <button
+                      onClick={disconnectSession}
+                      className="text-sm font-bold text-rose-500 bg-rose-50 hover:bg-rose-100 w-full py-3 rounded-xl transition-colors border border-rose-200"
+                    >
+                      Disconnect Device
+                    </button>
+                    <button
+                      onClick={disconnectAndDeleteChats}
+                      className="text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 w-full py-3 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-md shadow-rose-500/30"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Disconnect + Delete All Chats
+                    </button>
+                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                      Use &quot;Disconnect + Delete All Chats&quot; when switching to a new WhatsApp number — clears all previous chat history, contacts, and orders.
+                    </p>
+                  </div>
                 </div>
               )}
 

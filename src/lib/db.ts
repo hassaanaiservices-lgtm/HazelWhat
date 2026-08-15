@@ -1650,4 +1650,29 @@ export class DB {
       return false;
     }
   }
+
+  static async clearAllChatsAndCustomers(tenantId: string): Promise<void> {
+    if (!tenantId) return;
+
+    if (supabase) {
+      try {
+        await supabase.from('chat_messages').delete().eq('tenant_id', tenantId);
+      } catch (e) {
+        console.error('[DB] Failed to clear chat_messages from Supabase:', e);
+      }
+      try {
+        await supabase.from('customers').delete().eq('tenant_id', tenantId);
+      } catch (e) {
+        console.error('[DB] Failed to clear customers from Supabase:', e);
+      }
+      try {
+        await supabase.from('orders').delete().eq('tenant_id', tenantId);
+      } catch (e) {
+        console.error('[DB] Failed to clear orders from Supabase:', e);
+      }
+    }
+
+    console.log(`[DB] Cleared all chats, customers, and orders for tenant: ${tenantId}`);
+  }
 }
+

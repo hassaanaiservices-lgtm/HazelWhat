@@ -61,3 +61,24 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  const tag = "[Chats API DELETE]";
+  try {
+    const session = await getSessionFromCookies(req);
+    const tenantId = session?.tenantId;
+
+    if (!tenantId || session?.role === 'admin') {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Clear all chats from memory store for this tenant
+    await DB.clearAllChatsAndCustomers(tenantId);
+
+    console.log(`${tag} Cleared all chats and customers for tenant: ${tenantId}`);
+    return NextResponse.json({ success: true, message: "All chats cleared successfully" });
+  } catch (err: any) {
+    console.error(`${tag} Error:`, err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
