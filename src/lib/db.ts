@@ -67,6 +67,19 @@ export interface Config {
   deepgramVoice?: string;
 }
 
+function sanitizeCatalogField(val: string | undefined | null): string {
+  if (!val) return "N/A";
+  if (val.length > 300) {
+    if (val.startsWith("data:") || val.includes(";base64,") || val.includes("iVBORw0KGgo")) {
+      return "[Image Data - Truncated for AI context]";
+    }
+    if (val.length > 1000) {
+      return val.substring(0, 1000) + "... [Truncated]";
+    }
+  }
+  return val;
+}
+
 export function formatProductsToCatalog(products: ProductItem[], currency: string = "$"): string {
   if (!products || products.length === 0) return "";
   let text = "--- E-COMMERCE CATALOG ---\n\n";
@@ -88,7 +101,13 @@ export function formatProductsToCatalog(products: ProductItem[], currency: strin
           variationsText += `\n    - ${v.title}: ${v.price}`;
         });
       }
-      text += `- ${p.title} (Base Price/Range: ${p.price})\n  Image: ${p.image || "N/A"}\n  Link: ${p.link || "N/A"}${p.description ? `\n  Description: ${p.description}` : ""}${variationsText}\n\n`;
+      
+      const cleanTitle = sanitizeCatalogField(p.title);
+      const cleanImage = sanitizeCatalogField(p.image);
+      const cleanLink = sanitizeCatalogField(p.link);
+      const cleanDescription = p.description ? sanitizeCatalogField(p.description) : "";
+
+      text += `- ${cleanTitle} (Base Price/Range: ${p.price})\n  Image: ${cleanImage}\n  Link: ${cleanLink}${cleanDescription ? `\n  Description: ${cleanDescription}` : ""}${variationsText}\n\n`;
     });
   }
   return text;
