@@ -69,13 +69,14 @@ export interface Config {
 
 function sanitizeCatalogField(val: string | undefined | null): string {
   if (!val) return "N/A";
-  if (val.length > 300) {
+  if (val.length > 150) {
     if (val.startsWith("data:") || val.includes(";base64,") || val.includes("iVBORw0KGgo")) {
       return "[Image Data - Truncated for AI context]";
     }
-    if (val.length > 1000) {
-      return val.substring(0, 1000) + "... [Truncated]";
+    if (val.startsWith("http://") || val.startsWith("https://")) {
+      return val;
     }
+    return val.substring(0, 150) + "... [Truncated]";
   }
   return val;
 }
