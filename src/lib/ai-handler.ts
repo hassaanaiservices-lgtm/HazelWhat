@@ -786,7 +786,7 @@ async function callLLM(
           model: model,
           stop_reason: assistantMsg.tool_calls ? "tool_use" : "end_turn",
           usage: { input_tokens: data.usage?.prompt_tokens || 0, output_tokens: data.usage?.completion_tokens || 0 }
-        };
+        } as any;
       } catch (err: any) {
         console.error(`[callLLM] OpenRouter model ${model} failed:`, err.message || err);
         lastError = err;
