@@ -674,6 +674,19 @@ export default function DashboardPage() {
     }
   };
 
+  const toggleChatAi = async (enabled: boolean, targetPhone?: string) => {
+    const phone = targetPhone || selectedChat;
+    if (!phone) return;
+    setCustomers(prev => ({
+      ...prev,
+      [phone]: {
+        ...(prev[phone] || { phone }),
+        aiEnabled: enabled
+      }
+    }));
+    await updateCustomerField(phone, { aiEnabled: enabled });
+  };
+
   const isContactActiveLead = (c: any): boolean => {
     if (!c || !c.phone) return false;
     if (c.isLead === true) return true;
@@ -4950,9 +4963,13 @@ A: 2 to 4 working days."
                                     <h4 className="font-extrabold text-xs text-slate-800 truncate" title={leadName}>{leadName}</h4>
                                     <p className="text-[10px] text-slate-400 font-semibold mt-0.5">+{lead.phone}</p>
                                   </div>
-                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${hasAi ? 'bg-purple-50 text-purple-700 border border-purple-100' : 'bg-slate-100 text-slate-500'}`}>
+                                  <button 
+                                    onClick={() => toggleChatAi(!hasAi, lead.phone)}
+                                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full cursor-pointer hover:opacity-80 transition ${hasAi ? 'bg-purple-50 text-purple-700 border border-purple-100' : 'bg-slate-100 text-slate-500'}`}
+                                    title="Click to toggle Autopilot / Copilot for this contact"
+                                  >
                                     {hasAi ? 'Autopilot' : 'Copilot'}
-                                  </span>
+                                  </button>
                                 </div>
 
                                 {/* Tags */}

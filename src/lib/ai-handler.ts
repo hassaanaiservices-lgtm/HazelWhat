@@ -592,10 +592,10 @@ export async function callLLMWithFallback(
   tools: any[] = [],
   temperature: number = 0.7
 ): Promise<{ res: any; provider: string }> {
-  const deepseekKey = config?.openaiApiKey || process.env.DEEPSEEK_API_KEY || getEnvKey("DEEPSEEK_API_KEY") || "";
+  const primaryKey = config?.apiKey || config?.openRouterApiKey || config?.openaiApiKey || process.env.DEEPSEEK_API_KEY || getEnvKey("DEEPSEEK_API_KEY") || process.env.OPENROUTER_API_KEY || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENAI_API_KEY || getEnvKey("OPENAI_API_KEY") || "";
   const anthropicKey = config?.anthropicApiKey || process.env.ANTHROPIC_API_KEY || getEnvKey("ANTHROPIC_API_KEY") || "";
 
-  const deepseekAvailable = deepseekKey && isProviderAvailable("deepseek");
+  const deepseekAvailable = primaryKey && isProviderAvailable("deepseek");
   const anthropicAvailable = anthropicKey && isProviderAvailable("anthropic");
 
   if (!deepseekAvailable && !anthropicAvailable) {
@@ -611,7 +611,7 @@ export async function callLLMWithFallback(
   if (deepseekAvailable) {
     try {
       console.log("[callLLMWithFallback] Attempting primary LLM (DeepSeek)...");
-      const res = await callLLM(deepseekKey, systemPrompt, messages, tools, temperature);
+      const res = await callLLM(primaryKey, systemPrompt, messages, tools, temperature);
       recordProviderSuccess("deepseek");
       console.log("[callLLMWithFallback] Provider used: deepseek");
       return { res, provider: "deepseek" };
