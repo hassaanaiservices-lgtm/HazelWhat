@@ -1160,6 +1160,14 @@ export class WhatsAppManager {
     return sentMsg;
   }
 
+  static async sendImageUrl(to: string, imageUrl: string, caption?: string) {
+    const sock = await this.ensureConnected();
+    const jid = await this.resolveJid(to);
+    await sock.sendPresenceUpdate('paused', jid);
+    const sentMsg = await sock.sendMessage(jid, { image: { url: imageUrl }, caption: caption || "" });
+    return sentMsg;
+  }
+
   static async sendMedia(to: string, buffer: Buffer, mimetype: string, fileName?: string, caption?: string, isVoiceNote = false) {
     const sock = await this.ensureConnected();
     const jid = await this.resolveJid(to);

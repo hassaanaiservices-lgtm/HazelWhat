@@ -660,7 +660,7 @@ async function callLLM(
         console.log(`[callLLM] Attempting Anthropic model ${model}...`);
         const res = await anthropic.messages.create({
           model: model,
-          max_tokens: 2000,
+          max_tokens: 200,
           system: systemPrompt,
           messages: messages as any,
           tools: tools.length > 0 ? tools : undefined,
@@ -699,7 +699,7 @@ async function callLLM(
         });
         const res = await anthropic.messages.create({
           model: model,
-          max_tokens: 2000,
+          max_tokens: 200,
           system: systemPrompt,
           messages: messages as any,
           tools: tools.length > 0 ? tools : undefined,
@@ -760,7 +760,7 @@ async function callLLM(
             model: "deepseek-chat",
             messages: cleanedMessages,
             tools: openAiTools.length > 0 ? openAiTools : undefined,
-            max_tokens: 2000,
+            max_tokens: 200,
             temperature: temperature
           }),
           signal: controller.signal
@@ -854,6 +854,8 @@ interface HybridMatchResult {
   matched: boolean;
   reply?: string;
   source?: "sequential_flow" | "manual_keyword" | "knowledge_base_faq" | "product_catalog";
+  image?: string;
+  imageCaption?: string;
 }
 
 /**
@@ -870,6 +872,8 @@ async function processHybridEngine(
   tenantId: string
 ): Promise<HybridMatchResult> {
   const lowerContent = content.toLowerCase().trim();
+  const products: any[] = (config.products && config.products.length > 0) ? config.products : (activeTenant?.products || []);
+  const currency = activeTenant?.currency || config.storeCurrency || "PKR";
 
   // 1. LAYER 0: Sequential Chatbot Flow Machine
   const preferencesNote = customer?.preferences || "";
@@ -888,6 +892,43 @@ async function processHybridEngine(
       return {
         matched: true,
         reply: "Flow cancelled. How else can I assist you today?",
+        source: "sequential_flow"
+      };
+    }
+
+    if (currentState === "AWAITING_ORDER_SIZE") {
+      const input = lowerContent;
+      const variations = stateData.variations || [];
+      let selectedVariant = null;
+
+      const optionIndex = parseInt(input) - 1;
+      if (!isNaN(optionIndex) && optionIndex >= 0 && optionIndex < variations.length) {
+        selectedVariant = variations[optionIndex];
+      } else {
+        selectedVariant = variations.find((v: any) => input.includes(v.title.toLowerCase().trim()));
+      }
+
+      if (!selectedVariant) {
+        let optionsText = "";
+        variations.forEach((v: any, index: number) => {
+          optionsText += `\n- *${index + 1}. ${v.title}* - ${currency} ${v.price}`;
+        });
+        return {
+          matched: true,
+          reply: `I didn't catch that size. Please reply with one of the numbers or size options:${optionsText}`,
+          source: "sequential_flow"
+        };
+      }
+
+      stateData.selectedSize = selectedVariant.title;
+      stateData.price = selectedVariant.price;
+
+      const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_NAME:${JSON.stringify(stateData)}]`;
+      await DB.updateCustomer(from, { preferences: newNote }, tenantId);
+
+      return {
+        matched: true,
+        reply: `Excellent! *${stateData.productName} (${selectedVariant.title})* selected. Price: ${selectedVariant.price}.\n\nTo place your order, please reply with your Full Name:`,
         source: "sequential_flow"
       };
     }
@@ -924,14 +965,21 @@ async function processHybridEngine(
       }
 
       const productName = stateData.productName || "Product Order";
+      const selectedSize = stateData.selectedSize || "";
+      const finalProductName = selectedSize ? `${productName} (${selectedSize})` : productName;
       const customerName = stateData.name || customer?.name || "Customer";
       const deliveryAddress = stateData.address || "As provided";
+      const finalPrice = stateData.price || "N/A";
+      const productImageUrl = stateData.image || undefined;
 
       await DB.addOrder(from, {
-        productName,
+        productName: finalProductName,
         customerName,
         deliveryAddress,
-        paymentMethod
+        paymentMethod,
+        price: finalPrice,
+        size: selectedSize || undefined,
+        productImageUrl
       }, tenantId);
 
       const cleanedNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim();
@@ -944,9 +992,69 @@ async function processHybridEngine(
 
       return {
         matched: true,
-        reply: `🎉 *Order Confirmed!*\n\n📦 *Item:* ${productName}\n👤 *Name:* ${customerName}\n📍 *Address:* ${deliveryAddress}\n💳 *Payment:* ${paymentMethod}\n\nOur team will process your order shortly. Thank you!`,
+        reply: `🎉 *Order Confirmed!*\n\n📦 *Item:* ${finalProductName}\n👤 *Name:* ${customerName}\n📍 *Address:* ${deliveryAddress}\n💳 *Payment:* ${paymentMethod}\n💰 *Total Price:* ${finalPrice}\n\nOur team will process your order shortly. Thank you!`,
         source: "sequential_flow"
       };
+    }
+  }
+
+  // Check if user mentions any product in the catalog to start product-specific flow
+  if (products.length > 0) {
+    let matchedProduct = null;
+    for (const prod of products) {
+      if (!prod.title) continue;
+      const titleLower = prod.title.toLowerCase().trim();
+      if (lowerContent.includes(titleLower)) {
+        matchedProduct = prod;
+        break;
+      }
+    }
+
+    if (matchedProduct) {
+      const isOrderTrigger = ["order", "buy", "chahiye", "place order", "order now", "want"].some(w => lowerContent.includes(w)) || 
+                            lowerContent === matchedProduct.title.toLowerCase().trim();
+
+      if (isOrderTrigger) {
+        const hasVariations = Array.isArray(matchedProduct.variations) && matchedProduct.variations.length > 0;
+        if (hasVariations) {
+          const stateData = { 
+            productName: matchedProduct.title, 
+            image: matchedProduct.image || null,
+            variations: matchedProduct.variations 
+          };
+          const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_SIZE:${JSON.stringify(stateData)}]`;
+          await DB.updateCustomer(from, { preferences: newNote }, tenantId);
+
+          let optionsText = "";
+          matchedProduct.variations.forEach((v: any, index: number) => {
+            optionsText += `\n- *${index + 1}. ${v.title}* - ${currency} ${v.price}`;
+          });
+
+          return {
+            matched: true,
+            reply: `Yeh hai hamari *${matchedProduct.title}*! 🍕🔥\n\nKonsa size chahiye?${optionsText}\n\nSize batao, phir main aapka order confirm kar deta hoon! 😊`,
+            image: matchedProduct.image && matchedProduct.image !== "N/A" ? matchedProduct.image : undefined,
+            imageCaption: matchedProduct.title,
+            source: "sequential_flow"
+          };
+        } else {
+          const stateData = { 
+            productName: matchedProduct.title,
+            price: matchedProduct.price || "N/A",
+            image: matchedProduct.image || null
+          };
+          const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_NAME:${JSON.stringify(stateData)}]`;
+          await DB.updateCustomer(from, { preferences: newNote }, tenantId);
+
+          return {
+            matched: true,
+            reply: `Great choice! You are ordering *${matchedProduct.title}* (${currency} ${matchedProduct.price || "N/A"}).\n\nTo place your order, please reply with your Full Name:`,
+            image: matchedProduct.image && matchedProduct.image !== "N/A" ? matchedProduct.image : undefined,
+            imageCaption: matchedProduct.title,
+            source: "sequential_flow"
+          };
+        }
+      }
     }
   }
 
@@ -1035,9 +1143,6 @@ async function processHybridEngine(
   }
 
   // 5. LAYER 1C: Auto-Derived Product Catalog Indexer
-  const products: any[] = (config.products && config.products.length > 0) ? config.products : (activeTenant?.products || []);
-  const currency = activeTenant?.currency || config.storeCurrency || "PKR";
-
   if (products.length > 0) {
     for (const prod of products) {
       if (!prod.title) continue;
@@ -1352,6 +1457,13 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
 
     if (hybridResult.matched && hybridResult.reply) {
       console.log(`[AI Handler] Hybrid Engine matched via [${hybridResult.source}]. 0 Tokens used!`);
+      if (hybridResult.image) {
+        try {
+          await WhatsAppManager.sendImageUrl(from, hybridResult.image, hybridResult.imageCaption || "");
+        } catch (imgErr) {
+          console.error("[AI Handler] Failed to send hybrid result image:", imgErr);
+        }
+      }
       const sentMsg = await WhatsAppManager.sendMessage(from, hybridResult.reply);
       await DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: hybridResult.reply }, resolvedTenantId);
       return;

@@ -1830,9 +1830,9 @@ export default function DashboardPage() {
               <ShoppingCart className={`h-4 w-4 ${activeTab === 'orders' ? 'text-purple-600' : 'text-slate-400'}`} />
               <span>Orders</span>
             </div>
-            {orders && orders.length > 0 && (
-              <span key={orders.length} className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-purple-600 px-1.5 text-[10px] font-bold text-white shadow-sm animate-pop-in">
-                {orders.length}
+            {orders && orders.filter((o: any) => o.status === 'pending').length > 0 && (
+              <span key={orders.filter((o: any) => o.status === 'pending').length} className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-purple-600 px-1.5 text-[10px] font-bold text-white shadow-sm animate-pop-in">
+                {orders.filter((o: any) => o.status === 'pending').length}
               </span>
             )}
           </button>
@@ -4581,7 +4581,7 @@ A: 2 to 4 working days."
                     if (orderFilter === 'orders') return !o.productName.includes('Appointment') && !o.productName.startsWith('📅');
                     if (orderFilter === 'appointments') return o.productName.includes('Appointment') || o.productName.startsWith('📅');
                     return o.status === orderFilter;
-                  }).reverse().map((order) => {
+                  }).map((order) => {
                     const isAppointment = order.productName.includes('Appointment') || order.productName.startsWith('📅');
                     const clientName = customers[order.phone]?.name || order.customerName || order.phone || "Verified Client";
                     const isEditingThis = editingNotesId === order.id;
