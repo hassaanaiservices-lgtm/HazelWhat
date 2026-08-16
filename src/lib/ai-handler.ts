@@ -674,7 +674,7 @@ async function callLLM(
         console.log(`[callLLM] Attempting Anthropic model ${model}...`);
         const res = await anthropic.messages.create({
           model: model,
-          max_tokens: 200,
+          max_tokens: 1000,
           system: systemPrompt,
           messages: messages as any,
           tools: tools.length > 0 ? tools : undefined,
@@ -742,7 +742,7 @@ async function callLLM(
             model: model,
             messages: cleanedMessages,
             tools: openAiTools.length > 0 ? openAiTools : undefined,
-            max_tokens: 200,
+            max_tokens: 1000,
             temperature: temperature
           }),
           signal: controller.signal
@@ -845,7 +845,7 @@ async function callLLM(
             model: "deepseek-chat",
             messages: cleanedMessages,
             tools: openAiTools.length > 0 ? openAiTools : undefined,
-            max_tokens: 200,
+            max_tokens: 1000,
             temperature: temperature
           }),
           signal: controller.signal
