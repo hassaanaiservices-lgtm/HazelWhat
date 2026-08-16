@@ -595,14 +595,20 @@ export async function callLLMWithFallback(
   const primaryKey = config?.apiKey || config?.openRouterApiKey || config?.openaiApiKey || process.env.DEEPSEEK_API_KEY || getEnvKey("DEEPSEEK_API_KEY") || process.env.OPENROUTER_API_KEY || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENAI_API_KEY || getEnvKey("OPENAI_API_KEY") || "";
   const anthropicKey = config?.anthropicApiKey || process.env.ANTHROPIC_API_KEY || getEnvKey("ANTHROPIC_API_KEY") || "";
 
+  // Auto-recovery: If primary key is present, reset circuit if at least 10 seconds have elapsed since last failure
+  const dsStatus = getCircuitStatus("deepseek");
+  if (primaryKey && dsStatus.state === "open" && Date.now() - dsStatus.lastFailureTime > 10000) {
+    providerCircuits.deepseek.state = "closed";
+  }
+
   const deepseekAvailable = primaryKey && isProviderAvailable("deepseek");
   const anthropicAvailable = anthropicKey && isProviderAvailable("anthropic");
 
   if (!deepseekAvailable && !anthropicAvailable) {
-    const dsStatus = getCircuitStatus("deepseek");
+    const dsStatusNow = getCircuitStatus("deepseek");
     const antStatus = getCircuitStatus("anthropic");
     const errMsg = `All configured LLM providers are currently unavailable or circuit-open. ` +
-      `(DeepSeek: ${dsStatus.state} - "${dsStatus.lastErrorReason || "No key"}", ` +
+      `(DeepSeek: ${dsStatusNow.state} - "${dsStatusNow.lastErrorReason || "No key"}", ` +
       `Anthropic: ${antStatus.state} - "${antStatus.lastErrorReason || "No key"})`;
     console.error(`[callLLMWithFallback] ${errMsg}`);
     throw new Error(errMsg);

@@ -641,7 +641,10 @@ export class DB {
         workingHours: data?.working_hours || '9:00 AM - 5:00 PM',
         botMode: data?.bot_mode || 'both',
         maxFollowUps: data?.max_follow_ups || 7,
-        followUps: data?.follow_ups || DEFAULT_CONFIG.followUps
+        followUps: data?.follow_ups || DEFAULT_CONFIG.followUps,
+        apiKey: data?.api_key || data?.apiKey || tenantRecord?.apiKey || (tenantRecord as any)?.api_key || '',
+        openRouterApiKey: data?.openrouter_api_key || data?.openRouterApiKey || tenantRecord?.openRouterApiKey || '',
+        anthropicApiKey: data?.anthropic_api_key || data?.anthropicApiKey || tenantRecord?.anthropicApiKey || ''
       };
     } catch (e) {
       console.error('[DB/Supabase] getConfig exception:', e);
@@ -674,7 +677,10 @@ export class DB {
         working_hours: updated.workingHours,
         bot_mode: updated.botMode,
         max_follow_ups: updated.maxFollowUps,
-        follow_ups: updated.followUps || []
+        follow_ups: updated.followUps || [],
+        api_key: updated.apiKey,
+        openrouter_api_key: updated.openRouterApiKey,
+        anthropic_api_key: updated.anthropicApiKey
       }, { onConflict: 'tenant_id' });
     } catch (e) {
       console.error('[DB/Supabase] updateConfig error:', e);
