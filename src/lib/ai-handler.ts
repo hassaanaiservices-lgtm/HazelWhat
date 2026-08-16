@@ -694,39 +694,102 @@ async function callLLM(
     
     throw lastErr || new Error("Anthropic API call failed for all models.");
   } else if (keyType === "openrouter") {
+    console.log(`[callLLM] Attempting OpenRouter API...`);
+    const openAiMessages = convertAnthropicMessagesToOpenAi(messages, systemPrompt);
+    const openAiTools = convertAnthropicToolsToOpenAi(tools);
+
+    const cleanedMessages = openAiMessages.map(msg => {
+      if (Array.isArray(msg.content)) {
+        const textParts = [];
+        for (const block of msg.content) {
+          if (block.type === "text") {
+            textParts.push(block.text);
+          } else if (block.type === "image_url") {
+            textParts.push("[Image Attachment]");
+          }
+        }
+        return { ...msg, content: textParts.join("\n") || "[Attachment]" };
+      }
+      return msg;
+    });
+
     const models = [
-      "anthropic/claude-haiku-4.5",
-      "google/gemma-4-31b-it:free",
-      "google/gemma-4-26b-a4b-it:free"
+      "deepseek/deepseek-chat",
+      "anthropic/claude-3.5-haiku",
+      "google/gemini-2.5-flash",
+      "meta-llama/llama-3.3-70b-instruct:free"
     ];
+
     let lastError: any = null;
     for (const model of models) {
       try {
         console.log(`[callLLM] Attempting OpenRouter model ${model}...`);
-        const anthropic = new Anthropic({
-          apiKey: trimmed,
-          baseURL: "https://openrouter.ai/api",
-          defaultHeaders: {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${trimmed}`,
             "HTTP-Referer": "https://hazeldid.com",
-            "X-Title": "HazelWhat",
+            "X-Title": "HazelWhat"
           },
+          body: JSON.stringify({
+            model: model,
+            messages: cleanedMessages,
+            tools: openAiTools.length > 0 ? openAiTools : undefined,
+            max_tokens: 200,
+            temperature: temperature
+          }),
+          signal: controller.signal
         });
-        const res = await anthropic.messages.create({
+
+        clearTimeout(timeoutId);
+
+        if (!res.ok) {
+          const errText = await res.text();
+          console.error(`[callLLM] OpenRouter model ${model} HTTP ${res.status}:`, errText);
+          lastError = new Error(`OpenRouter (${model}) HTTP ${res.status}: ${errText}`);
+          if (res.status === 401) break; // Invalid key - don't keep trying models
+          continue;
+        }
+
+        const data = await res.json();
+        const assistantMsg = data.choices?.[0]?.message;
+        if (!assistantMsg) {
+          throw new Error(`OpenRouter model ${model} returned empty choices`);
+        }
+
+        const anthropicContent: any[] = [];
+        if (assistantMsg.content) {
+          anthropicContent.push({ type: "text", text: assistantMsg.content });
+        }
+        if (assistantMsg.tool_calls) {
+          for (const tc of assistantMsg.tool_calls) {
+            let input = {};
+            try { input = JSON.parse(tc.function.arguments || "{}"); } catch (e) {}
+            anthropicContent.push({
+              type: "tool_use",
+              id: tc.id || `call_${Math.random().toString(36).substr(2, 9)}`,
+              name: tc.function.name,
+              input
+            });
+          }
+        }
+
+        return {
+          id: data.id || `msg_${Math.random().toString(36).substr(2, 9)}`,
+          type: "message",
+          role: "assistant",
+          content: anthropicContent,
           model: model,
-          max_tokens: 200,
-          system: systemPrompt,
-          messages: messages as any,
-          tools: tools.length > 0 ? tools : undefined,
-          temperature: temperature,
-        });
-        return res;
+          stop_reason: assistantMsg.tool_calls ? "tool_use" : "end_turn",
+          usage: { input_tokens: data.usage?.prompt_tokens || 0, output_tokens: data.usage?.completion_tokens || 0 }
+        };
       } catch (err: any) {
         console.error(`[callLLM] OpenRouter model ${model} failed:`, err.message || err);
         lastError = err;
-        if (!isRetryableProviderError(err)) {
-          console.warn(`[callLLM] Non-retryable OpenRouter error (${err.status || err.message}). Stopping model loop.`);
-          break;
-        }
       }
     }
     throw lastError || new Error("OpenRouter models failed");
