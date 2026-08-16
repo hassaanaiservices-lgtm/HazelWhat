@@ -674,7 +674,7 @@ async function callLLM(
         console.log(`[callLLM] Attempting Anthropic model ${model}...`);
         const res = await anthropic.messages.create({
           model: model,
-          max_tokens: 1000,
+          max_tokens: 400,
           system: systemPrompt,
           messages: messages as any,
           tools: tools.length > 0 ? tools : undefined,
@@ -742,7 +742,7 @@ async function callLLM(
             model: model,
             messages: cleanedMessages,
             tools: openAiTools.length > 0 ? openAiTools : undefined,
-            max_tokens: 1000,
+            max_tokens: 400,
             temperature: temperature
           }),
           signal: controller.signal
@@ -845,7 +845,7 @@ async function callLLM(
             model: "deepseek-chat",
             messages: cleanedMessages,
             tools: openAiTools.length > 0 ? openAiTools : undefined,
-            max_tokens: 1000,
+            max_tokens: 400,
             temperature: temperature
           }),
           signal: controller.signal
@@ -1659,19 +1659,17 @@ Keep their history in mind and treat them like a valued returning customer.`;
       if (config.enabledFeatures.includes("Price Inquiry")) {
         fullSystemPrompt += "- PRICE INQUIRY: If the user asks about prices, clearly state the price from the Product Information and ask if they'd like to book.\n";
       }
-      if (config.enabledFeatures.includes("Google Review Requests")) {
-        fullSystemPrompt += "- GOOGLE REVIEW REQUESTS: If the user gives positive feedback or thanks you, politely ask them to leave a 5-star Google review.\n";
-      }
       if (config.enabledFeatures.includes("Human Handoff")) {
         fullSystemPrompt += "- HUMAN HANDOFF: If you do not know the answer to a question, tell the user you are transferring them to a human agent, and do NOT try to guess.\n";
       }
     }
+    fullSystemPrompt += "\n\n=== RESPONSE FORMAT & TOKEN OPTIMIZATION ===\n- Keep answers concise, direct, and polite (1-3 sentences max).\n- Do not repeat previous conversation context or output unnecessary filler text.\n- When asked for products/prices, list items concisely without fluff.\n";
 
     const history = await DB.getChats(from, resolvedTenantId);
     // Filter out system messages and sanitize past assistant refusal messages so LLM never gets primed by past errors!
     let recentHistory = history
       .filter((m: any) => m.role === 'user' || m.role === 'assistant')
-      .slice(-20)
+      .slice(-8)
       .map((m: any) => {
         let textContent = m.content || "";
         if (m.role === 'assistant' && (
