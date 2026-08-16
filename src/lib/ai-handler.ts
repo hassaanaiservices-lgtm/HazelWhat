@@ -33,33 +33,24 @@ function getEnvKey(keyName: string): string {
 
 function getApiKey(config: any): string {
   const keys = [
-    // 1. Tenant-specific keys (configured in dashboard)
-    config?.apiKey,
-    config?.anthropicApiKey,
-    config?.openaiApiKey,
-    config?.openRouterApiKey,
-    config?.deepgramApiKey,
-
-    // 2. Global fallback environment variables
+    // 1. Global environment variables (from Railway) - PRIMARY source for all clients
     process.env["DEEPSEEK_API_KEY"],
     getEnvKey("DEEPSEEK_API_KEY"),
-    process.env["API_KEY"],
-    getEnvKey("API_KEY"),
-    process.env["ANTHROPIC_API_KEY"],
-    getEnvKey("ANTHROPIC_API_KEY"),
-    process.env["OPENAI_API_KEY"],
-    getEnvKey("OPENAI_API_KEY"),
     process.env["OPENROUTER_API_KEY"],
     getEnvKey("OPENROUTER_API_KEY"),
-    process.env["Api key"],
-    getEnvKey("Api key"),
-    process.env["Api_key"],
-    process.env["api_key"],
-    process.env["ApiKey"],
-    process.env["apikey"],
-    process.env["APIKEY"],
-    getEnvKey("Api_key"),
-    getEnvKey("api_key")
+    process.env["OPENAI_API_KEY"],
+    getEnvKey("OPENAI_API_KEY"),
+    process.env["ANTHROPIC_API_KEY"],
+    getEnvKey("ANTHROPIC_API_KEY"),
+    process.env["API_KEY"],
+    getEnvKey("API_KEY"),
+
+    // 2. Tenant-specific keys fallback
+    config?.apiKey,
+    config?.openRouterApiKey,
+    config?.openaiApiKey,
+    config?.anthropicApiKey,
+    config?.deepgramApiKey
   ];
 
   for (const k of keys) {
@@ -592,8 +583,8 @@ export async function callLLMWithFallback(
   tools: any[] = [],
   temperature: number = 0.7
 ): Promise<{ res: any; provider: string }> {
-  const primaryKey = config?.apiKey || config?.openRouterApiKey || config?.openaiApiKey || process.env.DEEPSEEK_API_KEY || getEnvKey("DEEPSEEK_API_KEY") || process.env.OPENROUTER_API_KEY || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENAI_API_KEY || getEnvKey("OPENAI_API_KEY") || "";
-  const anthropicKey = config?.anthropicApiKey || process.env.ANTHROPIC_API_KEY || getEnvKey("ANTHROPIC_API_KEY") || "";
+  const primaryKey = process.env.DEEPSEEK_API_KEY || getEnvKey("DEEPSEEK_API_KEY") || process.env.OPENROUTER_API_KEY || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENAI_API_KEY || getEnvKey("OPENAI_API_KEY") || config?.apiKey || config?.openRouterApiKey || config?.openaiApiKey || "";
+  const anthropicKey = process.env.ANTHROPIC_API_KEY || getEnvKey("ANTHROPIC_API_KEY") || config?.anthropicApiKey || "";
 
   // Auto-recovery: If primary key is present, reset circuit if at least 10 seconds have elapsed since last failure
   const dsStatus = getCircuitStatus("deepseek");
