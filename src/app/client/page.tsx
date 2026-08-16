@@ -1125,23 +1125,6 @@ export default function DashboardPage() {
     }
   };
 
-  const toggleChatAi = async (enabled: boolean) => {
-    if (!selectedChat) return;
-    setCustomers(prev => ({
-      ...prev,
-      [selectedChat]: { ...prev[selectedChat], aiEnabled: enabled }
-    }));
-    try {
-      await fetch("/api/whatsapp/customers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: selectedChat, aiEnabled: enabled })
-      });
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
   const markChatAsRead = async (phone: string) => {
     try {
       await fetch("/api/whatsapp/read", {
