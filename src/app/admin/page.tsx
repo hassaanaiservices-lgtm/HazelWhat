@@ -237,7 +237,7 @@ export default function VoiceSaaSApp() {
     else if (type === 'password') textToCopy = selectedTenant.clientPassword || '';
     else if (type === 'link') textToCopy = loginUrl;
     else {
-      textToCopy = `🔐 Client Portal Login Details\nPortal Link: ${loginUrl}\nUsername: ${selectedTenant.clientUsername || ''}\nPassword: ${selectedTenant.clientPassword || ''}`;
+      textToCopy = `🔐 Client Portal Login Details\nPortal Link: ${loginUrl}\nEmail / Login ID: ${selectedTenant.email || ''}\nUsername: ${selectedTenant.clientUsername || ''}\nPassword: ${selectedTenant.clientPassword || ''}`;
     }
     navigator.clipboard.writeText(textToCopy);
     setCopiedCredsNotice(type === 'username' ? 'Username copied!' : type === 'password' ? 'Password copied!' : type === 'link' ? 'Login Link copied!' : 'All Login Credentials & Link Copied!');
@@ -2644,6 +2644,12 @@ export default function VoiceSaaSApp() {
             </div>
 
             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-left space-y-2">
+              {selectedTenant.email && (
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-slate-400 font-bold uppercase">Email / Login ID:</span>
+                  <span className="text-xs font-mono font-bold text-slate-900">{selectedTenant.email}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center">
                 <span className="text-xs text-slate-400 font-bold uppercase">Username:</span>
                 <span className="text-xs font-mono font-bold text-slate-900">{selectedTenant.clientUsername}</span>
