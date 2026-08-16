@@ -1584,7 +1584,8 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     const activeBusinessName = activeTenant?.businessName || activeTenant?.name || config.businessName || "our store";
 
     const structuredCatalog = activeProducts.length > 0 ? formatProductsToCatalog(activeProducts, activeCurrency) : "";
-    const activeProductCatalog = [structuredCatalog, activeKnowledgeBase, activeProductKB].filter(Boolean).join("\n\n");
+    const rawCatalog = [structuredCatalog, activeKnowledgeBase, activeProductKB].filter(Boolean).join("\n\n");
+    const activeProductCatalog = rawCatalog.replace(/data:image\/[a-zA-Z0-9+\/=;-]+;base64,[A-Za-z0-9+\/=]+/g, "[Image]");
     let fullSystemPrompt = `${activeSystemPrompt}\n\nToday's Date: ${new Date().toISOString().split('T')[0]}\n\nProduct Information & Catalog:\n${activeProductCatalog}`;
 
     const customerTags = customer?.tags || [];
