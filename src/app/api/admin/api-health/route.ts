@@ -94,3 +94,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
+
+export async function POST(request: NextRequest) {
+  const session = await requireAdminSession(request);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  try {
+    const { resetAllCircuits } = await import("@/lib/ai-handler");
+    resetAllCircuits();
+    return NextResponse.json({ success: true, message: "All circuit breakers reset to CLOSED. Bot is now accepting AI requests again." });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}

@@ -471,7 +471,11 @@ export function isRetryableProviderError(err: unknown): boolean {
   }
 
   // HTTP 4xx client errors (except 429) are generally non-retryable
+  // BUT: context-length 400 errors are input errors, not provider failures - don't open circuit
   if (typeof status === "number" && status >= 400 && status < 500 && status !== 429) {
+    if (msg.includes("context length") || msg.includes("maximum context") || msg.includes("context window") || msg.includes("too many tokens")) {
+      return true; // Retryable - just a prompt that was too long, not a provider issue
+    }
     return false;
   }
 
@@ -520,6 +524,16 @@ export function getAllCircuitStatuses(): Record<LLMProviderName, CircuitState> {
     anthropic: getCircuitStatus("anthropic"),
     openrouter: getCircuitStatus("openrouter")
   };
+}
+
+export function resetAllCircuits(): void {
+  for (const provider of ["deepseek", "anthropic", "openrouter"] as LLMProviderName[]) {
+    providerCircuits[provider].state = "closed";
+    providerCircuits[provider].consecutiveFailures = 0;
+    providerCircuits[provider].lastFailureTime = 0;
+    providerCircuits[provider].lastErrorReason = "";
+  }
+  console.log("🔄 [Circuit Breaker] All circuits manually RESET to CLOSED state.");
 }
 
 export function isProviderAvailable(provider: LLMProviderName): boolean {
