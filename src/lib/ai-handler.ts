@@ -492,7 +492,7 @@ export interface CircuitState {
   lastErrorReason: string;
 }
 
-export const CIRCUIT_COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes
+export const CIRCUIT_COOLDOWN_MS = 30 * 1000; // 30 seconds cooldown for quick recovery
 
 const providerCircuits: Record<LLMProviderName, CircuitState> = {
   deepseek: { provider: "deepseek", state: "closed", consecutiveFailures: 0, lastFailureTime: 0, lastErrorReason: "" },
