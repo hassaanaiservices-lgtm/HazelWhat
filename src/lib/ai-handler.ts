@@ -714,13 +714,16 @@ async function callLLM(
     });
 
     const models = [
+      "openrouter/auto",
       "deepseek/deepseek-chat",
-      "anthropic/claude-3.5-haiku",
-      "google/gemini-2.5-flash",
-      "meta-llama/llama-3.3-70b-instruct:free"
+      "google/gemini-2.0-flash-001",
+      "openai/gpt-4o-mini",
+      "meta-llama/llama-3.3-70b-instruct"
     ];
 
     let lastError: any = null;
+    let errorDetails: string[] = [];
+
     for (const model of models) {
       try {
         console.log(`[callLLM] Attempting OpenRouter model ${model}...`);
@@ -750,8 +753,13 @@ async function callLLM(
         if (!res.ok) {
           const errText = await res.text();
           console.error(`[callLLM] OpenRouter model ${model} HTTP ${res.status}:`, errText);
-          lastError = new Error(`OpenRouter (${model}) HTTP ${res.status}: ${errText}`);
-          if (res.status === 401) break; // Invalid key - don't keep trying models
+          const msg = `OpenRouter (${model}) [HTTP ${res.status}]: ${errText}`;
+          errorDetails.push(msg);
+          lastError = new Error(msg);
+          if (res.status === 401 || res.status === 402) {
+            console.warn(`[callLLM] OpenRouter Auth/Billing error (${res.status}). Stopping model loop.`);
+            break; 
+          }
           continue;
         }
 
@@ -792,7 +800,7 @@ async function callLLM(
         lastError = err;
       }
     }
-    throw lastError || new Error("OpenRouter models failed");
+    throw lastError || new Error("OpenRouter models failed: " + (errorDetails.join(" | ") || "unknown error"));
   } else if (keyType === "deepseek") {
     console.log(`[callLLM] Attempting DeepSeek API...`);
     const openAiMessages = convertAnthropicMessagesToOpenAi(messages, systemPrompt);
