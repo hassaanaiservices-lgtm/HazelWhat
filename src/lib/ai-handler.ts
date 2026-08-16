@@ -983,6 +983,17 @@ async function processHybridEngine(
       const variations = stateData.variations || [];
       let selectedVariant = null;
 
+      // Yield to LLM if the user is asking a question or talking about other items (like fries or coke) instead of a size
+      const isOutofTurn = input.includes("?") || 
+                         ["coke", "fries", "drink", "extra", "cancel", "no", "wait", "change", "price", "rate", "cost"].some(w => input.includes(w));
+      if (isOutofTurn) {
+        return {
+          matched: false, // Yield to LLM
+          reply: "",
+          source: "sequential_flow"
+        };
+      }
+
       const optionIndex = parseInt(input) - 1;
       if (!isNaN(optionIndex) && optionIndex >= 0 && optionIndex < variations.length) {
         selectedVariant = variations[optionIndex];
@@ -1029,6 +1040,16 @@ async function processHybridEngine(
 
     if (currentState === "AWAITING_ORDER_NAME") {
       const name = content.trim();
+      
+      // Yield to LLM if name looks like a question or correction
+      if (name.includes("?") || name.split(/\s+/).length > 4 || ["cancel", "no", "stop", "wait", "change"].some(w => lowerContent.includes(w))) {
+        return {
+          matched: false, // Yield to LLM
+          reply: "",
+          source: "sequential_flow"
+        };
+      }
+
       stateData.name = name;
       const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_ADDRESS:${JSON.stringify(stateData)}]`;
       await DB.updateCustomer(from, { name, preferences: newNote }, tenantId);
@@ -1041,6 +1062,20 @@ async function processHybridEngine(
 
     if (currentState === "AWAITING_ORDER_ADDRESS") {
       const address = content.trim();
+
+      // Yield to LLM if the address input looks like a question, custom request (like adding drinks), or cancellation
+      const isInvalidAddress = address.includes("?") || 
+                               address.split(/\s+/).length > 15 || 
+                               ["coke", "fries", "drink", "extra", "cancel", "no", "wait", "change", "wrong", "galat", "galt"].some(w => lowerContent.includes(w));
+      
+      if (isInvalidAddress) {
+        return {
+          matched: false, // Yield to LLM
+          reply: "",
+          source: "sequential_flow"
+        };
+      }
+
       stateData.address = address;
       const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_PAYMENT:${JSON.stringify(stateData)}]`;
       await DB.updateCustomer(from, { preferences: newNote }, tenantId);
@@ -1053,9 +1088,22 @@ async function processHybridEngine(
 
     if (currentState === "AWAITING_ORDER_PAYMENT") {
       const input = lowerContent;
-      let paymentMethod = "Cash on Delivery";
-      if (input.includes("2") || input.includes("online") || input.includes("transfer") || input.includes("bank") || input.includes("jazz") || input.includes("easy")) {
+      let paymentMethod = "";
+
+      const isCod = ["1", "cod", "cash", "delivery", "hath"].some(w => input.includes(w));
+      const isOnline = ["2", "online", "transfer", "bank", "jazz", "easy", "paisa"].some(w => input.includes(w));
+
+      if (isCod) {
+        paymentMethod = "Cash on Delivery";
+      } else if (isOnline) {
         paymentMethod = "Online Transfer";
+      } else {
+        // Yield to LLM if it's not a direct payment method choice (e.g. they ask a question or want to change address)
+        return {
+          matched: false, // Yield to LLM
+          reply: "",
+          source: "sequential_flow"
+        };
       }
 
       const productName = stateData.productName || "Product Order";
