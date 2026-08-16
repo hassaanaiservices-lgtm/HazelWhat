@@ -973,7 +973,7 @@ async function processHybridEngine(
       await DB.updateCustomer(from, { preferences: updatedNotes }, tenantId);
       return {
         matched: true,
-        reply: "Flow cancelled. How else can I assist you today?",
+        reply: "Flow cancel ho gaya hai. Main aapki mazeed kya madad kar sakta hoon? 😊",
         source: "sequential_flow"
       };
     }
@@ -997,7 +997,7 @@ async function processHybridEngine(
         });
         return {
           matched: true,
-          reply: `I didn't catch that size. Please reply with one of the numbers or size options:${optionsText}`,
+          reply: `I didn't catch that size. Apne size ka number (e.g. 1 ya 2) ya size select karein:${optionsText}`,
           source: "sequential_flow"
         };
       }
@@ -1005,14 +1005,26 @@ async function processHybridEngine(
       stateData.selectedSize = selectedVariant.title;
       stateData.price = selectedVariant.price;
 
-      const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_NAME:${JSON.stringify(stateData)}]`;
-      await DB.updateCustomer(from, { preferences: newNote }, tenantId);
-
-      return {
-        matched: true,
-        reply: `Excellent! *${stateData.productName} (${selectedVariant.title})* selected. Price: ${selectedVariant.price}.\n\nTo place your order, please reply with your Full Name:`,
-        source: "sequential_flow"
-      };
+      // Skip name if customer's name exists in CRM and isn't just their phone number
+      const hasCleanName = customer?.name && !customer.name.match(/^\+?[0-9]+$/) && customer.name !== from;
+      if (hasCleanName) {
+        stateData.name = customer.name;
+        const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_ADDRESS:${JSON.stringify(stateData)}]`;
+        await DB.updateCustomer(from, { preferences: newNote }, tenantId);
+        return {
+          matched: true,
+          reply: `Excellent! *${stateData.productName} (${selectedVariant.title})* select ho gaya hai. Price: ${selectedVariant.price}.\n\nApna delivery address (House/Street #, Area/City) bata dein:`,
+          source: "sequential_flow"
+        };
+      } else {
+        const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_NAME:${JSON.stringify(stateData)}]`;
+        await DB.updateCustomer(from, { preferences: newNote }, tenantId);
+        return {
+          matched: true,
+          reply: `Excellent! *${stateData.productName} (${selectedVariant.title})* select ho gaya hai. Price: ${selectedVariant.price}.\n\nOrder place karne ke liye apna Full Name bata dein:`,
+          source: "sequential_flow"
+        };
+      }
     }
 
     if (currentState === "AWAITING_ORDER_NAME") {
@@ -1022,7 +1034,7 @@ async function processHybridEngine(
       await DB.updateCustomer(from, { name, preferences: newNote }, tenantId);
       return {
         matched: true,
-        reply: `Thank you, ${name}! Please provide your complete delivery address (House/Street #, City).`,
+        reply: `Shukriya, ${name}! Apna complete delivery address (House/Street #, Area/City) bata dein:`,
         source: "sequential_flow"
       };
     }
@@ -1034,7 +1046,7 @@ async function processHybridEngine(
       await DB.updateCustomer(from, { preferences: newNote }, tenantId);
       return {
         matched: true,
-        reply: `Address noted!\n\nHow would you like to pay?\n1. Cash on Delivery (COD)\n2. Online Transfer (JazzCash / EasyPaisa / Bank)\n\nPlease reply with 1 or 2.`,
+        reply: `Address noted!\n\nAap payment kaise karna chahenge?\n1. Cash on Delivery (COD)\n2. Online Transfer (JazzCash / EasyPaisa / Bank)\n\nPlease reply with 1 or 2.`,
         source: "sequential_flow"
       };
     }
@@ -1074,7 +1086,7 @@ async function processHybridEngine(
 
       return {
         matched: true,
-        reply: `🎉 *Order Confirmed!*\n\n📦 *Item:* ${finalProductName}\n👤 *Name:* ${customerName}\n📍 *Address:* ${deliveryAddress}\n💳 *Payment:* ${paymentMethod}\n💰 *Total Price:* ${finalPrice}\n\nOur team will process your order shortly. Thank you!`,
+        reply: `🎉 *Order Confirmed!*\n\n📦 *Item:* ${finalProductName}\n👤 *Name:* ${customerName}\n📍 *Address:* ${deliveryAddress}\n💳 *Payment:* ${paymentMethod}\n💰 *Total Price:* ${finalPrice}\n\nOur team will process your order shortly. Shukriya!`,
         source: "sequential_flow"
       };
     }
@@ -1086,15 +1098,27 @@ async function processHybridEngine(
     for (const prod of products) {
       if (!prod.title) continue;
       const titleLower = prod.title.toLowerCase().trim();
-      if (lowerContent.includes(titleLower)) {
+      
+      // Match if user typed the exact title, or the title contains the user's input, or vice versa
+      const isMatch = lowerContent.includes(titleLower) || 
+                      (lowerContent.length >= 3 && titleLower.includes(lowerContent)) ||
+                      // Or match significant words (excluding common stop words)
+                      titleLower.split(/\s+/).some((word: string) => 
+                        word.length >= 3 && 
+                        !["the", "and", "for", "with", "box", "pkr"].includes(word) && 
+                        lowerContent.includes(word)
+                      );
+                      
+      if (isMatch) {
         matchedProduct = prod;
         break;
       }
     }
 
     if (matchedProduct) {
-      const isOrderTrigger = ["order", "buy", "chahiye", "place order", "order now", "want"].some(w => lowerContent.includes(w)) || 
-                            lowerContent === matchedProduct.title.toLowerCase().trim();
+      const isOrderTrigger = ["order", "buy", "chahiye", "place order", "order now", "want", "lelo", "mangwana", "price", "rate", "cost", "how much", "size", "variant"].some(w => lowerContent.includes(w)) || 
+                            lowerContent === matchedProduct.title.toLowerCase().trim() ||
+                            matchedProduct.title.toLowerCase().trim().includes(lowerContent);
 
       if (isOrderTrigger) {
         const hasVariations = Array.isArray(matchedProduct.variations) && matchedProduct.variations.length > 0;
@@ -1114,27 +1138,44 @@ async function processHybridEngine(
 
           return {
             matched: true,
-            reply: `Yeh hai hamari *${matchedProduct.title}*! 🍕🔥\n\nKonsa size chahiye?${optionsText}\n\nSize batao, phir main aapka order confirm kar deta hoon! 😊`,
+            reply: `Yeh hai hamari *${matchedProduct.title}*! 🍕🔥\n\nKonsa size chahiye?${optionsText}\n\nApne size ka number send karein, main aapka order confirm kar deta hoon! 😊`,
             image: matchedProduct.image && matchedProduct.image !== "N/A" ? matchedProduct.image : undefined,
             imageCaption: matchedProduct.title,
             source: "sequential_flow"
           };
         } else {
-          const stateData = { 
+          const stateData: any = { 
             productName: matchedProduct.title,
             price: matchedProduct.price || "N/A",
             image: matchedProduct.image || null
           };
-          const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_NAME:${JSON.stringify(stateData)}]`;
-          await DB.updateCustomer(from, { preferences: newNote }, tenantId);
+          
+          // Skip name check if already exists
+          const hasCleanName = customer?.name && !customer.name.match(/^\+?[0-9]+$/) && customer.name !== from;
+          if (hasCleanName) {
+            stateData.name = customer.name;
+            const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_ADDRESS:${JSON.stringify(stateData)}]`;
+            await DB.updateCustomer(from, { preferences: newNote }, tenantId);
 
-          return {
-            matched: true,
-            reply: `Great choice! You are ordering *${matchedProduct.title}* (${currency} ${matchedProduct.price || "N/A"}).\n\nTo place your order, please reply with your Full Name:`,
-            image: matchedProduct.image && matchedProduct.image !== "N/A" ? matchedProduct.image : undefined,
-            imageCaption: matchedProduct.title,
-            source: "sequential_flow"
-          };
+            return {
+              matched: true,
+              reply: `Great choice! You are ordering *${matchedProduct.title}* (${currency} ${matchedProduct.price || "N/A"}).\n\nApna complete delivery address (House/Street #, Area/City) bata dein:`,
+              image: matchedProduct.image && matchedProduct.image !== "N/A" ? matchedProduct.image : undefined,
+              imageCaption: matchedProduct.title,
+              source: "sequential_flow"
+            };
+          } else {
+            const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_NAME:${JSON.stringify(stateData)}]`;
+            await DB.updateCustomer(from, { preferences: newNote }, tenantId);
+
+            return {
+              matched: true,
+              reply: `Great choice! You are ordering *${matchedProduct.title}* (${currency} ${matchedProduct.price || "N/A"}).\n\nOrder place karne ke liye apna Full Name bata dein:`,
+              image: matchedProduct.image && matchedProduct.image !== "N/A" ? matchedProduct.image : undefined,
+              imageCaption: matchedProduct.title,
+              source: "sequential_flow"
+            };
+          }
         }
       }
     }
