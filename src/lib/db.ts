@@ -642,9 +642,9 @@ export class DB {
         botMode: data?.bot_mode || 'both',
         maxFollowUps: data?.max_follow_ups || 7,
         followUps: data?.follow_ups || DEFAULT_CONFIG.followUps,
-        apiKey: data?.api_key || data?.apiKey || tenantRecord?.apiKey || (tenantRecord as any)?.api_key || '',
-        openRouterApiKey: data?.openrouter_api_key || data?.openRouterApiKey || tenantRecord?.openRouterApiKey || '',
-        anthropicApiKey: data?.anthropic_api_key || data?.anthropicApiKey || tenantRecord?.anthropicApiKey || ''
+        apiKey: data?.api_key || data?.apiKey || (tenantRecord as any)?.apiKey || (tenantRecord as any)?.api_key || '',
+        openRouterApiKey: data?.openrouter_api_key || data?.openRouterApiKey || (tenantRecord as any)?.openRouterApiKey || '',
+        anthropicApiKey: data?.anthropic_api_key || data?.anthropicApiKey || (tenantRecord as any)?.anthropicApiKey || ''
       };
     } catch (e) {
       console.error('[DB/Supabase] getConfig exception:', e);
