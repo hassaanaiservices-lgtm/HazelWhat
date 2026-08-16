@@ -832,7 +832,7 @@ async function callLLM(
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-        res = await fetch("https://api.deepseek.com/v1/chat/completions", {
+        res = await fetch("https://api.deepseek.com/chat/completions", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
