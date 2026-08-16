@@ -1585,7 +1585,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
     // Filter out system messages and sanitize past assistant refusal messages so LLM never gets primed by past errors!
     let recentHistory = history
       .filter((m: any) => m.role === 'user' || m.role === 'assistant')
-      .slice(-200)
+      .slice(-20)
       .map((m: any) => {
         let textContent = m.content || "";
         if (m.role === 'assistant' && (
@@ -1604,7 +1604,6 @@ Keep their history in mind and treat them like a valued returning customer.`;
     console.log(`[AI Handler Debug] Active Tenant ID: ${activeTenant?.id}`);
     console.log(`[AI Handler Debug] System Prompt: ${fullSystemPrompt.substring(0, 200)}...`);
     console.log(`[AI Handler Debug] History Count: ${recentHistory.length}`);
-    console.log(`[AI Handler Debug] History:`, JSON.stringify(recentHistory));
 
     if (base64Image) {
       const lastUserMsg = recentHistory[recentHistory.length - 1];
