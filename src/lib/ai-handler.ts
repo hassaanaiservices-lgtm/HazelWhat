@@ -521,7 +521,7 @@ export function getCircuitStatus(provider: LLMProviderName): CircuitState {
   // Check if open circuit cooldown has expired
   if (circuit.state === "open" && Date.now() - circuit.lastFailureTime >= CIRCUIT_COOLDOWN_MS) {
     circuit.state = "half-open";
-    console.log(`[Circuit Breaker] ${provider.toUpperCase()} cooldown (15m) expired. Entering HALF-OPEN state for 1 test request.`);
+    console.log(`[Circuit Breaker] ${provider.toUpperCase()} cooldown (30s) expired. Entering HALF-OPEN state for 1 test request.`);
   }
 
   return { ...circuit };
@@ -583,14 +583,14 @@ export function recordProviderFailure(provider: LLMProviderName, err: unknown): 
     circuit.lastFailureTime = Date.now();
 
     if (!wasOpen) {
-      console.error(`🚨 [PROVIDER DOWN] ${provider.toUpperCase()} failed with non-retryable error: ${reason}. Circuit OPENED for 15 minutes.`);
-      DB.recordApiAlert(`${provider.toUpperCase()} LLM`, "circuit_open", `Circuit OPENED for 15m due to non-retryable error: ${reason}`);
+      console.error(`🚨 [PROVIDER DOWN] ${provider.toUpperCase()} failed with non-retryable error: ${reason}. Circuit OPENED for 30 seconds.`);
+      DB.recordApiAlert(`${provider.toUpperCase()} LLM`, "circuit_open", `Circuit OPENED for 30s due to non-retryable error: ${reason}`);
     }
   } else if (circuit.state === "half-open") {
     // Half-open test attempt failed -> re-open circuit
     circuit.state = "open";
     circuit.lastFailureTime = Date.now();
-    console.error(`🚨 [PROVIDER DOWN] ${provider.toUpperCase()} half-open test failed: ${reason}. Circuit RE-OPENED for 15 minutes.`);
+    console.error(`🚨 [PROVIDER DOWN] ${provider.toUpperCase()} half-open test failed: ${reason}. Circuit RE-OPENED for 30 seconds.`);
   }
 }
 
