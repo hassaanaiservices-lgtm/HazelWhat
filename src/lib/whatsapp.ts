@@ -85,28 +85,8 @@ export class WhatsAppManager {
   }
 
   static startAutoSync() {
-    if (globalForBaileys.autoSyncInterval) {
-      clearInterval(globalForBaileys.autoSyncInterval);
-    }
-    // Run every 6 hours (21600000 ms)
-    globalForBaileys.autoSyncInterval = setInterval(async () => {
-      try {
-        const config = await DB.getConfig();
-        if (config.storeUrl) {
-          console.log("[Auto-Sync] Scraping store catalog from:", config.storeUrl);
-          const { catalog } = await scrapeStore(config.storeUrl, config.storeCurrency || "$");
-          if (catalog) {
-            // Keep the non-catalog part of productInfo and append the new catalog
-            const parts = config.productInfo.split("--- E-COMMERCE CATALOG ---");
-            const baseInfo = parts[0].trim();
-            await DB.updateConfig({ productInfo: baseInfo + "\n\n" + catalog });
-            console.log("[Auto-Sync] Successfully updated Knowledge Base with latest catalog.");
-          }
-        }
-      } catch (e) {
-        console.error("[Auto-Sync] Failed to sync catalog:", e);
-      }
-    }, 21600000);
+    // Disabled to prevent automatic catalog sync from overwriting manual configurations
+    console.log("[Auto-Sync] Auto-Sync is disabled.");
   }
 
   static startFollowUpsSync() {

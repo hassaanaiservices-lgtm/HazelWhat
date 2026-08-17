@@ -1262,57 +1262,6 @@ async function processHybridEngine(
     };
   }
 
-  // 4. LAYER 1B: Auto-Derived Knowledge Base FAQ Indexer
-  const kbText = [
-    config.productInfo || "",
-    activeTenant?.knowledgeBase || "",
-    activeTenant?.productKnowledgeBase || ""
-  ].filter(Boolean).join("\n");
-
-  if (kbText) {
-    const kbLines = kbText.split("\n");
-    const faqEntries: { triggers: string[]; response: string }[] = [];
-
-    kbLines.forEach(line => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-
-      const headerMatch = trimmed.match(/^[-*#]*\s*(location|address|timing|working hours|opening hours|delivery fee|delivery charges|return policy|refund policy|payment methods|bank account|jazzcash|easypaisa|cod|cash on delivery):\s*(.*)$/i);
-      
-      if (headerMatch) {
-        const key = headerMatch[1].toLowerCase();
-        const value = headerMatch[2] || trimmed;
-        
-        let triggers: string[] = [];
-        if (key.includes("location") || key.includes("address")) {
-          triggers = ["location", "address", "dukaan kahan", "shop location", "address kya hai", "kahan h", "dukan kahan", "where is your shop"];
-        } else if (key.includes("timing") || key.includes("hours") || key.includes("opening")) {
-          triggers = ["timing", "time", "working hours", "opening time", "closing time", "kab khulti", "time kya hai", "open hours"];
-        } else if (key.includes("delivery")) {
-          triggers = ["delivery fee", "delivery charges", "delivery kitni", "delivery kitne", "shipping fee", "delivery rate"];
-        } else if (key.includes("return") || key.includes("refund")) {
-          triggers = ["return policy", "refund policy", "exchange policy", "wapas", "return kaise"];
-        } else if (key.includes("payment") || key.includes("cod") || key.includes("bank") || key.includes("jazz") || key.includes("easy")) {
-          triggers = ["payment method", "payment options", "jazzcash", "easypaisa", "bank account", "how to pay", "cod available"];
-        }
-
-        if (triggers.length > 0) {
-          faqEntries.push({ triggers, response: value });
-        }
-      }
-    });
-
-    for (const faq of faqEntries) {
-      if (faq.triggers.some(trig => lowerContent.includes(trig))) {
-        return {
-          matched: true,
-          reply: faq.response,
-          source: "knowledge_base_faq"
-        };
-      }
-    }
-  }
-
   // 5. LAYER 1C: Auto-Derived Product Catalog Indexer
   if (products.length > 0) {
     for (const prod of products) {
@@ -1663,14 +1612,12 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     }
     
     const activeSystemPrompt = config.systemPrompt || activeTenant?.systemPrompt || "";
-    const activeKnowledgeBase = config.productInfo || activeTenant?.knowledgeBase || "";
-    const activeProductKB = activeTenant?.productKnowledgeBase?.trim() || "";
     const activeProducts = (config.products && config.products.length > 0) ? config.products : (activeTenant?.products || []);
     const activeCurrency = activeTenant?.currency || config.storeCurrency || "PKR";
     const activeBusinessName = activeTenant?.businessName || activeTenant?.name || config.businessName || "our store";
 
     const structuredCatalog = activeProducts.length > 0 ? formatProductsToCatalog(activeProducts, activeCurrency) : "";
-    const rawCatalog = [structuredCatalog, activeKnowledgeBase, activeProductKB].filter(Boolean).join("\n\n");
+    const rawCatalog = structuredCatalog;
     const activeProductCatalog = rawCatalog.replace(/data:image\/[a-zA-Z0-9+\/=;-]+;base64,[A-Za-z0-9+\/=]+/g, "[Image]");
     let fullSystemPrompt = `${activeSystemPrompt}\n\nToday's Date: ${new Date().toISOString().split('T')[0]}\n\nProduct Information & Catalog:\n${activeProductCatalog}`;
 
