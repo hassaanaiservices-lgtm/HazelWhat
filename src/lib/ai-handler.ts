@@ -605,6 +605,40 @@ export async function callLLMWithFallback(
     throw new Error(errMsg);
   }
 
+  // Detect if any message has an image block (Anthropic image block format)
+  const hasImage = messages.some(msg => 
+    Array.isArray(msg.content) && msg.content.some((block: any) => block.type === "image")
+  );
+
+  // If there's an image and Anthropic (vision-capable) is available, prioritize Anthropic
+  const prioritizeAnthropic = hasImage && anthropicAvailable;
+
+  if (prioritizeAnthropic) {
+    try {
+      console.log("[callLLMWithFallback] Vision Request: prioritizing vision-capable Anthropic (Claude)...");
+      const res = await callLLM(anthropicKey, systemPrompt, messages, tools, temperature);
+      recordProviderSuccess("anthropic");
+      console.log("[callLLMWithFallback] Provider used: anthropic (vision)");
+      return { res, provider: "anthropic" };
+    } catch (err: any) {
+      console.error("[callLLMWithFallback] Prioritized vision Anthropic failed:", err.message || err);
+      recordProviderFailure("anthropic", err);
+      
+      // Fallback to DeepSeek if Anthropic failed, even for image (DeepSeek will handle text description parts)
+      if (deepseekAvailable) {
+        console.warn("[callLLMWithFallback] Falling back to DeepSeek after vision Anthropic failure...");
+        try {
+          const res = await callLLM(primaryKey, systemPrompt, messages, tools, temperature);
+          recordProviderSuccess("deepseek");
+          return { res, provider: "deepseek" };
+        } catch (dsErr) {
+          throw dsErr;
+        }
+      }
+      throw err;
+    }
+  }
+
   if (deepseekAvailable) {
     try {
       console.log("[callLLMWithFallback] Attempting primary LLM (DeepSeek)...");
@@ -688,12 +722,20 @@ async function callLLM(
         }
       }
     }
-    
     throw lastErr || new Error("Anthropic API call failed for all models.");
   } else if (keyType === "openrouter") {
     console.log(`[callLLM] Attempting OpenRouter API...`);
     const openAiMessages = convertAnthropicMessagesToOpenAi(messages, systemPrompt);
     const openAiTools = convertAnthropicToolsToOpenAi(tools);
+
+    const hasImage = messages.some(msg => 
+      Array.isArray(msg.content) && msg.content.some((block: any) => block.type === "image")
+    );
+
+    const isVisionModel = (modelName: string) => {
+      const lower = modelName.toLowerCase();
+      return lower.includes("gemini") || lower.includes("gpt-4") || lower.includes("gpt-4o") || lower.includes("claude");
+    };
 
     const cleanedMessages = openAiMessages.map(msg => {
       if (Array.isArray(msg.content)) {
@@ -710,7 +752,11 @@ async function callLLM(
       return msg;
     });
 
-    const models = [
+    const models = hasImage ? [
+      "google/gemini-2.0-flash-001",
+      "openai/gpt-4o-mini",
+      "openrouter/auto"
+    ] : [
       "openrouter/auto",
       "deepseek/deepseek-chat",
       "google/gemini-2.0-flash-001",
@@ -723,7 +769,7 @@ async function callLLM(
 
     for (const model of models) {
       try {
-        console.log(`[callLLM] Attempting OpenRouter model ${model}...`);
+        console.log(`[callLLM] Attempting OpenRouter model ${model} (hasImage: ${hasImage})...`);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
 
@@ -737,7 +783,7 @@ async function callLLM(
           },
           body: JSON.stringify({
             model: model,
-            messages: cleanedMessages,
+            messages: isVisionModel(model) ? openAiMessages : cleanedMessages,
             tools: openAiTools.length > 0 ? openAiTools : undefined,
             max_tokens: 400,
             temperature: temperature
