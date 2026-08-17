@@ -1653,9 +1653,9 @@ Keep their history in mind and treat them like a valued returning customer.`;
 6. ORDER COLLECTION: When a customer wants to order something, follow these steps:
    a. Confirm the product name and size/variation (ask if not specified)
    b. Ask for delivery address
-   c. Ask for contact number
+   c. Do NOT ask for their contact/phone number (we already have it from WhatsApp).
    d. Ask for payment method (COD, JazzCash, EasyPaisa)
-   e. Call the place_order tool with ALL collected details
+   e. Call the place_order tool with ALL collected details (passing their WhatsApp number as the contact number)
    f. Confirm the order to the customer with a summary
 7. APPOINTMENTS & CALL BOOKINGS: When a customer wants to book a call, meeting, or appointment:
    a. Ask what service/call type they need (e.g., Discovery Call, Consultation)
@@ -1904,7 +1904,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
                 size: args.size,
                 color: args.color,
                 deliveryAddress: args.address,
-                contactNumber: args.contact_number,
+                contactNumber: args.contact_number || from,
                 paymentMethod: args.payment_method,
                 price: args.price,
                 productImageUrl: args.image_url,
