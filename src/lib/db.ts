@@ -911,6 +911,45 @@ export class DB {
       console.error('[SECURITY] addOrder called without tenantId — refusing order creation');
       return null;
     }
+
+    if (supabase) {
+      try {
+        const twoMinutesAgo = new Date(Date.now() - 120 * 1000).toISOString();
+        const { data: existingOrders } = await supabase
+          .from('orders')
+          .select('*')
+          .eq('phone', phone)
+          .eq('tenant_id', tenantId)
+          .eq('product_name', data.productName)
+          .gte('created_at', twoMinutesAgo)
+          .limit(1);
+
+        if (existingOrders && existingOrders.length > 0) {
+          console.warn(`[DB] Duplicate order detected for ${phone} within 2 minutes. Skipping creation.`);
+          const match = existingOrders[0];
+          return {
+            id: match.id,
+            tenantId: match.tenant_id,
+            phone: match.phone,
+            customerName: match.customer_name,
+            productName: match.product_name,
+            productImageUrl: match.product_image_url,
+            size: match.size,
+            color: match.color,
+            deliveryAddress: match.delivery_address,
+            contactNumber: match.contact_number,
+            paymentMethod: match.payment_method,
+            price: match.price,
+            timestamp: match.created_at,
+            status: match.status,
+            notes: match.notes
+          };
+        }
+      } catch (checkErr) {
+        console.error('[DB/Supabase] Error checking for duplicate order:', checkErr);
+      }
+    }
+
     const ordId = randomUUID();
     const newOrder: Order = {
       id: ordId,

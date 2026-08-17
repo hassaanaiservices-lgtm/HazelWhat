@@ -1656,7 +1656,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
    c. Do NOT ask for their contact/phone number (we already have it from WhatsApp).
    d. Ask for payment method (COD, JazzCash, EasyPaisa)
    e. Call the place_order tool with ALL collected details (passing their WhatsApp number as the contact number)
-   f. Confirm the order to the customer with a summary
+   f. Output the final order confirmation summary to the customer. Do NOT ask 'Is this correct?' or 'Confirm?' after calling the tool, as the order has already been successfully placed. Do not call the place_order tool twice.
 7. APPOINTMENTS & CALL BOOKINGS: When a customer wants to book a call, meeting, or appointment:
    a. Ask what service/call type they need (e.g., Discovery Call, Consultation)
    b. Call checkAvailability tool to get available time slots for their desired date
