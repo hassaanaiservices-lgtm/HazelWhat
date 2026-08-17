@@ -729,26 +729,26 @@ export class DB {
       return;
     }
     try {
-      const existing = await DB.getCustomer(phone, resolvedTenantId);
-      const merged = { ...existing, ...data, phone };
-
-      await supabase.from('customers').upsert({
+      const payload: any = {
         tenant_id: resolvedTenantId,
-        phone: merged.phone,
-        name: merged.name || merged.phone,
-        jid: merged.jid || '',
-        preferences: merged.preferences || '',
-        ai_enabled: merged.aiEnabled !== false,
-        follow_up_level: merged.followUpLevel || 0,
-        lead_status: merged.leadStatus || 'none',
-        tags: merged.tags || [],
-        pipeline_stage: merged.pipelineStage || 'new',
-        is_opted_out: Boolean(merged.isOptedOut),
-        opted_out_at: merged.optedOutAt || null,
-        is_lead: Boolean(merged.isLead),
-        pipeline_stage_set_by_user: Boolean(merged.pipelineStageSetByUser),
-        lead_created_at: merged.leadCreatedAt || new Date().toISOString()
-      }, { onConflict: 'tenant_id,phone' });
+        phone: phone,
+      };
+
+      if (data.name !== undefined) payload.name = data.name;
+      if (data.jid !== undefined) payload.jid = data.jid;
+      if (data.preferences !== undefined) payload.preferences = data.preferences;
+      if (data.aiEnabled !== undefined) payload.ai_enabled = data.aiEnabled;
+      if (data.followUpLevel !== undefined) payload.follow_up_level = data.followUpLevel;
+      if (data.leadStatus !== undefined) payload.lead_status = data.leadStatus;
+      if (data.tags !== undefined) payload.tags = data.tags;
+      if (data.pipelineStage !== undefined) payload.pipeline_stage = data.pipelineStage;
+      if (data.isOptedOut !== undefined) payload.is_opted_out = data.isOptedOut;
+      if (data.optedOutAt !== undefined) payload.opted_out_at = data.optedOutAt;
+      if (data.isLead !== undefined) payload.is_lead = data.isLead;
+      if (data.pipelineStageSetByUser !== undefined) payload.pipeline_stage_set_by_user = data.pipelineStageSetByUser;
+      if (data.leadCreatedAt !== undefined) payload.lead_created_at = data.leadCreatedAt;
+
+      await supabase.from('customers').upsert(payload, { onConflict: 'tenant_id,phone' });
     } catch (e) {
       console.error('[DB/Supabase] updateCustomer error:', e);
     }
