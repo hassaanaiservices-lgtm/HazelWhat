@@ -1146,11 +1146,13 @@ async function processHybridEngine(
   // Check if user mentions any product in the catalog to start product-specific flow
   if (products.length > 0) {
     let matchedProduct = null;
+    let highestScore = 0;
     
-    // Skip product matching entirely if the user is just asking for the menu
+    // Skip product matching entirely if the user is just asking for the menu or typing generic categories
     const isMenuRequest = ["menu", "show menu", "send menu", "deikhao menu", "pizza menu", "card", "website"].some(w => lowerContent === w || lowerContent.includes(w));
+    const isGenericCategory = ["pizza", "burger", "deal", "combo", "fries", "drink", "shakes", "sides", "appetizers"].includes(lowerContent);
     
-    if (!isMenuRequest) {
+    if (!isMenuRequest && !isGenericCategory) {
       for (const prod of products) {
         if (!prod.title) continue;
         const titleLower = prod.title.toLowerCase().trim();
@@ -1164,25 +1166,45 @@ async function processHybridEngine(
         const hasVariations = Array.isArray(prod.variations) && prod.variations.length > 0;
         if (isZeroPrice && !hasVariations) continue;
         
-        // Match if user typed the exact title, or the title contains the user's input, or vice versa
-        const isMatch = lowerContent.includes(titleLower) || 
-                        (lowerContent.length >= 3 && titleLower.includes(lowerContent)) ||
-                        // Or match significant words (excluding common stop words)
-                        titleLower.split(/\s+/).some((word: string) => 
-                          word.length >= 3 && 
-                          !["the", "and", "for", "with", "box", "pkr"].includes(word) && 
-                          lowerContent.includes(word)
-                        );
-                        
-        if (isMatch) {
+        let score = 0;
+        
+        // 1. Exact Match (Score: 100)
+        if (lowerContent === titleLower) {
+          score = 100;
+        }
+        // 2. Substring Match (Score: 50+)
+        else if (lowerContent.includes(titleLower) || (lowerContent.length >= 4 && titleLower.includes(lowerContent))) {
+          score = 50 + (lowerContent.length / titleLower.length) * 10;
+        }
+        // 3. Word Match (Score based on non-generic word matching)
+        else {
+          const inputWords = lowerContent.split(/[\s,.\-\/]+/);
+          const titleWords = titleLower.split(/[\s,.\-\/]+/);
+          
+          let matchCount = 0;
+          titleWords.forEach((w: string) => {
+            if (w.length < 3) return;
+            if (["the", "and", "for", "with", "box", "pkr", "pizza", "burger", "deal", "combo", "fries", "drink"].includes(w)) return;
+            
+            if (inputWords.includes(w)) {
+              matchCount++;
+            }
+          });
+          
+          if (matchCount > 0) {
+            score = matchCount * 20;
+          }
+        }
+        
+        if (score > highestScore) {
+          highestScore = score;
           matchedProduct = prod;
-          break;
         }
       }
     }
 
-    if (matchedProduct) {
-      const isOrderTrigger = ["order", "buy", "chahiye", "place order", "order now", "want", "lelo", "mangwana", "price", "rate", "cost", "how much", "size", "variant"].some(w => lowerContent.includes(w)) || 
+    if (matchedProduct && highestScore >= 20) {
+      const isOrderTrigger = ["order", "buy", "chahiye", "place order", "order now", "want", "lelo", "mangwana", "price", "rate", "cost", "how much", "size", "variant"].some((w: string) => lowerContent.includes(w)) || 
                             lowerContent === matchedProduct.title.toLowerCase().trim() ||
                             matchedProduct.title.toLowerCase().trim().includes(lowerContent);
 
