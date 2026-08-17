@@ -71,6 +71,11 @@ export default function DashboardPage() {
     globalAiEnabled: true 
   });
   
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingKB, setSavingKB] = useState(false);
   const [kbSaveSuccess, setKbSaveSuccess] = useState(false);
@@ -2452,7 +2457,7 @@ export default function DashboardPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-baseline mb-1">
                         <h4 className="text-xs font-bold text-slate-900 truncate">{displayName}</h4>
-                        <span className="text-[11px] font-bold text-purple-600">{timeStr}</span>
+                        <span className="text-[11px] font-bold text-purple-600">{isMounted ? timeStr : ""}</span>
                       </div>
                       <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
                         {lastMessage?.role === 'assistant' && <CheckCheck className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />}
@@ -2574,7 +2579,7 @@ export default function DashboardPage() {
                           </span>
                         )}
                         <div className={`absolute bottom-1 right-3 flex items-center gap-1 text-[10px] font-bold ${isSent ? 'text-teal-200' : 'text-slate-500'}`}>
-                          <span>{new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                          <span>{isMounted ? new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ""}</span>
                           {isSent && (
                             m.status === 4 ? <CheckCheck className="h-3.5 w-3.5 text-white" /> :
                             m.status === 3 ? <CheckCheck className="h-3.5 w-3.5 text-teal-200" /> :
@@ -4618,7 +4623,7 @@ A: 2 to 4 working days."
 
                           <span className="text-xs font-semibold text-slate-400 flex items-center gap-1">
                             <Clock className="w-3.5 h-3.5 text-slate-400" />
-                            {new Date(order.timestamp).toLocaleString()}
+                            {isMounted ? new Date(order.timestamp).toLocaleString() : ""}
                           </span>
                         </div>
 
