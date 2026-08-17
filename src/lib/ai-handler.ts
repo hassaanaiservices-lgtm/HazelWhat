@@ -1063,14 +1063,25 @@ async function processHybridEngine(
       stateData.selectedSize = selectedVariant.title;
       stateData.price = selectedVariant.price;
 
-      stateData.name = customer?.name && customer.name !== from ? customer.name : "Customer";
-      const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_ADDRESS:${JSON.stringify(stateData)}]`;
-      await DB.updateCustomer(from, { preferences: newNote }, tenantId);
-      return {
-        matched: true,
-        reply: `Excellent! *${stateData.productName} (${selectedVariant.title})* select ho gaya hai. Price: ${selectedVariant.price}.\n\nApna delivery address (House/Street #, Area/City) bata dein:`,
-        source: "sequential_flow"
-      };
+      const hasCleanName = customer?.name && !customer.name.match(/^\+?[0-9]+$/) && customer.name !== from;
+      if (hasCleanName) {
+        stateData.name = customer.name;
+        const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_ADDRESS:${JSON.stringify(stateData)}]`;
+        await DB.updateCustomer(from, { preferences: newNote }, tenantId);
+        return {
+          matched: true,
+          reply: `Excellent! *${stateData.productName} (${selectedVariant.title})* select ho gaya hai. Price: ${selectedVariant.price}.\n\nApna delivery address (House/Street #, Area/City) bata dein:`,
+          source: "sequential_flow"
+        };
+      } else {
+        const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_NAME:${JSON.stringify(stateData)}]`;
+        await DB.updateCustomer(from, { preferences: newNote }, tenantId);
+        return {
+          matched: true,
+          reply: `Excellent! *${stateData.productName} (${selectedVariant.title})* select ho gaya hai. Price: ${selectedVariant.price}.\n\nOrder place karne ke liye apna Full Name bata dein:`,
+          source: "sequential_flow"
+        };
+      }
     }
 
     if (currentState === "AWAITING_ORDER_NAME") {
@@ -1728,10 +1739,11 @@ Keep their history in mind and treat them like a valued returning customer.`;
     a. Confirm the product name and size/variation (ask if not specified)
     b. Ask for delivery address
     c. Do NOT ask for their contact/phone number (we already have it from WhatsApp).
-    d. Do NOT ask for their name. If they haven't provided it, just use their WhatsApp name or phone number. Do not block order placement for their name.
+    d. Ask for their Full Name if it is not already known (or not in history). If name is missing, you MUST ask for it before proceeding.
     e. Ask for payment method (COD, JazzCash, EasyPaisa)
-    f. Call the place_order tool with ALL collected details (passing their WhatsApp number as the contact number). You must NEVER say 'Order confirmed', 'Aapka order confirm hai', or use checkmarks like '✅' until the place_order tool has successfully run.
-    g. Output the final order confirmation summary to the customer. Do NOT ask 'Is this correct?' or 'Confirm?' after calling the tool, as the order has already been successfully placed. Do not call the place_order tool twice.
+    f. Call the place_order tool with ALL collected details (passing their WhatsApp number as the contact number).
+    g. CRITICAL: You must NEVER say 'Order confirmed', 'Aapka order confirm hai', or use checkmarks like '✅' until the place_order tool has successfully run. If you are still waiting for name or other details, keep your question SHORT (1-2 sentences) and do NOT tell the user their order is confirmed.
+    h. Output the final order confirmation summary to the customer. Do NOT ask 'Is this correct?' or 'Confirm?' after calling the tool, as the order has already been successfully placed. Do not call the place_order tool twice.
 7. APPOINTMENTS & CALL BOOKINGS: When a customer wants to book a call, meeting, or appointment:
    a. Ask what service/call type they need (e.g., Discovery Call, Consultation)
    b. Call checkAvailability tool to get available time slots for their desired date
