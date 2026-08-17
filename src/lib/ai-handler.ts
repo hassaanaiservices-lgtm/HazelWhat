@@ -104,6 +104,8 @@ async function transcribeAudioWithDeepgram(buffer: Buffer, apiKey: string, mimet
     console.warn("[Deepgram STT] Deepgram API key is missing.");
     return "";
   }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
   try {
     const cleanMime = (mimetype || "audio/ogg").split(';')[0].trim() || "audio/ogg";
     console.log(`[Deepgram STT] Transcribing ${buffer.length} bytes of audio (${cleanMime})...`);
@@ -115,21 +117,30 @@ async function transcribeAudioWithDeepgram(buffer: Buffer, apiKey: string, mimet
         "Authorization": `Token ${apiKey.trim()}`,
         "Content-Type": cleanMime
       },
-      body: new Uint8Array(buffer)
+      body: new Uint8Array(buffer),
+      signal: controller.signal
     });
 
     // Secondary attempt: Fallback with explicit language=ur support or general model
     if (!res.ok) {
       const errText = await res.text();
       console.warn(`[Deepgram STT] First attempt error (${res.status}):`, errText);
-      res = await fetch("https://api.deepgram.com/v1/listen?model=general&language=ur&smart_format=true&punctuate=true", {
-        method: "POST",
-        headers: {
-          "Authorization": `Token ${apiKey.trim()}`,
-          "Content-Type": "application/octet-stream"
-        },
-        body: new Uint8Array(buffer)
-      });
+      
+      const fallbackController = new AbortController();
+      const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 10000);
+      try {
+        res = await fetch("https://api.deepgram.com/v1/listen?model=general&language=ur&smart_format=true&punctuate=true", {
+          method: "POST",
+          headers: {
+            "Authorization": `Token ${apiKey.trim()}`,
+            "Content-Type": "application/octet-stream"
+          },
+          body: new Uint8Array(buffer),
+          signal: fallbackController.signal
+        });
+      } finally {
+        clearTimeout(fallbackTimeoutId);
+      }
     }
 
     if (!res.ok) {
@@ -142,15 +153,19 @@ async function transcribeAudioWithDeepgram(buffer: Buffer, apiKey: string, mimet
     const transcript = data?.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
     console.log(`[Deepgram STT] Transcribed text: "${transcript}"`);
     return transcript;
-  } catch (err) {
-    console.error("[Deepgram STT] Exception during transcription:", err);
+  } catch (err: any) {
+    console.error("[Deepgram STT] Exception during transcription:", err.message || err);
     return "";
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
 
 async function transcribeAudioWithOpenAI(buffer: Buffer, apiKey: string, mimetype = "audio/ogg"): Promise<string> {
   if (!apiKey || !apiKey.trim() || !apiKey.startsWith("sk-")) return "";
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
   try {
     const extension = mimetype.includes("mp4") ? "mp4" : mimetype.includes("mpeg") ? "mp3" : "ogg";
     const formData = new FormData();
@@ -164,7 +179,8 @@ async function transcribeAudioWithOpenAI(buffer: Buffer, apiKey: string, mimetyp
       headers: {
         "Authorization": `Bearer ${apiKey.trim()}`
       },
-      body: formData
+      body: formData,
+      signal: controller.signal
     });
 
     if (!res.ok) {
@@ -177,9 +193,11 @@ async function transcribeAudioWithOpenAI(buffer: Buffer, apiKey: string, mimetyp
     const transcript = data?.text || "";
     console.log(`[Whisper STT] Successfully transcribed audio: "${transcript}"`);
     return transcript;
-  } catch (err) {
-    console.error("[Whisper STT] Exception during transcription:", err);
+  } catch (err: any) {
+    console.error("[Whisper STT] Exception during transcription:", err.message || err);
     return "";
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -710,6 +728,8 @@ async function callLLM(
           messages: messages as any,
           tools: tools.length > 0 ? tools : undefined,
           temperature: temperature,
+        }, {
+          timeout: 15000
         });
         console.log(`[callLLM] Anthropic model ${model} SUCCESS!`);
         return res;
@@ -1418,7 +1438,21 @@ export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
 
     try {
       await previousPromise;
-      await processWhatsAppMessage(msg, from, inputTenantId);
+      const processPromise = processWhatsAppMessage(msg, from, inputTenantId);
+      const timeoutPromise = new Promise<void>((_, reject) => 
+        setTimeout(() => reject(new Error("Message processing timed out (25s)")), 25000)
+      );
+      await Promise.race([processPromise, timeoutPromise]);
+    } catch (error: any) {
+      console.error(`[AI Handler] Error/Timeout for customer ${from}:`, error.message || error);
+      try {
+        const fallback = "System par loads zyada hone ki waja se reply mein dair ho rahi hai. Humari team jald hi aapse raabta karegi! Shukriya! 🙏";
+        await WhatsAppManager.sendMessage(from, fallback);
+        const resolvedTenantId = inputTenantId || WhatsAppManager.getActiveTenantId() || undefined;
+        await DB.addChatMessage(from, { role: "assistant", content: fallback }, resolvedTenantId);
+      } catch (sendErr) {
+        console.error("[AI Handler] Failed to send fallback message:", sendErr);
+      }
     } finally {
       resolveLock!();
       const currentQueue = customerLocks.get(from);
@@ -1783,7 +1817,7 @@ Keep their history in mind and treat them like a valued returning customer.`;
         fullSystemPrompt += "- HUMAN HANDOFF: If you do not know the answer to a question, tell the user you are transferring them to a human agent, and do NOT try to guess.\n";
       }
     }
-    fullSystemPrompt += "\n\n=== RESPONSE FORMAT & TOKEN OPTIMIZATION ===\n- Keep answers concise, direct, and polite (1-3 sentences max).\n- Do not repeat previous conversation context or output unnecessary filler text.\n- When asked for products/prices, list items concisely without fluff.\n";
+    fullSystemPrompt += "\n\n=== RESPONSE FORMAT & TOKEN OPTIMIZATION ===\n- Keep answers EXTREMELY short and direct (1-2 sentences max, under 30 words).\n- Do not repeat previous conversation context, greeting, or output unnecessary filler text.\n- When asked for products/prices, list items concisely without fluff.\n";
 
     const history = await DB.getChats(from, resolvedTenantId);
     // Filter out system messages and sanitize past assistant refusal messages so LLM never gets primed by past errors!
