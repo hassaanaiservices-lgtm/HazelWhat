@@ -984,8 +984,9 @@ async function processHybridEngine(
       let selectedVariant = null;
 
       // Yield to LLM if the user is asking a question or talking about other items (like fries or coke) instead of a size
+      const inputWords = input.split(/[\s,.\-\/]+/);
       const isOutofTurn = input.includes("?") || 
-                         ["coke", "fries", "drink", "extra", "cancel", "no", "wait", "change", "price", "rate", "cost"].some(w => input.includes(w));
+                         ["coke", "fries", "drink", "extra", "cancel", "no", "wait", "change", "price", "rate", "cost"].some(w => inputWords.includes(w));
       if (isOutofTurn) {
         return {
           matched: false, // Yield to LLM
@@ -1041,8 +1042,9 @@ async function processHybridEngine(
     if (currentState === "AWAITING_ORDER_NAME") {
       const name = content.trim();
       
+      const nameWords = lowerContent.split(/[\s,.\-\/]+/);
       // Yield to LLM if name looks like a question or correction
-      if (name.includes("?") || name.split(/\s+/).length > 4 || ["cancel", "no", "stop", "wait", "change"].some(w => lowerContent.includes(w))) {
+      if (name.includes("?") || name.split(/\s+/).length > 4 || ["cancel", "no", "stop", "wait", "change"].some(w => nameWords.includes(w))) {
         return {
           matched: false, // Yield to LLM
           reply: "",
@@ -1063,10 +1065,11 @@ async function processHybridEngine(
     if (currentState === "AWAITING_ORDER_ADDRESS") {
       const address = content.trim();
 
+      const addressWords = lowerContent.split(/[\s,.\-\/]+/);
       // Yield to LLM if the address input looks like a question, custom request (like adding drinks), or cancellation
       const isInvalidAddress = address.includes("?") || 
                                address.split(/\s+/).length > 15 || 
-                               ["coke", "fries", "drink", "extra", "cancel", "no", "wait", "change", "wrong", "galat", "galt"].some(w => lowerContent.includes(w));
+                               ["coke", "fries", "drink", "extra", "cancel", "no", "wait", "change", "wrong", "galat", "galt"].some(w => addressWords.includes(w));
       
       if (isInvalidAddress) {
         return {
@@ -1143,23 +1146,38 @@ async function processHybridEngine(
   // Check if user mentions any product in the catalog to start product-specific flow
   if (products.length > 0) {
     let matchedProduct = null;
-    for (const prod of products) {
-      if (!prod.title) continue;
-      const titleLower = prod.title.toLowerCase().trim();
-      
-      // Match if user typed the exact title, or the title contains the user's input, or vice versa
-      const isMatch = lowerContent.includes(titleLower) || 
-                      (lowerContent.length >= 3 && titleLower.includes(lowerContent)) ||
-                      // Or match significant words (excluding common stop words)
-                      titleLower.split(/\s+/).some((word: string) => 
-                        word.length >= 3 && 
-                        !["the", "and", "for", "with", "box", "pkr"].includes(word) && 
-                        lowerContent.includes(word)
-                      );
-                      
-      if (isMatch) {
-        matchedProduct = prod;
-        break;
+    
+    // Skip product matching entirely if the user is just asking for the menu
+    const isMenuRequest = ["menu", "show menu", "send menu", "deikhao menu", "pizza menu", "card", "website"].some(w => lowerContent === w || lowerContent.includes(w));
+    
+    if (!isMenuRequest) {
+      for (const prod of products) {
+        if (!prod.title) continue;
+        const titleLower = prod.title.toLowerCase().trim();
+        
+        // Skip placeholders or menu buttons
+        if (["menu", "menu.", "pizza menu", "website", "link", "card"].includes(titleLower)) continue;
+        
+        // Skip free/zero-price products without variations (usually navigational elements scraped by accident)
+        const priceClean = (prod.price || "").toString().toLowerCase().replace(/[^0-9.]/g, "");
+        const isZeroPrice = priceClean === "0" || priceClean === "0.00" || priceClean === "rs.0.00";
+        const hasVariations = Array.isArray(prod.variations) && prod.variations.length > 0;
+        if (isZeroPrice && !hasVariations) continue;
+        
+        // Match if user typed the exact title, or the title contains the user's input, or vice versa
+        const isMatch = lowerContent.includes(titleLower) || 
+                        (lowerContent.length >= 3 && titleLower.includes(lowerContent)) ||
+                        // Or match significant words (excluding common stop words)
+                        titleLower.split(/\s+/).some((word: string) => 
+                          word.length >= 3 && 
+                          !["the", "and", "for", "with", "box", "pkr"].includes(word) && 
+                          lowerContent.includes(word)
+                        );
+                        
+        if (isMatch) {
+          matchedProduct = prod;
+          break;
+        }
       }
     }
 

@@ -920,30 +920,35 @@ export class DB {
           .select('*')
           .eq('phone', phone)
           .eq('tenant_id', tenantId)
-          .eq('product_name', data.productName)
-          .gte('created_at', twoMinutesAgo)
-          .limit(1);
+          .gte('created_at', twoMinutesAgo);
 
         if (existingOrders && existingOrders.length > 0) {
-          console.warn(`[DB] Duplicate order detected for ${phone} within 2 minutes. Skipping creation.`);
-          const match = existingOrders[0];
-          return {
-            id: match.id,
-            tenantId: match.tenant_id,
-            phone: match.phone,
-            customerName: match.customer_name,
-            productName: match.product_name,
-            productImageUrl: match.product_image_url,
-            size: match.size,
-            color: match.color,
-            deliveryAddress: match.delivery_address,
-            contactNumber: match.contact_number,
-            paymentMethod: match.payment_method,
-            price: match.price,
-            timestamp: match.created_at,
-            status: match.status,
-            notes: match.notes
-          };
+          const duplicate = existingOrders.find(match => {
+            const nameA = (match.product_name || "").toLowerCase().trim();
+            const nameB = (data.productName || "").toLowerCase().trim();
+            return nameA === nameB || nameA.includes(nameB) || nameB.includes(nameA);
+          });
+
+          if (duplicate) {
+            console.warn(`[DB] Duplicate order detected for ${phone} within 2 minutes. Skipping creation. Match: ${duplicate.product_name}`);
+            return {
+              id: duplicate.id,
+              tenantId: duplicate.tenant_id,
+              phone: duplicate.phone,
+              customerName: duplicate.customer_name,
+              productName: duplicate.product_name,
+              productImageUrl: duplicate.product_image_url,
+              size: duplicate.size,
+              color: duplicate.color,
+              deliveryAddress: duplicate.delivery_address,
+              contactNumber: duplicate.contact_number,
+              paymentMethod: duplicate.payment_method,
+              price: duplicate.price,
+              timestamp: duplicate.created_at,
+              status: duplicate.status,
+              notes: duplicate.notes
+            };
+          }
         }
       } catch (checkErr) {
         console.error('[DB/Supabase] Error checking for duplicate order:', checkErr);
