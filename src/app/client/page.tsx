@@ -2385,8 +2385,9 @@ export default function DashboardPage() {
                     const searchLower = inboxSearch.toLowerCase();
                     const displayName = (customers[phone]?.name || phone).toLowerCase();
                     const matchesName = displayName.includes(searchLower);
+                    const matchesPhone = phone.includes(searchLower);
                     const matchesMessage = messages.some(m => m.content?.toLowerCase().includes(searchLower));
-                    if (!matchesName && !matchesMessage) return false;
+                    if (!matchesName && !matchesMessage && !matchesPhone) return false;
                   }
 
                   // 2. Inbox segment filter
