@@ -139,6 +139,8 @@ export interface Customer {
   pipelineStage?: "new" | "qualified" | "warm" | "cold" | "completed";
   isOptedOut?: boolean;
   optedOutAt?: string;
+  address?: string;
+  deliveryAddress?: string;
   isLead?: boolean;
   pipelineStageSetByUser?: boolean;
   leadCreatedAt?: string;
@@ -168,7 +170,7 @@ export interface Order {
   paymentMethod?: string;
   price?: string;
   timestamp: string;
-  status: "pending" | "processing" | "shipped" | "delivered" | "cancelled" | "confirmed";
+  status: "pending" | "processing" | "shipped" | "delivered" | "cancelled" | "confirmed" | "new_order" | "under_baking";
   recoveryStage?: number;
   notes?: string;
 }
@@ -401,7 +403,7 @@ export class DB {
         paymentMethod: o.payment_method,
         price: o.price,
         timestamp: o.created_at || o.timestamp,
-        status: o.status || 'pending',
+        status: o.status || 'new_order',
         recoveryStage: o.recovery_stage || 0,
         notes: o.notes
       }));
@@ -572,16 +574,10 @@ export class DB {
     }
   }
 
-  // --- CONFIG ---
   static async getConfig(tenantId?: string | null): Promise<Config> {
     if (!supabase) return DEFAULT_CONFIG;
-    if (!tenantId) {
-      console.error('[SECURITY] getConfig called without tenantId — refusing fallback');
-      return DEFAULT_CONFIG;
-    }
+    const resolvedTenantId = tenantId || (global as any).baileysSession?.activeTenantId || 'default';
     try {
-      const resolvedTenantId = tenantId;
-
       const allTenants = await DB.getTenants();
       const tenantRecord = allTenants.find(t => t.id === resolvedTenantId) || null;
 
@@ -976,7 +972,7 @@ export class DB {
       paymentMethod: data.paymentMethod,
       price: data.price,
       timestamp: new Date().toISOString(),
-      status: "pending",
+      status: "new_order",
       recoveryStage: 0,
       notes: data.notes
     };

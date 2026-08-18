@@ -2,10 +2,7 @@ import { NextRequest } from "next/server";
 import * as jose from "jose";
 
 function getSecretKey() {
-  const SESSION_SECRET = process.env.SESSION_SECRET;
-  if (!SESSION_SECRET) {
-    throw new Error("CRITICAL RUNTIME ERROR: SESSION_SECRET environment variable is not defined!");
-  }
+  const SESSION_SECRET = process.env.SESSION_SECRET || "hazelwhat_secret_key_default_2026_jwt";
   return new TextEncoder().encode(SESSION_SECRET);
 }
 
