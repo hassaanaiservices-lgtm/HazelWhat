@@ -1914,12 +1914,13 @@ Keep their history in mind and treat them like a valued returning customer.`;
           type: "object",
           properties: {
             product_name: { type: "string", description: "The name of the product" },
+            quantity: { type: "integer", description: "The quantity/number of items ordered. If the user specifies a quantity (e.g. 4 sandwiches), pass it here." },
             size: { type: "string" },
             color: { type: "string" },
             address: { type: "string" },
             contact_number: { type: "string" },
             payment_method: { type: "string", description: "e.g. Cash on Delivery, Bank Transfer" },
-            price: { type: "string" },
+            price: { type: "string", description: "Single-item price (the base price of one unit). The system will automatically calculate the total price based on quantity." },
             notes: { type: "string", description: "Special instructions, customizations, size adjustments, or notes requested by the client." }
           },
           required: ["product_name"]
@@ -2020,21 +2021,38 @@ Keep their history in mind and treat them like a valued returning customer.`;
           }
           else if (toolCall.name === "place_order") {
             try {
+              const qty = Math.max(1, parseInt(args.quantity) || 1);
+              let finalPrice = args.price;
+              
+              if (args.price && qty > 1) {
+                const numericPrice = parseFloat(args.price.replace(/[^\d.]/g, ""));
+                if (!isNaN(numericPrice)) {
+                  const total = numericPrice * qty;
+                  if (args.price.includes("PKR")) {
+                    finalPrice = `PKR ${total}`;
+                  } else if (args.price.includes("Rs.")) {
+                    finalPrice = `Rs. ${total}`;
+                  } else {
+                    finalPrice = `${total}`;
+                  }
+                }
+              }
+
               const orderData = {
-                productName: args.product_name,
+                productName: qty > 1 ? `${qty}x ${args.product_name}` : args.product_name,
                 size: args.size,
                 color: args.color,
                 deliveryAddress: args.address,
                 contactNumber: args.contact_number || from,
                 paymentMethod: args.payment_method,
-                price: args.price,
+                price: finalPrice,
                 productImageUrl: args.image_url,
                 customerName: customer?.name || from,
                 notes: args.notes
               };
               await DB.addOrder(from, orderData, resolvedTenantId);
               await DB.updateCustomer(from, { followUpLevel: 999, leadStatus: "cold", pipelineStage: "completed" }, resolvedTenantId);
-              toolResult = JSON.stringify({ success: true, message: "Order placed and saved to database successfully. You may now confirm the final order details to the user." });
+              toolResult = JSON.stringify({ success: true, message: `Order placed and saved to database successfully. Quantity: ${qty}. Total Price: ${finalPrice}. You may now confirm the final order details to the user.` });
             } catch (err: any) {
               console.error("[AI Handler] place_order error:", err);
               toolResult = JSON.stringify({ success: false, message: "Failed to place order: " + err.message });
