@@ -2427,47 +2427,52 @@ export default function DashboardPage() {
                   return `+${id}`;
                 };
                 const displayName = formatContactName(phone);
-                const isSelected = selectedChat === phone;
-                const timeStr = lastMessage ? new Date(lastMessage.timestamp).toLocaleDateString([], { month: '2-digit', day: '2-digit' }) : "";
-                
-                // Mock ring percentage
-                const percents = [40, 12, 20, 80, 100];
-                const ringPercent = percents[i % percents.length];
+                 const isSelected = selectedChat === phone;
+                 const isChatAiEnabled = customers[phone]?.aiEnabled !== undefined ? customers[phone].aiEnabled : (config.globalAiEnabled !== false);
+                 const timeStr = (() => {
+                   if (!lastMessage?.timestamp) return "";
+                   const d = new Date(lastMessage.timestamp);
+                   return isNaN(d.getTime()) ? "" : d.toLocaleDateString([], { month: '2-digit', day: '2-digit' });
+                 })();
+                 
+                 // Mock ring percentage
+                 const percents = [40, 12, 20, 80, 100];
+                 const ringPercent = percents[i % percents.length];
 
-                return (
-                  <div 
-                    key={phone} 
-                    onClick={() => {
-                      setSelectedChat(phone);
-                      markChatAsRead(phone);
-                    }}
-                    className={`cursor-pointer px-5 py-4 flex items-start gap-3.5 transition-all border-b border-slate-100/60 relative ${isSelected ? 'bg-purple-50/70 before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:bg-purple-600' : 'hover:bg-slate-50'}`}
-                  >
-                    {/* Avatar with ring */}
-                    <div className="relative flex-shrink-0 mt-0.5">
-                      <div className="h-[44px] w-[44px] rounded-full border-2 border-purple-500 p-0.5 relative flex items-center justify-center bg-white shadow-sm">
-                        <div className="h-full w-full bg-slate-100 rounded-full flex items-center justify-center overflow-hidden">
-                          <User className="text-purple-400 h-5 w-5" />
-                        </div>
-                      </div>
-                      <div className="absolute -bottom-1 -left-1 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[9px] font-extrabold px-1.5 rounded-full border-2 border-white shadow-sm">
-                        {ringPercent}%
-                      </div>
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-baseline mb-1">
-                        <h4 className="text-xs font-bold text-slate-900 truncate">{displayName}</h4>
-                        <span className="text-[11px] font-bold text-purple-600">{isMounted ? timeStr : ""}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-                        {lastMessage?.role === 'assistant' && <CheckCheck className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />}
-                        <span className="truncate">{lastMessage?.content}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              });
+                 return (
+                   <div 
+                     key={phone} 
+                     onClick={() => {
+                       setSelectedChat(phone);
+                       markChatAsRead(phone);
+                     }}
+                     className={`cursor-pointer px-5 py-4 flex items-start gap-3.5 transition-all border-b border-slate-100/60 relative ${isSelected ? 'bg-purple-50/70 before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:bg-purple-600' : 'hover:bg-slate-50'}`}
+                   >
+                     {/* Avatar with ring */}
+                     <div className="relative flex-shrink-0 mt-0.5">
+                       <div className={`h-[44px] w-[44px] rounded-full border-2 ${isChatAiEnabled ? 'border-emerald-500 shadow-md shadow-emerald-500/20' : 'border-purple-500'} p-0.5 relative flex items-center justify-center bg-white shadow-sm`}>
+                         <div className="h-full w-full bg-slate-100 rounded-full flex items-center justify-center overflow-hidden">
+                           <User className={`${isChatAiEnabled ? 'text-emerald-500' : 'text-purple-400'} h-5 w-5`} />
+                         </div>
+                       </div>
+                       <div className={`absolute -bottom-1 -left-1 bg-gradient-to-r ${isChatAiEnabled ? 'from-emerald-600 to-green-600' : 'from-purple-600 to-indigo-600'} text-white text-[9px] font-extrabold px-1.5 rounded-full border-2 border-white shadow-sm`}>
+                         {ringPercent}%
+                       </div>
+                     </div>
+                     
+                     <div className="flex-1 min-w-0">
+                       <div className="flex justify-between items-baseline mb-1">
+                         <h4 className="text-xs font-bold text-slate-900 truncate">{displayName}</h4>
+                         <span className="text-[11px] font-bold text-purple-600">{isMounted ? timeStr : ""}</span>
+                       </div>
+                       <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                         {lastMessage?.role === 'assistant' && <CheckCheck className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />}
+                         <span className="truncate">{lastMessage?.content}</span>
+                       </div>
+                     </div>
+                   </div>
+                 );
+               });
             })()}
           </div>
         </div>
@@ -2486,13 +2491,18 @@ export default function DashboardPage() {
             </div>
           ) : (
             <>
-              {/* Chat Header */}
-              <div className="h-[72px] bg-white border-b border-slate-200/80 px-6 flex items-center justify-between z-10 flex-shrink-0 shadow-sm">
-                <div className="flex items-center gap-3.5 cursor-pointer">
-                  <div className="h-11 w-11 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center overflow-hidden flex-shrink-0 shadow-md shadow-purple-500/20">
-                    <User className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="flex flex-col">
+               {/* Chat Header */}
+               <div className="h-[72px] bg-white border-b border-slate-200/80 px-6 flex items-center justify-between z-10 flex-shrink-0 shadow-sm">
+                 <div className="flex items-center gap-3.5 cursor-pointer">
+                   {(() => {
+                     const isHeaderAiEnabled = customers[selectedChat]?.aiEnabled !== undefined ? customers[selectedChat].aiEnabled : (config.globalAiEnabled !== false);
+                     return (
+                       <div className={`h-11 w-11 rounded-full bg-gradient-to-tr ${isHeaderAiEnabled ? 'from-emerald-600 to-green-500 shadow-emerald-500/20' : 'from-purple-600 to-indigo-500 shadow-purple-500/20'} flex items-center justify-center overflow-hidden flex-shrink-0 shadow-md`}>
+                         <User className="h-6 w-6 text-white" />
+                       </div>
+                     );
+                   })()}
+                   <div className="flex flex-col">
                     <h4 className="font-extrabold text-slate-900 text-sm">
                       {(() => {
                         const savedName = customers[selectedChat]?.name;
@@ -2580,7 +2590,10 @@ export default function DashboardPage() {
                           </span>
                         )}
                         <div className={`absolute bottom-1 right-3 flex items-center gap-1 text-[10px] font-bold ${isSent ? 'text-teal-200' : 'text-slate-500'}`}>
-                          <span>{isMounted ? new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ""}</span>
+                          <span>{isMounted && m.timestamp ? (() => {
+                            const d = new Date(m.timestamp);
+                            return isNaN(d.getTime()) ? "" : d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                          })() : ""}</span>
                           {isSent && (
                             m.status === 4 ? <CheckCheck className="h-3.5 w-3.5 text-white" /> :
                             m.status === 3 ? <CheckCheck className="h-3.5 w-3.5 text-teal-200" /> :
