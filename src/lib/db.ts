@@ -329,7 +329,7 @@ export class DB {
   static async getAllChatsAdminAllTenants(): Promise<Record<string, ChatMessage[]>> {
     if (!supabase) return {};
     try {
-      const { data, error } = await supabase.from('chat_messages').select('*').order('timestamp', { ascending: true });
+      const { data, error } = await supabase.from('chat_messages').select('*').order('timestamp', { ascending: true }).limit(30000);
       if (error || !data) return {};
       const result: Record<string, ChatMessage[]> = {};
       data.forEach((m: any) => {
@@ -355,7 +355,7 @@ export class DB {
   static async getAllCustomersAdminAllTenants(): Promise<Customer[]> {
     if (!supabase) return [];
     try {
-      const { data } = await supabase.from('customers').select('*');
+      const { data } = await supabase.from('customers').select('*').limit(20000);
       return (data || []).map((c: any) => ({
         phone: c.phone,
         tenantId: c.tenant_id,
@@ -480,7 +480,7 @@ export class DB {
       return {};
     }
     try {
-      const { data, error } = await supabase.from('chat_messages').select('*').eq('tenant_id', tenantId).order('timestamp', { ascending: true });
+      const { data, error } = await supabase.from('chat_messages').select('*').eq('tenant_id', tenantId).order('timestamp', { ascending: true }).limit(20000);
       if (error || !data) return {};
 
       const result: Record<string, ChatMessage[]> = {};
@@ -759,7 +759,7 @@ export class DB {
       return [];
     }
     try {
-      const { data } = await supabase.from('customers').select('*').eq('tenant_id', tenantId);
+      const { data } = await supabase.from('customers').select('*').eq('tenant_id', tenantId).limit(10000);
       return (data || []).map((c: any) => ({
         phone: c.phone,
         tenantId: c.tenant_id,
