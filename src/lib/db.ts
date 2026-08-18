@@ -660,29 +660,27 @@ export class DB {
       return;
     }
     try {
-      const existing = await DB.getConfig(tenantId);
-      const updated = { ...existing, ...newConfig };
+      const payload: any = { tenant_id: tenantId };
 
-      await supabase.from('tenant_configs').upsert({
-        tenant_id: tenantId,
-        system_prompt: updated.systemPrompt,
-        product_info: updated.productInfo,
-        products: updated.products || [],
-        keyword_replies: updated.keywordReplies || [],
-        enabled_features: updated.enabledFeatures || [],
-        global_ai_enabled: updated.globalAiEnabled !== false,
-        store_url: updated.storeUrl,
-        store_currency: updated.storeCurrency,
-        business_name: updated.businessName,
-        timezone: updated.timezone,
-        working_hours: updated.workingHours,
-        bot_mode: updated.botMode,
-        max_follow_ups: updated.maxFollowUps,
-        follow_ups: updated.followUps || [],
-        api_key: updated.apiKey,
-        openrouter_api_key: updated.openRouterApiKey,
-        anthropic_api_key: updated.anthropicApiKey
-      }, { onConflict: 'tenant_id' });
+      if (newConfig.systemPrompt !== undefined) payload.system_prompt = newConfig.systemPrompt;
+      if (newConfig.productInfo !== undefined) payload.product_info = newConfig.productInfo;
+      if (newConfig.products !== undefined) payload.products = newConfig.products;
+      if (newConfig.keywordReplies !== undefined) payload.keyword_replies = newConfig.keywordReplies;
+      if (newConfig.enabledFeatures !== undefined) payload.enabled_features = newConfig.enabledFeatures;
+      if (newConfig.globalAiEnabled !== undefined) payload.global_ai_enabled = newConfig.globalAiEnabled;
+      if (newConfig.storeUrl !== undefined) payload.store_url = newConfig.storeUrl;
+      if (newConfig.storeCurrency !== undefined) payload.store_currency = newConfig.storeCurrency;
+      if (newConfig.businessName !== undefined) payload.business_name = newConfig.businessName;
+      if (newConfig.timezone !== undefined) payload.timezone = newConfig.timezone;
+      if (newConfig.workingHours !== undefined) payload.working_hours = newConfig.workingHours;
+      if (newConfig.botMode !== undefined) payload.bot_mode = newConfig.botMode;
+      if (newConfig.maxFollowUps !== undefined) payload.max_follow_ups = newConfig.maxFollowUps;
+      if (newConfig.followUps !== undefined) payload.follow_ups = newConfig.followUps;
+      if (newConfig.apiKey !== undefined) payload.api_key = newConfig.apiKey;
+      if (newConfig.openRouterApiKey !== undefined) payload.openrouter_api_key = newConfig.openRouterApiKey;
+      if (newConfig.anthropicApiKey !== undefined) payload.anthropic_api_key = newConfig.anthropicApiKey;
+
+      await supabase.from('tenant_configs').upsert(payload, { onConflict: 'tenant_id' });
     } catch (e) {
       console.error('[DB/Supabase] updateConfig error:', e);
     }
@@ -1561,13 +1559,22 @@ export class DB {
             throw new Error(`Failed to upsert tenant ${t.id} (${t.name || t.businessName}) to Supabase`);
           }
           try {
-            await supabase.from('tenant_configs').upsert({
-              tenant_id: t.id,
-              system_prompt: t.systemPrompt || '',
-              product_info: t.knowledgeBase || t.productKnowledgeBase || '',
-              products: t.products || [],
-              business_name: t.businessName || t.name || 'My Business'
-            }, { onConflict: 'tenant_id' });
+            // Only seed tenant_configs if no row exists yet — never overwrite user-saved config
+            const { data: existingCfg } = await supabase
+              .from('tenant_configs')
+              .select('tenant_id')
+              .eq('tenant_id', t.id)
+              .single();
+
+            if (!existingCfg) {
+              await supabase.from('tenant_configs').upsert({
+                tenant_id: t.id,
+                system_prompt: t.systemPrompt || '',
+                product_info: t.knowledgeBase || t.productKnowledgeBase || '',
+                products: t.products || [],
+                business_name: t.businessName || t.name || 'My Business'
+              }, { onConflict: 'tenant_id' });
+            }
           } catch (e: any) {
             console.error(`[DB/Supabase] Sync tenant_configs error for ${t.id}:`, e);
           }
