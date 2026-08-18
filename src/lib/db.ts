@@ -920,23 +920,23 @@ export class DB {
 
     if (supabase) {
       try {
-        const twoMinutesAgo = new Date(Date.now() - 120 * 1000).toISOString();
+        const fifteenMinutesAgo = new Date(Date.now() - 900 * 1000).toISOString();
         const { data: existingOrders } = await supabase
           .from('orders')
           .select('*')
           .eq('phone', phone)
           .eq('tenant_id', tenantId)
-          .gte('created_at', twoMinutesAgo);
+          .gte('created_at', fifteenMinutesAgo);
 
         if (existingOrders && existingOrders.length > 0) {
           const duplicate = existingOrders.find(match => {
             const nameA = (match.product_name || "").toLowerCase().trim();
             const nameB = (data.productName || "").toLowerCase().trim();
-            return nameA === nameB || nameA.includes(nameB) || nameB.includes(nameA);
+            return nameA === nameB || nameA.includes(nameB) || nameB.includes(nameA) || match.status === 'pending';
           });
 
           if (duplicate) {
-            console.warn(`[DB] Duplicate order detected for ${phone} within 2 minutes. Skipping creation. Match: ${duplicate.product_name}`);
+            console.warn(`[DB] Duplicate order detected for ${phone} within 15 minutes. Skipping creation. Match: ${duplicate.product_name}`);
             return {
               id: duplicate.id,
               tenantId: duplicate.tenant_id,
