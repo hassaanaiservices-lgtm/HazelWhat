@@ -329,7 +329,7 @@ export class DB {
   static async getAllChatsAdminAllTenants(): Promise<Record<string, ChatMessage[]>> {
     if (!supabase) return {};
     try {
-      const { data, error } = await supabase.from('chat_messages').select('*').order('timestamp', { ascending: true }).limit(30000);
+      const { data, error } = await supabase.from('chat_messages').select('*').order('timestamp', { ascending: false }).limit(30000);
       if (error || !data) return {};
       const result: Record<string, ChatMessage[]> = {};
       data.forEach((m: any) => {
@@ -344,6 +344,10 @@ export class DB {
           mediaUrl: m.media_url,
           mediaType: m.media_type
         });
+      });
+      // Reverse each list to restore ascending chronological order for chat view
+      Object.keys(result).forEach((phone) => {
+        result[phone].reverse();
       });
       return result;
     } catch (e) {
@@ -480,7 +484,7 @@ export class DB {
       return {};
     }
     try {
-      const { data, error } = await supabase.from('chat_messages').select('*').eq('tenant_id', tenantId).order('timestamp', { ascending: true }).limit(20000);
+      const { data, error } = await supabase.from('chat_messages').select('*').eq('tenant_id', tenantId).order('timestamp', { ascending: false }).limit(20000);
       if (error || !data) return {};
 
       const result: Record<string, ChatMessage[]> = {};
@@ -496,6 +500,10 @@ export class DB {
           mediaUrl: m.media_url,
           mediaType: m.media_type
         });
+      });
+      // Reverse each list to restore ascending chronological order for chat view
+      Object.keys(result).forEach((phone) => {
+        result[phone].reverse();
       });
       return result;
     } catch (e) {
