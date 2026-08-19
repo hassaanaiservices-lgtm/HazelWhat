@@ -65,7 +65,7 @@ export async function GET(req: any) {
     // Compute this week's revenue
     let weekRevenue = 0;
     orders.forEach(o => {
-      if ((o.status === 'confirmed' || o.status === 'delivered') && new Date(o.timestamp) >= startOfWeek) {
+      if ((o.status === 'confirmed' || o.status === 'delivered' || o.status === 'completed') && new Date(o.timestamp) >= startOfWeek) {
         if (o.price) {
           const num = parseFloat(o.price.replace(/[^\d.-]/g, ''));
           if (!isNaN(num)) {
@@ -118,7 +118,7 @@ export async function GET(req: any) {
     const totalFollowUps = sentScheduledCount + sentSequenceCount + sentRecoveryCount;
 
     // Sales Completed
-    const successfulOrders = orders.filter(o => o.status === 'confirmed' || o.status === 'delivered' || o.status === 'processing' || o.status === 'shipped');
+    const successfulOrders = orders.filter(o => o.status === 'confirmed' || o.status === 'delivered' || o.status === 'completed' || o.status === 'processing' || o.status === 'shipped');
     const totalSalesCount = successfulOrders.length;
 
     let totalSalesRevenue = 0;

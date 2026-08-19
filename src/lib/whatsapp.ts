@@ -1298,15 +1298,19 @@ export class WhatsAppManager {
     if (product.description) {
       caption += `\n\n${product.description}`;
     }
-    if (product.link) {
-      caption += `\n\nView Product: ${product.link}`;
-    }
-    
     const isValidUrl = (url?: string) => {
       if (!url || typeof url !== 'string') return false;
       const clean = url.trim();
-      return (clean.startsWith('http://') || clean.startsWith('https://')) && !clean.includes('example.com');
+      return (clean.startsWith('http://') || clean.startsWith('https://')) && 
+             !clean.includes('example.com') && 
+             !clean.includes('placeholder') && 
+             clean !== 'N/A' && 
+             clean.trim() !== '';
     };
+
+    if (product.link && isValidUrl(product.link)) {
+      caption += `\n\nView Product: ${product.link}`;
+    }
 
     if (isValidUrl(product.image)) {
       try {

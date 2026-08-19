@@ -4622,16 +4622,16 @@ A: 2 to 4 working days."
 
                             <span className={`text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 ${
                               order.status === 'pending' ? 'bg-amber-50 text-amber-800 border border-amber-200' :
-                              order.status === 'confirmed' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
+                              (order.status === 'confirmed' || order.status === 'delivered' || order.status === 'completed') ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
                               order.status === 'cancelled' ? 'bg-rose-50 text-rose-800 border border-rose-200' :
                               'bg-slate-100 text-slate-700 border border-slate-200'
                             }`}>
                               <span className={`w-1.5 h-1.5 rounded-full ${
                                 order.status === 'pending' ? 'bg-amber-500 animate-pulse' :
-                                order.status === 'confirmed' ? 'bg-emerald-500' :
+                                (order.status === 'confirmed' || order.status === 'delivered' || order.status === 'completed') ? 'bg-emerald-500' :
                                 order.status === 'cancelled' ? 'bg-rose-500' : 'bg-slate-400'
                               }`} />
-                              {order.status}
+                              {order.status === 'completed' ? 'delivered' : order.status}
                             </span>
                           </div>
 
@@ -4914,7 +4914,7 @@ A: 2 to 4 working days."
                 const getCustomerStage = (c: any): "new" | "qualified" | "warm" | "cold" | "completed" => {
                   if (c.pipelineStage) return c.pipelineStage;
                   if (c.leadStatus === "cold") return "cold";
-                  const hasOrder = orders.some((o: any) => o.phone === c.phone && (o.status === "confirmed" || o.status === "delivered"));
+                  const hasOrder = orders.some((o: any) => o.phone === c.phone && (o.status === "confirmed" || o.status === "delivered" || o.status === "completed"));
                   if (hasOrder) return "completed";
                   const hasAppt = orders.some((o: any) => o.phone === c.phone && (o.productName?.includes('Appointment') || o.productName?.includes('Call')));
                   if (hasAppt) return "qualified";
@@ -5105,7 +5105,7 @@ A: 2 to 4 working days."
                         const getCustomerStage = (c: any): "new" | "qualified" | "warm" | "cold" | "completed" => {
                           if (c.pipelineStage) return c.pipelineStage;
                           if (c.leadStatus === "cold") return "cold";
-                          const hasOrder = orders.some((o: any) => o.phone === c.phone && (o.status === "confirmed" || o.status === "delivered"));
+                          const hasOrder = orders.some((o: any) => o.phone === c.phone && (o.status === "confirmed" || o.status === "delivered" || o.status === "completed"));
                           if (hasOrder) return "completed";
                           const hasAppt = orders.some((o: any) => o.phone === c.phone && (o.productName?.includes('Appointment') || o.productName?.includes('Call')));
                           if (hasAppt) return "qualified";

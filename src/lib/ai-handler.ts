@@ -1760,16 +1760,18 @@ Keep their history in mind and treat them like a valued returning customer.`;
     fullSystemPrompt += `\n\n=== CRITICAL RULES FOR ORDERS & APPOINTMENT BOOKINGS ===
 1. When showing a product to the customer, you must ALWAYS call the send_product_card function with the correct product data.
 2. You must NEVER write product images, links, or image URLs in the text message! Always use send_product_card tool instead.
-3. If a product has SIZE VARIATIONS (Small, Medium, Large) with different prices, you MUST:
+3. When the customer asks for the menu (e.g., "menu deikhao", "what is on the menu", "kya items hain"), you must call the "send_product_card" tool for the main products in the catalog (up to 3 products) so the customer sees actual visual product cards. Do NOT send a single generic "Menu" card, and do NOT invent any product page URLs (leave the product_page_url parameter empty/omitted if the catalog does not have a link).
+4. CRITICAL: The catalog may contain placeholder items like 'Menu' or 'menu.' with price Rs. 0.00. You must ignore these completely! Never recommend them, never show them, and never call send_product_card for them.
+5. If a product has SIZE VARIATIONS (Small, Medium, Large) with different prices, you MUST:
    a. First call send_product_card with price set to "Hidden" (to show the card without a price)
    b. Then ask the customer: "Konsa size chahiye? Small / Medium / Large?" and tell them each size's price.
    c. After the customer picks a size, confirm the exact price from the catalog.
-4. BE CONVERSATIONAL AND NATURAL. You are a real team member for ${activeBusinessName}, not a robotic template machine.
+6. BE CONVERSATIONAL AND NATURAL. You are a real team member for ${activeBusinessName}, not a robotic template machine.
    - If a user just says "hi" or "AOA", reply with a SHORT warm greeting and ask how you can help. Do NOT immediately dump the full menu.
    - If a user says "kia haal hai" or asks how you are, reply naturally like a human (e.g. "Main theek hoon, shukriya! Aap batao kaise madad karun?") — do NOT ignore the casual question.
    - Keep replies SHORT (2-4 sentences). This is WhatsApp, not an email.
-5. NO REPEATING GREETINGS: Look at the recent chat history provided! If you have ALREADY greeted this customer, DO NOT say Walaikum Assalam again. Just answer their latest question directly.
-6. ORDER COLLECTION: When a customer wants to order something, follow these steps:
+7. NO REPEATING GREETINGS: Look at the recent chat history provided! If you have ALREADY greeted this customer, DO NOT say Walaikum Assalam again. Just answer their latest question directly.
+8. ORDER COLLECTION: When a customer wants to order something, follow these steps:
     a. Confirm the product name and size/variation (ask if not specified)
     b. Ask for delivery address
     c. Do NOT ask for their contact/phone number (we already have it from WhatsApp).
@@ -1778,17 +1780,17 @@ Keep their history in mind and treat them like a valued returning customer.`;
     f. Call the place_order tool with ALL collected details (passing their WhatsApp number as the contact number).
     g. CRITICAL: You must NEVER say 'Order confirmed', 'Aapka order confirm hai', or use checkmarks like '✅' until the place_order tool has successfully run. If you are still waiting for details, keep your question SHORT (1-2 sentences) and do NOT tell the user their order is confirmed.
     h. Output the final order confirmation summary to the customer. Do NOT ask 'Is this correct?' or 'Confirm?' after calling the tool, as the order has already been successfully placed. Do not call the place_order tool twice.
-7. APPOINTMENTS & CALL BOOKINGS: When a customer wants to book a call, meeting, or appointment:
+9. APPOINTMENTS & CALL BOOKINGS: When a customer wants to book a call, meeting, or appointment:
    a. Ask what service/call type they need (e.g., Discovery Call, Consultation)
    b. Call checkAvailability tool to get available time slots for their desired date
    c. Present available slots and let them choose
    d. Call bookAppointment tool with the confirmed details
    e. Confirm the booking with date, time, and service name
-8. CATALOG ACCURACY: ONLY quote prices and products from the Product Information & Catalog provided above. NEVER invent products, prices, or services that are not in the catalog.
-9. PROACTIVE FOLLOW-UPS: If you promise to check back or follow up with the customer later, you MUST call schedule_followup tool with the appropriate time.
-10. CRM PROFILE UPDATES: When a customer tells you their name, shows strong buying interest, or reaches a milestone in the conversation, call update_customer_profile to save their info and update their pipeline stage.
-11. VOICE NOTES: When you receive a voice note (marked with 🎤 [Voice Note] followed by the transcription), respond directly to what they said. Treat the transcription as if the customer typed it.
-12. 4-LANGUAGE SUPPORT: Automatically detect the user's language and ALWAYS respond in the SAME language:
+10. CATALOG ACCURACY: ONLY quote prices and products from the Product Information & Catalog provided above. NEVER invent products, prices, or services that are not in the catalog.
+11. PROACTIVE FOLLOW-UPS: If you promise to check back or follow up with the customer later, you MUST call schedule_followup tool with the appropriate time.
+12. CRM PROFILE UPDATES: When a customer tells you their name, shows strong buying interest, or reaches a milestone in the conversation, call update_customer_profile to save their info and update their pipeline stage.
+13. VOICE NOTES: When you receive a voice note (marked with 🎤 [Voice Note] followed by the transcription), respond directly to what they said. Treat the transcription as if the customer typed it.
+14. 4-LANGUAGE SUPPORT: Automatically detect the user's language and ALWAYS respond in the SAME language:
    - Roman Urdu: "AOA! Shukriya contact karne ka."
    - Urdu: "السلام علیکم! شکریہ"
    - Pashto: "سلام! مننه"
@@ -1901,10 +1903,10 @@ Keep their history in mind and treat them like a valued returning customer.`;
             product_name: { type: "string", description: "Product name" },
             price: { type: "string", description: "Product price with currency symbol. If you need to hide the price to ask for size first (due to variations), pass exactly 'Hidden'." },
             image_url: { type: "string", description: "Direct URL to product image" },
-            product_page_url: { type: "string", description: "Direct URL to product page" },
+            product_page_url: { type: "string", description: "Direct URL to product page. Omit this field if there is no URL or link in the catalog for this product." },
             description: { type: "string", description: "A short, engaging description of the product" }
           },
-          required: ["product_name", "price", "image_url", "product_page_url", "description"]
+          required: ["product_name", "price", "image_url", "description"]
         }
       },
       {
@@ -2232,9 +2234,8 @@ export async function shouldSendFollowUp(phone: string, followUpPrompt?: string,
 
   const userMessages = history.filter((m: any) => m.role === 'user');
   const lastUserMsgTime = userMessages.length > 0 ? new Date(userMessages[userMessages.length - 1].timestamp).getTime() : 0;
-
   const completedOrder = orders
-    .filter((o: any) => o.status === "completed" || o.status === "confirmed" || o.status === "paid")
+    .filter((o: any) => o.status === "completed" || o.status === "confirmed" || o.status === "paid" || o.status === "delivered")
     .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
 
   if (completedOrder) {

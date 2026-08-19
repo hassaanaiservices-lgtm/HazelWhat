@@ -52,7 +52,10 @@ export async function PATCH(req: NextRequest) {
     }
 
     const updates: any = {};
-    if (status) updates.status = status;
+    if (status) {
+      // Normalize 'completed' from external sources (like WooCommerce) to 'delivered'
+      updates.status = status === 'completed' ? 'delivered' : status;
+    }
     if (notes !== undefined) updates.notes = notes;
     if (customerName) updates.customerName = customerName;
 
