@@ -205,7 +205,7 @@ async function transcribeAudioWithDeepgram(buffer: Buffer, apiKey: string, mimet
 
 
 async function transcribeAudioWithOpenAI(buffer: Buffer, apiKey: string, mimetype = "audio/ogg"): Promise<string> {
-  if (!apiKey || !apiKey.trim() || !apiKey.startsWith("sk-")) return "";
+  if (!apiKey || !apiKey.trim() || (!apiKey.startsWith("sk-") && !apiKey.startsWith("sk-proj-"))) return "";
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
   try {
@@ -241,6 +241,179 @@ async function transcribeAudioWithOpenAI(buffer: Buffer, apiKey: string, mimetyp
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+async function transcribeAudioWithGemini(buffer: Buffer, apiKey: string, mimetype = "audio/ogg"): Promise<string> {
+  if (!apiKey || !apiKey.trim()) return "";
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  try {
+    const cleanMime = (mimetype || "audio/ogg").split(';')[0].trim() || "audio/ogg";
+    const base64Audio = buffer.toString("base64");
+    
+    console.log(`[Gemini STT] Transcribing ${buffer.length} bytes of audio via Gemini 3.6 Flash...`);
+    let res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey.trim()}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: cleanMime,
+                  data: base64Audio
+                }
+              },
+              {
+                text: "Transcribe this voice note audio accurately. The spoken language may be Pashto, Urdu, Roman Urdu, or English. Write down the exact spoken words verbatim in clear natural text. Return ONLY the transcribed text. Do not add any introduction, explanations, or quotes. If the audio is silent or completely unintelligible, return an empty string."
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 500
+        }
+      }),
+      signal: controller.signal
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn(`[Gemini STT] First attempt (gemini-3.6-flash) error (${res.status}):`, errText);
+      const fallbackController = new AbortController();
+      const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 10000);
+      try {
+        res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey.trim()}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: cleanMime,
+                      data: base64Audio
+                    }
+                  },
+                  {
+                    text: "Transcribe this voice note audio accurately. The spoken language may be Pashto, Urdu, Roman Urdu, or English. Write down the exact spoken words verbatim in clear natural text. Return ONLY the transcribed text. Do not add any introduction, explanations, or quotes. If the audio is silent or completely unintelligible, return an empty string."
+                  }
+                ]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.1,
+              maxOutputTokens: 500
+            }
+          }),
+          signal: fallbackController.signal
+        });
+      } finally {
+        clearTimeout(fallbackTimeoutId);
+      }
+    }
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[Gemini STT] API error (${res.status}):`, errText);
+      return "";
+    }
+
+    const data = await res.json();
+    const transcript = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+    console.log(`[Gemini STT] Successfully transcribed audio: "${transcript}"`);
+    return transcript;
+  } catch (err: any) {
+    console.error("[Gemini STT] Exception during transcription:", err.message || err);
+    return "";
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function transcribeAudioWithGroq(buffer: Buffer, apiKey: string, mimetype = "audio/ogg"): Promise<string> {
+  if (!apiKey || !apiKey.trim()) return "";
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  try {
+    const cleanMime = (mimetype || "audio/ogg").split(';')[0].trim() || "audio/ogg";
+    const extension = cleanMime.includes("mp4") ? "mp4" : cleanMime.includes("mpeg") ? "mp3" : "ogg";
+    const formData = new FormData();
+    const blob = new Blob([new Uint8Array(buffer)], { type: cleanMime });
+    formData.append("file", blob, `voice_note.${extension}`);
+    formData.append("model", "whisper-large-v3-turbo");
+
+    console.log(`[Groq STT] Transcribing ${buffer.length} bytes of audio via Groq Whisper...`);
+    const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey.trim()}`
+      },
+      body: formData,
+      signal: controller.signal
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[Groq STT] API error (${res.status}):`, errText);
+      return "";
+    }
+
+    const data = await res.json();
+    const transcript = data?.text || "";
+    console.log(`[Groq STT] Successfully transcribed audio: "${transcript}"`);
+    return transcript;
+  } catch (err: any) {
+    console.error("[Groq STT] Exception during transcription:", err.message || err);
+    return "";
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export async function transcribeAudio(buffer: Buffer, mimetype = "audio/ogg", config?: any): Promise<string> {
+  if (!buffer || buffer.length === 0) return "";
+
+  // 1. Gather keys
+  const geminiKey = getEnvKey("GEMINI_API_KEY") || process.env.GEMINI_API_KEY || getEnvKey("GOOGLE_API_KEY") || process.env.GOOGLE_API_KEY || config?.geminiApiKey || "";
+  const openaiKey = getEnvKey("OPENAI_API_KEY") || process.env.OPENAI_API_KEY || config?.openaiApiKey || "";
+  const groqKey = getEnvKey("GROQ_API_KEY") || process.env.GROQ_API_KEY || config?.groqApiKey || "";
+  const { apiKey: deepgramKey } = await getDeepgramSettings(config || {});
+  
+  const generalKey = getEnvKey("API_KEY") || process.env.API_KEY || config?.apiKey || "";
+
+  // 2. Try Gemini Flash STT if Gemini key available
+  const effectiveGeminiKey = geminiKey || (generalKey.startsWith("AIza") ? generalKey : "");
+  if (effectiveGeminiKey) {
+    const transcript = await transcribeAudioWithGemini(buffer, effectiveGeminiKey, mimetype);
+    if (transcript && transcript.trim()) return transcript.trim();
+  }
+
+  // 3. Try Groq Whisper STT if Groq key available
+  const effectiveGroqKey = groqKey || (generalKey.startsWith("gsk_") ? generalKey : "");
+  if (effectiveGroqKey) {
+    const transcript = await transcribeAudioWithGroq(buffer, effectiveGroqKey, mimetype);
+    if (transcript && transcript.trim()) return transcript.trim();
+  }
+
+  // 4. Try OpenAI Whisper STT if OpenAI key available
+  const effectiveOpenAIKey = openaiKey || ((generalKey.startsWith("sk-") || generalKey.startsWith("sk-proj-")) && !generalKey.startsWith("sk-ant-") && !generalKey.startsWith("sk-or-") ? generalKey : "");
+  if (effectiveOpenAIKey) {
+    const transcript = await transcribeAudioWithOpenAI(buffer, effectiveOpenAIKey, mimetype);
+    if (transcript && transcript.trim()) return transcript.trim();
+  }
+
+  // 5. Try Deepgram STT if Deepgram key available
+  if (deepgramKey) {
+    const transcript = await transcribeAudioWithDeepgram(buffer, deepgramKey, mimetype);
+    if (transcript && transcript.trim()) return transcript.trim();
+  }
+
+  console.warn("[STT Engine] No valid STT API key found (GEMINI_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, or DEEPGRAM_API_KEY) or all transcription attempts returned empty.");
+  return "";
 }
 
 export function detectKeyType(key: string): "anthropic" | "openrouter" | "deepseek" | "unknown" {
@@ -1653,24 +1826,8 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
 
     let voiceTranscript = "";
     if (hasAudio && audioBuffer) {
-      console.log(`[AI Handler] Voice note detected. Audio buffer size: ${audioBuffer.length} bytes. Deepgram key configured: ${!!deepgramApiKey}`);
-      
-      // Step 1: Try Deepgram STT if key is configured
-      if (deepgramApiKey) {
-        voiceTranscript = await transcribeAudioWithDeepgram(audioBuffer, deepgramApiKey, audioMime);
-        console.log(`[AI Handler] Deepgram STT result: "${voiceTranscript || "(empty)"}"`);
-      }
-      
-      // Step 2: Try OpenAI Whisper if Deepgram failed — only with actual OpenAI keys
-      if (!voiceTranscript) {
-        const openaiKey = getEnvKey("OPENAI_API_KEY") || process.env.OPENAI_API_KEY || "";
-        if (openaiKey && openaiKey.trim()) {
-          voiceTranscript = await transcribeAudioWithOpenAI(audioBuffer, openaiKey.trim(), audioMime);
-          console.log(`[AI Handler] OpenAI Whisper STT result: "${voiceTranscript || "(empty)"}"`);
-        } else {
-          console.log(`[AI Handler] No OpenAI key found for Whisper fallback. No Deepgram key either: ${!deepgramApiKey}`);
-        }
-      }
+      console.log(`[AI Handler] Voice note detected. Audio buffer size: ${audioBuffer.length} bytes. Mime: ${audioMime}`);
+      voiceTranscript = await transcribeAudio(audioBuffer, audioMime, config);
       
       if (voiceTranscript) {
         content = `[Customer Voice Note Transcribed]: "${voiceTranscript}"`;
