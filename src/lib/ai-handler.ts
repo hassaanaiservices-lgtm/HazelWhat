@@ -9,9 +9,14 @@ import path from "path";
 dns.setDefaultResultOrder("ipv4first");
 
 export function filterRelevantProducts(products: ProductItem[], userQuery: string): ProductItem[] {
-  if (!products || products.length <= 8) return products || [];
+  if (!products || products.length <= 15) return products || [];
 
   const query = (userQuery || "").toLowerCase();
+  const isMenuQuery = ["menu", "catalog", "rate list", "items", "list"].some(w => query.includes(w));
+  if (isMenuQuery) {
+    return products;
+  }
+
   const stopWords = new Set(["the", "a", "an", "is", "are", "and", "or", "in", "on", "at", "to", "for", "of", "with", "me", "i", "you", "we", "can", "please", "show", "price", "how", "much", "what", "kia", "ka", "ki", "kya", "hai", "mujhe", "chahiye", "batao", "bataen"]);
   const terms = query
     .replace(/[^\w\s]/gi, " ")
@@ -19,7 +24,7 @@ export function filterRelevantProducts(products: ProductItem[], userQuery: strin
     .filter(t => t.length > 2 && !stopWords.has(t));
 
   if (terms.length === 0) {
-    return products.slice(0, 8);
+    return products.slice(0, 15);
   }
 
   const scored = products.map(p => {
@@ -43,10 +48,10 @@ export function filterRelevantProducts(products: ProductItem[], userQuery: strin
   const matched = scored.filter(s => s.score > 0).map(s => s.product);
 
   if (matched.length > 0) {
-    return matched.slice(0, 8);
+    return matched.slice(0, 15);
   }
 
-  return products.slice(0, 8);
+  return products.slice(0, 15);
 }
 
 function getEnvKey(keyName: string): string {
@@ -1459,11 +1464,46 @@ async function processHybridEngine(
 
   // Check if user mentions any product in the catalog to start product-specific flow
   if (products.length > 0) {
+    const isMenuRequest = ["menu", "show menu", "send menu", "deikhao menu", "dikhao menu", "menu bhajo", "menu do", "menu bhej do", "catalog", "rate list", "list", "pizza menu", "card", "website"].some(w => lowerContent === w || lowerContent.includes(w));
+    
+    if (isMenuRequest) {
+      let menuText = `📜 *${activeTenant?.businessName || config.businessName || "OUR"} MENU* 🍕🍔\n\n`;
+      const grouped: Record<string, any[]> = {};
+      products.forEach(p => {
+        if (!p.title) return;
+        const titleLower = p.title.toLowerCase().trim();
+        if (["menu", "menu.", "pizza menu", "website", "link", "card"].includes(titleLower)) return;
+        const cat = p.category || "Menu Items";
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat].push(p);
+      });
+      
+      let itemCount = 0;
+      for (const [cat, items] of Object.entries(grouped)) {
+        menuText += `*${cat.toUpperCase()}*\n`;
+        items.forEach(p => {
+          itemCount++;
+          const priceClean = p.price && p.price !== "0" && p.price !== "N/A" ? `${currency} ${p.price}` : "";
+          menuText += `• *${p.title}*${priceClean ? ` — ${priceClean}` : ""}\n`;
+          if (p.description) {
+            menuText += `   _${p.description}_\n`;
+          }
+        });
+        menuText += `\n`;
+      }
+      if (itemCount > 0) {
+        menuText += `Order karne ke liye item ka naam aur quantity bata dein! 😊`;
+        return {
+          matched: true,
+          reply: menuText,
+          source: "product_catalog"
+        };
+      }
+    }
+
     let matchedProduct = null;
     let highestScore = 0;
     
-    // Skip product matching entirely if the user is just asking for the menu or typing generic categories
-    const isMenuRequest = ["menu", "show menu", "send menu", "deikhao menu", "pizza menu", "card", "website"].some(w => lowerContent === w || lowerContent.includes(w));
     const isGenericCategory = ["pizza", "burger", "deal", "combo", "fries", "drink", "shakes", "sides", "appetizers"].includes(lowerContent);
     
     if (!isMenuRequest && !isGenericCategory) {
@@ -2069,7 +2109,11 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
 14. ROMAN URDU PERSONA & LANGUAGE SUPPORT:
    - Always respond in natural, polite Roman Urdu for all food orders and inquiries!
    - Example: "Aapka order note kar liya hai! 🍕🍔 Total bill PKR 900 hai. Delivery address (House #, Street, Area) bata dein:"
-   - Keep vocabulary local, friendly, and natural.`;
+   - Keep vocabulary local, friendly, and natural.
+15. MENU & CATALOG DISPLAY RULE:
+   - When a customer asks for the menu, catalog, or available items (e.g. "menu", "menu bhajo", "show menu", "rate list"):
+   - YOU MUST PRINT THE ITEMS AND THEIR PRICES IN YOUR TEXT RESPONSE formatted neatly with category headers!
+   - NEVER say "Menu bhej rahe hain" without actually writing out the items and prices in the message.`;
 
     if (config.enabledFeatures && config.enabledFeatures.length > 0) {
       fullSystemPrompt += "\n\n=== ADVANCED FEATURES ENABLED ===\n";
