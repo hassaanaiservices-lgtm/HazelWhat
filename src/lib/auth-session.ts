@@ -4,7 +4,10 @@ import * as jose from "jose";
 function getSecretKey() {
   const SESSION_SECRET = process.env.SESSION_SECRET;
   if (!SESSION_SECRET) {
-    throw new Error("CRITICAL RUNTIME ERROR: SESSION_SECRET environment variable is not defined!");
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("CRITICAL RUNTIME ERROR: SESSION_SECRET environment variable is not defined!");
+    }
+    return new TextEncoder().encode("hazelsecretkey12345678901234567890_fallback");
   }
   return new TextEncoder().encode(SESSION_SECRET);
 }

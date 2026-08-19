@@ -2024,19 +2024,29 @@ Keep their history in mind and treat them like a valued returning customer.`;
           else if (toolCall.name === "place_order") {
             try {
               const qty = Math.max(1, parseInt(args.quantity) || 1);
-              let finalPrice = args.price;
+              let finalPrice = args.price || "";
               
-              if (args.price && qty > 1) {
-                const numericPrice = parseFloat(args.price.replace(/[^\d.]/g, ""));
-                if (!isNaN(numericPrice)) {
-                  const total = numericPrice * qty;
-                  if (args.price.includes("PKR")) {
-                    finalPrice = `PKR ${total}`;
-                  } else if (args.price.includes("Rs.")) {
-                    finalPrice = `Rs. ${total}`;
-                  } else {
-                    finalPrice = `${total}`;
-                  }
+              const numericPrice = parseFloat(finalPrice.replace(/[^\d.]/g, ""));
+              if (!isNaN(numericPrice)) {
+                const total = numericPrice * qty;
+                let cur: string = activeCurrency;
+                if (finalPrice.includes("PKR")) {
+                  cur = "PKR";
+                } else if (finalPrice.includes("Rs.")) {
+                  cur = "Rs.";
+                } else if (finalPrice.includes("$")) {
+                  cur = "$";
+                }
+                
+                if (cur === "$") {
+                  finalPrice = `$${total}`;
+                } else {
+                  finalPrice = `${cur} ${total}`;
+                }
+              } else {
+                const hasCurrency = /^[A-Za-z\$\£\€\¥]/i.test(finalPrice) || finalPrice.includes("PKR") || finalPrice.includes("Rs.");
+                if (!hasCurrency && finalPrice.trim() !== "") {
+                  finalPrice = `${activeCurrency} ${finalPrice}`;
                 }
               }
 

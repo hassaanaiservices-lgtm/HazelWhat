@@ -142,6 +142,16 @@ export default function DashboardPage() {
     if (!products || products.length === 0) return "";
     let text = "--- E-COMMERCE CATALOG ---\n\n";
     const grouped: Record<string, any[]> = {};
+
+    const formatPrice = (price: any) => {
+      if (price === undefined || price === null) return "N/A";
+      const str = String(price).trim();
+      if (str === "N/A" || str === "Hidden" || str === "0" || str === "0.00" || str === "") return str;
+      const hasCurrency = /^[A-Za-z\$\£\€\¥]/i.test(str) || str.includes("PKR") || str.includes("Rs.");
+      if (hasCurrency) return str;
+      return `${currency} ${str}`;
+    };
+
     products.forEach((p) => {
       const cat = p.category || "General Products";
       if (!grouped[cat]) grouped[cat] = [];
@@ -155,10 +165,11 @@ export default function DashboardPage() {
         if (p.variations && p.variations.length > 0) {
           variationsText = "\n  Variations:";
           p.variations.forEach((v: any) => {
-            variationsText += `\n    - ${v.title}: ${v.price}`;
+            variationsText += `\n    - ${v.title}: ${formatPrice(v.price)}`;
           });
         }
-        text += `- ${p.title} (Base Price/Range: ${p.price})\n  Image: ${p.image || "N/A"}\n  Link: ${p.link || "N/A"}${p.description ? `\n  Description: ${p.description}` : ""}${variationsText}\n\n`;
+        const basePrice = formatPrice(p.price);
+        text += `- ${p.title} (Base Price/Range: ${basePrice})\n  Image: ${p.image || "N/A"}\n  Link: ${p.link || "N/A"}${p.description ? `\n  Description: ${p.description}` : ""}${variationsText}\n\n`;
       });
     }
     return text;

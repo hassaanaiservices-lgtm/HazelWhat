@@ -31,30 +31,33 @@ export async function POST(request: NextRequest) {
     const rememberMe = remember !== false;
 
     // 1. Check Super Admin Login (using SUPER_ADMIN_PASSWORD env)
-    const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD;
-    if (!superAdminPassword) {
-      throw new Error("CRITICAL RUNTIME ERROR: SUPER_ADMIN_PASSWORD environment variable is not defined!");
-    }
-
     const isSuperAdminUser = (cleanUsername === "admin@hazelwhat.com" || cleanUsername === "admin");
-    const superAdminPassHash = bcrypt.hashSync(superAdminPassword, 10);
-    const isSuperAdminPass = bcrypt.compareSync(password.trim(), superAdminPassHash);
 
-    if (isSuperAdminUser && isSuperAdminPass) {
-      const sessionData = {
-        role: "admin",
-        tenantId: "admin",
-        username: "Super Admin",
-        name: "Hassaan (Super Admin)",
-        email: "admin@hazelwhat.com",
-        accessLevel: "read_write",
-      };
+    if (isSuperAdminUser) {
+      const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD;
+      if (!superAdminPassword) {
+        throw new Error("CRITICAL RUNTIME ERROR: SUPER_ADMIN_PASSWORD environment variable is not defined!");
+      }
 
-      const { opts, maxAge } = getCookieOptsAndMaxAge(rememberMe);
-      const jwtToken = await signJWT(sessionData, maxAge);
-      const res = NextResponse.json({ success: true, user: sessionData, redirectTo: "/admin" });
-      res.cookies.set("hazel_admin_session", jwtToken, opts);
-      return res;
+      const superAdminPassHash = bcrypt.hashSync(superAdminPassword, 10);
+      const isSuperAdminPass = bcrypt.compareSync(password.trim(), superAdminPassHash);
+
+      if (isSuperAdminPass) {
+        const sessionData = {
+          role: "admin",
+          tenantId: "admin",
+          username: "Super Admin",
+          name: "Hassaan (Super Admin)",
+          email: "admin@hazelwhat.com",
+          accessLevel: "read_write",
+        };
+
+        const { opts, maxAge } = getCookieOptsAndMaxAge(rememberMe);
+        const jwtToken = await signJWT(sessionData, maxAge);
+        const res = NextResponse.json({ success: true, user: sessionData, redirectTo: "/admin" });
+        res.cookies.set("hazel_admin_session", jwtToken, opts);
+        return res;
+      }
     }
 
     // 1b. Check Registered Team Admins from Store/Database

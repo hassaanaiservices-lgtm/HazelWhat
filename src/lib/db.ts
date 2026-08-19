@@ -86,6 +86,15 @@ export function formatProductsToCatalog(products: ProductItem[], currency: strin
   let text = "--- E-COMMERCE CATALOG ---\n\n";
   const grouped: Record<string, ProductItem[]> = {};
 
+  const formatPrice = (price: string | undefined | null) => {
+    if (!price) return "N/A";
+    const str = String(price).trim();
+    if (str === "N/A" || str === "Hidden" || str === "0" || str === "0.00" || str === "") return str;
+    const hasCurrency = /^[A-Za-z\$\£\€\¥]/i.test(str) || str.includes("PKR") || str.includes("Rs.");
+    if (hasCurrency) return str;
+    return `${currency} ${str}`;
+  };
+
   products.forEach(p => {
     const cat = p.category || "General Products";
     if (!grouped[cat]) grouped[cat] = [];
@@ -99,7 +108,7 @@ export function formatProductsToCatalog(products: ProductItem[], currency: strin
       if (p.variations && p.variations.length > 0) {
         variationsText = "\n  Variations:";
         p.variations.forEach(v => {
-          variationsText += `\n    - ${v.title}: ${v.price}`;
+          variationsText += `\n    - ${v.title}: ${formatPrice(v.price)}`;
         });
       }
       
@@ -107,8 +116,9 @@ export function formatProductsToCatalog(products: ProductItem[], currency: strin
       const cleanImage = sanitizeCatalogField(p.image);
       const cleanLink = sanitizeCatalogField(p.link);
       const cleanDescription = p.description ? sanitizeCatalogField(p.description) : "";
+      const basePrice = formatPrice(p.price);
 
-      text += `- ${cleanTitle} (Base Price/Range: ${p.price})\n  Image: ${cleanImage}\n  Link: ${cleanLink}${cleanDescription ? `\n  Description: ${cleanDescription}` : ""}${variationsText}\n\n`;
+      text += `- ${cleanTitle} (Base Price/Range: ${basePrice})\n  Image: ${cleanImage}\n  Link: ${cleanLink}${cleanDescription ? `\n  Description: ${cleanDescription}` : ""}${variationsText}\n\n`;
     });
   }
   return text;
