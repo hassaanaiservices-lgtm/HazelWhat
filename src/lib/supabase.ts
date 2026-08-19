@@ -8,7 +8,18 @@ const supabaseAnonKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEX
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 export const supabase = isSupabaseConfigured 
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        fetch: (url, options) => {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
+          return fetch(url, {
+            ...options,
+            signal: controller.signal
+          }).finally(() => clearTimeout(timeoutId));
+        }
+      }
+    })
   : null;
 
 export function handleSupabaseError(context: string, error: any) {
