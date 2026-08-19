@@ -7,7 +7,7 @@ function getSecretKey() {
     if (process.env.NODE_ENV === "production") {
       throw new Error("CRITICAL RUNTIME ERROR: SESSION_SECRET environment variable is not defined!");
     }
-    return new TextEncoder().encode("hazelsecretkey12345678901234567890_fallback");
+    return new TextEncoder().encode("hazelwhat_secret_key_default_2026_jwt");
   }
   return new TextEncoder().encode(SESSION_SECRET);
 }

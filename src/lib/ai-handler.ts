@@ -1,11 +1,53 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { WhatsAppManager } from "./whatsapp";
 import { DB, DB_DIR, formatProductsToCatalog, ChatMessage } from "./db";
+import { ProductItem } from "./scraper";
 import dns from "dns";
 import fs from "fs";
 import path from "path";
 
 dns.setDefaultResultOrder("ipv4first");
+
+export function filterRelevantProducts(products: ProductItem[], userQuery: string): ProductItem[] {
+  if (!products || products.length <= 8) return products || [];
+
+  const query = (userQuery || "").toLowerCase();
+  const stopWords = new Set(["the", "a", "an", "is", "are", "and", "or", "in", "on", "at", "to", "for", "of", "with", "me", "i", "you", "we", "can", "please", "show", "price", "how", "much", "what", "kia", "ka", "ki", "kya", "hai", "mujhe", "chahiye", "batao", "bataen"]);
+  const terms = query
+    .replace(/[^\w\s]/gi, " ")
+    .split(/\s+/)
+    .filter(t => t.length > 2 && !stopWords.has(t));
+
+  if (terms.length === 0) {
+    return products.slice(0, 8);
+  }
+
+  const scored = products.map(p => {
+    let score = 0;
+    const itemAny = p as any;
+    const name = (itemAny.name || p.title || "").toLowerCase();
+    const category = (p.category || "").toLowerCase();
+    const desc = (p.description || "").toLowerCase();
+    const tags = Array.isArray(itemAny.tags) ? itemAny.tags.join(" ").toLowerCase() : "";
+
+    for (const term of terms) {
+      if (name.includes(term)) score += 10;
+      if (category.includes(term)) score += 6;
+      if (tags.includes(term)) score += 4;
+      if (desc.includes(term)) score += 2;
+    }
+    return { product: p, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  const matched = scored.filter(s => s.score > 0).map(s => s.product);
+
+  if (matched.length > 0) {
+    return matched.slice(0, 8);
+  }
+
+  return products.slice(0, 8);
+}
 
 function getEnvKey(keyName: string): string {
   try {
@@ -1145,11 +1187,37 @@ async function processHybridEngine(
       }
 
       stateData.address = address;
-      const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_PAYMENT:${JSON.stringify(stateData)}]`;
-      await DB.updateCustomer(from, { preferences: newNote }, tenantId);
+      const productName = stateData.productName || "Product Order";
+      const selectedSize = stateData.selectedSize || "";
+      const finalProductName = selectedSize ? `${productName} (${selectedSize})` : productName;
+      const customerName = stateData.name || customer?.name || "Customer";
+      const deliveryAddress = address;
+      const finalPrice = stateData.price || "N/A";
+      const productImageUrl = stateData.image || undefined;
+
+      await DB.addOrder(from, {
+        productName: finalProductName,
+        customerName,
+        deliveryAddress,
+        paymentMethod: "Cash on Delivery",
+        price: finalPrice,
+        size: selectedSize || undefined,
+        productImageUrl
+      }, tenantId);
+
+      const cleanedNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim();
+      await DB.updateCustomer(from, { 
+        address: deliveryAddress,
+        deliveryAddress: deliveryAddress,
+        preferences: cleanedNote,
+        followUpLevel: 999,
+        leadStatus: "cold",
+        pipelineStage: "completed"
+      }, tenantId);
+
       return {
         matched: true,
-        reply: `Address noted!\n\nAap payment kaise karna chahenge?\n1. Cash on Delivery (COD)\n2. Online Transfer (JazzCash / EasyPaisa / Bank)\n\nPlease reply with 1 or 2.`,
+        reply: `🎉 *Aapka Order Confirm ho gaya hai!* 🍕🍔\n\n📦 *Item:* ${finalProductName}\n👤 *Name:* ${customerName}\n📍 *Delivery Address:* ${deliveryAddress}\n💳 *Payment:* Cash on Delivery (COD)\n💰 *Total Price:* ${currency} ${finalPrice}\n\nAapka order receive ho gaya hai aur 35-40 minutes mein aapke address par deliver ho jayega. Shukriya!`,
         source: "sequential_flow"
       };
     }
@@ -1206,6 +1274,14 @@ async function processHybridEngine(
         source: "sequential_flow"
       };
     }
+  }
+
+  // Multi-item order detector: If user is ordering multiple items (e.g. contains "and", "aur", "+", ",", or matches multiple products), yield to LLM for full multi-item calculation!
+  const hasConjunction = [" and ", " aur ", ",", " + ", " plus ", " & "].some(c => lowerContent.includes(c));
+  const productMatchesCount = products.filter(p => p.title && lowerContent.includes(p.title.toLowerCase().split(' ')[0])).length;
+  if (hasConjunction || productMatchesCount > 1) {
+    console.log(`[AI Handler] Multi-item order request detected ("${content}"). Yielding to LLM for multi-item invoice.`);
+    return { matched: false };
   }
 
   // Check if user mentions any product in the catalog to start product-specific flow
@@ -1303,9 +1379,29 @@ async function processHybridEngine(
             image: matchedProduct.image || null
           };
           
-          // Skip name check if already exists
+          const customerAny = customer as any;
+          const savedAddress = customerAny?.address || customerAny?.deliveryAddress;
           const hasCleanName = customer?.name && !customer.name.match(/^\+?[0-9]+$/) && customer.name !== from;
-          if (hasCleanName) {
+          if (savedAddress) {
+            // Address already saved — DO NOT ask for address again!
+            await DB.addOrder(from, {
+              customerName: customer?.name || from,
+              productName: matchedProduct.title,
+              productImageUrl: matchedProduct.image || undefined,
+              price: matchedProduct.price || "N/A",
+              deliveryAddress: savedAddress,
+              paymentMethod: "Cash on Delivery",
+              notes: "Placed via WhatsApp Bot (Saved Address)"
+            }, tenantId);
+
+            return {
+              matched: true,
+              reply: `✅ *Order Confirmed!* 🍕🍔\n\n- *Item*: ${matchedProduct.title}\n- *Price*: ${currency} ${matchedProduct.price || "N/A"}\n- *Delivery Address*: ${savedAddress}\n\nHum aapka order aapke is saved address par deliver kar rahe hain! (Agar address change karna ho to humein bata dein!)`,
+              image: matchedProduct.image && matchedProduct.image !== "N/A" ? matchedProduct.image : undefined,
+              imageCaption: matchedProduct.title,
+              source: "sequential_flow"
+            };
+          } else if (hasCleanName) {
             stateData.name = customer.name;
             const newNote = preferencesNote.replace(/\[FLOW_STATE:[^\]]+\]/g, "").trim() + ` [FLOW_STATE: AWAITING_ORDER_ADDRESS:${JSON.stringify(stateData)}]`;
             await DB.updateCustomer(from, { preferences: newNote }, tenantId);
@@ -1735,67 +1831,88 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     const activeCurrency = activeTenant?.currency || config.storeCurrency || "PKR";
     const activeBusinessName = activeTenant?.businessName || activeTenant?.name || config.businessName || "our store";
 
-    const structuredCatalog = activeProducts.length > 0 ? formatProductsToCatalog(activeProducts, activeCurrency) : "";
-    const rawCatalog = structuredCatalog;
-    const activeProductCatalog = rawCatalog.replace(/data:image\/[a-zA-Z0-9+\/=;-]+;base64,[A-Za-z0-9+\/=]+/g, "[Image]");
-    let fullSystemPrompt = `${activeSystemPrompt}\n\nToday's Date: ${new Date().toISOString().split('T')[0]}\n\nProduct Information & Catalog:\n${activeProductCatalog}`;
+    // 1. Fast Keyword & Greeting Guardrail (Zero-Cost Local Fast Path)
+    const cleanGreetingContent = lowerContent.replace(/[^\w\s]/gi, "").trim();
 
-    const customerTags = customer?.tags || [];
-    const hasRevivalTag = customerTags.includes("revival-sent") || customerTags.includes("revival-replied");
-    if (hasRevivalTag) {
-      fullSystemPrompt += `\n\n=== DEAD LEAD REVIVAL PIPELINE FUNNEL STRATEGY ===
-This customer is a revived dead lead who recently responded to our re-engagement outreach campaign.
-Follow this funnel strategy to turn them from a dead lead into a paying customer:
-1. RE-INTRODUCTION: Re-introduce our business/brand warmly, acknowledging that they were previously in contact, and maintain a friendly, warm tone.
-2. DISCOUNT/INCENTIVE: Offer them a special revival discount, exclusive promo code, or limited-time deal to incentivize them to buy right now.
-3. CONVERSATION OVER PITCHING: Do not immediately push a hard sell. Build rapport, ask if their needs have changed, or check if they need help with their previous inquiry.
-4. ACTIVE NURTURING: Offer a direct purchase link, guide them to place an order, or answer questions about product options.
-5. PROACTIVE FOLLOW-UPS: If they go quiet, schedule a follow-up message using your schedule_followup tool in 1-2 days to check in on the offer.
-Keep their history in mind and treat them like a valued returning customer.`;
+    if (config.keywordReplies && Array.isArray(config.keywordReplies)) {
+      for (const kr of config.keywordReplies) {
+        if (kr.keyword && lowerContent.includes(kr.keyword.toLowerCase())) {
+          console.log(`[AI Handler Guardrail] Fast-path keyword match for "${kr.keyword}". Replying without LLM call.`);
+          const sentMsg = await WhatsAppManager.sendMessage(from, kr.reply);
+          await DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: kr.reply }, resolvedTenantId);
+          return;
+        }
+      }
     }
-    
-    const botPurposeMode = config.botMode || "both";
-    fullSystemPrompt += `\n\n=== BOT MODE: ${botPurposeMode.toUpperCase()} (ORDERS & APPOINTMENTS SUPPORTED) ===\n`;
 
-    fullSystemPrompt += `\n\n=== CRITICAL RULES FOR ORDERS & APPOINTMENT BOOKINGS ===
-1. When showing a product to the customer, you must ALWAYS call the send_product_card function with the correct product data.
-2. You must NEVER write product images, links, or image URLs in the text message! Always use send_product_card tool instead.
-3. When the customer asks for the menu (e.g., "menu deikhao", "what is on the menu", "kya items hain"), you must call the "send_product_card" tool for the main products in the catalog (up to 3 products) so the customer sees actual visual product cards. Do NOT send a single generic "Menu" card, and do NOT invent any product page URLs (leave the product_page_url parameter empty/omitted if the catalog does not have a link).
-4. CRITICAL: The catalog may contain placeholder items like 'Menu' or 'menu.' with price Rs. 0.00. You must ignore these completely! Never recommend them, never show them, and never call send_product_card for them.
-5. If a product has SIZE VARIATIONS (Small, Medium, Large) with different prices, you MUST:
-   a. First call send_product_card with price set to "Hidden" (to show the card without a price)
-   b. Then ask the customer: "Konsa size chahiye? Small / Medium / Large?" and tell them each size's price.
-   c. After the customer picks a size, confirm the exact price from the catalog.
-6. BE CONVERSATIONAL AND NATURAL. You are a real team member for ${activeBusinessName}, not a robotic template machine.
-   - If a user just says "hi" or "AOA", reply with a SHORT warm greeting and ask how you can help. Do NOT immediately dump the full menu.
-   - If a user says "kia haal hai" or asks how you are, reply naturally like a human (e.g. "Main theek hoon, shukriya! Aap batao kaise madad karun?") — do NOT ignore the casual question.
-   - Keep replies SHORT (2-4 sentences). This is WhatsApp, not an email.
-7. NO REPEATING GREETINGS: Look at the recent chat history provided! If you have ALREADY greeted this customer, DO NOT say Walaikum Assalam again. Just answer their latest question directly.
-8. ORDER COLLECTION: When a customer wants to order something, follow these steps:
-    a. Confirm the product name and size/variation (ask if not specified)
-    b. Ask for delivery address
-    c. Do NOT ask for their contact/phone number (we already have it from WhatsApp).
-    d. Ask for their Full Name if it is not already known. If they do not provide it or skip it, you may still proceed to call the place_order tool using their phone number as the customer name. Do not get stuck in a loop asking for the name.
-    e. Ask for payment method (COD, JazzCash, EasyPaisa)
-    f. Call the place_order tool with ALL collected details (passing their WhatsApp number as the contact number).
-    g. CRITICAL: You must NEVER say 'Order confirmed', 'Aapka order confirm hai', or use checkmarks like '✅' until the place_order tool has successfully run. If you are still waiting for details, keep your question SHORT (1-2 sentences) and do NOT tell the user their order is confirmed.
-    h. Output the final order confirmation summary to the customer. Do NOT ask 'Is this correct?' or 'Confirm?' after calling the tool, as the order has already been successfully placed. Do not call the place_order tool twice.
-9. APPOINTMENTS & CALL BOOKINGS: When a customer wants to book a call, meeting, or appointment:
-   a. Ask what service/call type they need (e.g., Discovery Call, Consultation)
-   b. Call checkAvailability tool to get available time slots for their desired date
-   c. Present available slots and let them choose
-   d. Call bookAppointment tool with the confirmed details
-   e. Confirm the booking with date, time, and service name
-10. CATALOG ACCURACY: ONLY quote prices and products from the Product Information & Catalog provided above. NEVER invent products, prices, or services that are not in the catalog.
+    const existingChats = await DB.getChats(from, resolvedTenantId);
+    const simpleGreetings = new Set(["hi", "hello", "hey", "aoa", "assalam o alaikum", "assalamu alaikum", "slam", "salam"]);
+    if (existingChats.length <= 1 && simpleGreetings.has(cleanGreetingContent)) {
+      const fastGreeting = `Walaikum Assalam! Welcome to ${activeBusinessName}. How can I assist you today?`;
+      console.log(`[AI Handler Guardrail] Fast-path greeting reply for "${cleanGreetingContent}". Replying without LLM call.`);
+      const sentMsg = await WhatsAppManager.sendMessage(from, fastGreeting);
+      await DB.addChatMessage(from, { id: sentMsg?.key?.id, role: "assistant", content: fastGreeting }, resolvedTenantId);
+      return;
+    }
+
+    // 2. Smart Product Catalog Slicing (RAG Light - Token Optimization)
+    const filteredProducts = filterRelevantProducts(activeProducts, content);
+    const structuredCatalog = filteredProducts.length > 0 ? formatProductsToCatalog(filteredProducts, activeCurrency) : "";
+    const activeProductCatalog = structuredCatalog.replace(/data:image\/[a-zA-Z0-9+\/=;-]+;base64,[A-Za-z0-9+\/=]+/g, "[Image]");
+    const catalogNote = activeProducts.length > filteredProducts.length ? `\n(Showing top ${filteredProducts.length} relevant items out of ${activeProducts.length} total catalog products.)` : "";
+    const customerAny = customer as any;
+    const savedCustomerAddress = customerAny?.address || customerAny?.deliveryAddress || "";
+
+    // 3. DeepSeek Prompt Cache Prefix Assembly (Static Top, Dynamic Bottom)
+    const botPurposeMode = config.botMode || "both";
+    let fullSystemPrompt = `${activeSystemPrompt}\n\n=== BOT MODE: ${botPurposeMode.toUpperCase()} (ORDERS & APPOINTMENTS SUPPORTED) ===\n`;
+
+    if (savedCustomerAddress) {
+      fullSystemPrompt += `\n=== CUSTOMER SAVED DELIVERY ADDRESS: ${savedCustomerAddress} ===\n`;
+    }
+
+    fullSystemPrompt += `\n=== CRITICAL RULES FOR ORDERS & APPOINTMENT BOOKINGS ===
+1. ADDRESS PERSISTENCE & SAVED ADDRESS RULE:
+   - Check if "CUSTOMER SAVED DELIVERY ADDRESS" is provided above (${savedCustomerAddress ? `"${savedCustomerAddress}"` : "None"}).
+   - IF A SAVED ADDRESS IS PRESENT: DO NOT ASK FOR THE DELIVERY ADDRESS AGAIN!
+   - Instead, confirm: "Hum aapka order is pehle se saved address par deliver kar rahe hain: ${savedCustomerAddress}. (Agar address change karna ho to humein bata dein!)"
+   - ONLY ask for a delivery address if NO saved address exists or if the customer explicitly says they want to deliver to a new/different address.
+
+2. MULTIPLE FOOD ITEMS IN SINGLE ORDER:
+   - Customers can order multiple items and quantities at once (e.g. "Mujhe 2 Zinger Burgers, 1 Medium Pepperoni Pizza, aur 2 Mint Margaritas chahiye").
+   - You MUST support multi-item orders in a single transaction.
+   - Calculate total cost per item (Quantity x Unit Price).
+   - Calculate Grand Total Bill (Sum of all items).
+   - Call place_order tool with:
+     * productName: Combine all items ordered with quantities & sizes (e.g. "2x Smokey Zinger Burger Supreme, 1x Gourmet Pepperoni Feast Pizza (Medium), 2x Chilled Mint Margarita")
+     * price: Total calculated bill (e.g. "3680")
+     * deliveryAddress: The saved address ("${savedCustomerAddress || ""}") or user's provided address.
+
+3. Call the send_product_card function ONLY ONCE when FIRST recommending or introducing a product to the customer.
+4. NEVER call send_product_card again if you have ALREADY shown the product card in recent chat history, or if the customer is already in the process of placing an order. Just ask for their order details directly in text!
+5. You must NEVER write raw image links or URLs in the text message!
+6. If a product has SIZE VARIATIONS (Small, Medium, Large) with different prices:
+   a. First call send_product_card with price set to "Hidden"
+   b. Ask the customer: "Konsa size chahiye? Small / Medium / Large?" and state prices.
+   c. Confirm the exact price from the catalog after choice.
+7. BE CONVERSATIONAL AND NATURAL. You are a real team member for ${activeBusinessName}, not a robotic template machine.
+   - Keep replies SHORT (2-4 sentences max per message).
+8. NO REPEATING GREETINGS: If you have ALREADY greeted this customer, DO NOT say Walaikum Assalam again. Answer their latest question directly.
+9. ORDER COLLECTION FLOW & NO PAYMENT QUESTIONS:
+    a. Confirm items, quantities, and sizes/variations.
+    b. Check saved address. If saved, confirm delivery to saved address. If missing, ask ONLY for delivery address.
+    c. DO NOT ASK FOR PAYMENT METHOD! Always default to "Cash on Delivery" (COD). Never ask 1 or 2 for payment options or ask how they want to pay unless the customer explicitly requests online transfer.
+    d. Do NOT ask for phone number (we already have it from WhatsApp).
+    e. Call place_order tool with all details and paymentMethod set to "Cash on Delivery".
+    f. CRITICAL: NEVER say 'Order confirmed' until place_order tool has successfully run.
+10. CATALOG ACCURACY: ONLY quote prices and products from the catalog. NEVER invent items or prices.
 11. PROACTIVE FOLLOW-UPS: If you promise to check back or follow up with the customer later, you MUST call schedule_followup tool with the appropriate time.
 12. CRM PROFILE UPDATES: When a customer tells you their name, shows strong buying interest, or reaches a milestone in the conversation, call update_customer_profile to save their info and update their pipeline stage.
 13. VOICE NOTES: When you receive a voice note (marked with 🎤 [Voice Note] followed by the transcription), respond directly to what they said. Treat the transcription as if the customer typed it.
-14. 4-LANGUAGE SUPPORT: Automatically detect the user's language and ALWAYS respond in the SAME language:
-   - Roman Urdu: "AOA! Shukriya contact karne ka."
-   - Urdu: "السلام علیکم! شکریہ"
-   - Pashto: "سلام! مننه"
-   - English: "Hello! Thanks for reaching out."
-   Keep vocabulary natural and local. Never mix languages awkwardly.`;
+14. ROMAN URDU PERSONA & LANGUAGE SUPPORT:
+   - Always respond in natural, polite Roman Urdu for all food orders and inquiries!
+   - Example: "Aapka order note kar liya hai! 🍕🍔 Total bill PKR 900 hai. Delivery address (House #, Street, Area) bata dein:"
+   - Keep vocabulary local, friendly, and natural.`;
 
     if (config.enabledFeatures && config.enabledFeatures.length > 0) {
       fullSystemPrompt += "\n\n=== ADVANCED FEATURES ENABLED ===\n";
@@ -1821,9 +1938,19 @@ Keep their history in mind and treat them like a valued returning customer.`;
     }
     fullSystemPrompt += "\n\n=== RESPONSE FORMAT & TOKEN OPTIMIZATION ===\n- Keep answers EXTREMELY short and direct (1-2 sentences max, under 30 words).\n- Do not repeat previous conversation context, greeting, or output unnecessary filler text.\n- When asked for products/prices, list items concisely without fluff.\n";
 
-    const history = await DB.getChats(from, resolvedTenantId);
+    // Dynamic tail content to preserve prompt cache hits
+    fullSystemPrompt += `\n\nProduct Information & Relevant Catalog:${catalogNote}\n${activeProductCatalog}`;
+    fullSystemPrompt += `\n\nToday's Date: ${new Date().toISOString().split('T')[0]}`;
+
+    const customerTags = customer?.tags || [];
+    const hasRevivalTag = customerTags.includes("revival-sent") || customerTags.includes("revival-replied");
+    if (hasRevivalTag) {
+      fullSystemPrompt += `\n\n=== DEAD LEAD REVIVAL PIPELINE FUNNEL STRATEGY ===
+This customer is a revived dead lead who recently responded to our re-engagement outreach campaign. Treat them as a returning customer and offer a special discount.`;
+    }
+
     // Filter out system messages and sanitize past assistant refusal messages so LLM never gets primed by past errors!
-    let recentHistory = history
+    let recentHistory = existingChats
       .filter((m: any) => m.role === 'user' || m.role === 'assistant')
       .slice(-8)
       .map((m: any) => {
@@ -2130,8 +2257,9 @@ Keep their history in mind and treat them like a valued returning customer.`;
           content: toolResults
         } as any);
 
-        console.log("[AI Handler] Sending tool results back to AI...");
-        const fallbackResult2 = await callLLMWithFallback(config, fullSystemPrompt, recentHistory, tools);
+        console.log("[AI Handler] Sending tool results back to AI with compact system prompt...");
+        const compactToolSystemPrompt = `You are a concise sales assistant for ${activeBusinessName}. Complete the action and provide a brief confirmation message (1-2 sentences max). Do not repeat catalog or rules.`;
+        const fallbackResult2 = await callLLMWithFallback(config, compactToolSystemPrompt, recentHistory, tools);
         usedProvider = fallbackResult2.provider;
         res = fallbackResult2.res;
 

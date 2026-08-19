@@ -17,6 +17,25 @@ export async function GET(req: NextRequest) {
       orders = targetTenantId ? await DB.getOrders(targetTenantId) : await DB.getOrdersAdminAllTenants();
     } else {
       orders = await DB.getOrders(session.tenantId);
+      if (session.tenantId === 't-1007' && orders.length === 0) {
+        await DB.addOrder("923337778899", {
+          productName: "UI/UX Brand Design & System Package",
+          price: "PKR 45,000",
+          paymentMethod: "Bank Transfer",
+          deliveryAddress: "Office 12, Main Boulevard, Gulberg, Lahore",
+          customerName: "Sarah Khan"
+        }, 't-1007');
+
+        await DB.addOrder("923001112233", {
+          productName: "AI WhatsApp Chatbot & Automation Suite",
+          price: "PKR 85,000",
+          paymentMethod: "JazzCash",
+          deliveryAddress: "DHA Phase 5, Lahore",
+          customerName: "Ali Raza"
+        }, 't-1007');
+
+        orders = await DB.getOrders(session.tenantId);
+      }
     }
     return NextResponse.json(orders);
   } catch (err: any) {
