@@ -2038,6 +2038,23 @@ This customer is a revived dead lead who recently responded to our re-engagement
               };
               await DB.addOrder(from, orderData, resolvedTenantId);
               await DB.updateCustomer(from, { followUpLevel: 999, leadStatus: "cold", pipelineStage: "completed" }, resolvedTenantId);
+
+              // Instant WhatsApp Alert Notification to Kitchen / Manager Phone!
+              try {
+                const activeTenantConfig = await DB.getTenantConfig(resolvedTenantId);
+                const managerPhone = activeTenantConfig?.managerPhone || activeTenantConfig?.notificationPhone;
+                if (managerPhone) {
+                  const cleanManagerPhone = String(managerPhone).replace(/[^0-9]/g, '');
+                  if (cleanManagerPhone) {
+                    const alertMsg = `🚨 *NEW WHATSAPP ORDER RECEIVED!*\n\n📦 *Order*: ${orderData.productName}\n💰 *Price*: ${orderData.price}\n📍 *Address*: ${orderData.deliveryAddress || 'N/A'}\n👤 *Customer*: ${orderData.customerName} (+${from})\n💳 *Payment*: ${orderData.paymentMethod || 'COD'}\n⏰ *Time*: ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}\n\n*Please dispatch / prepare food immediately!*`;
+                    const { WhatsAppManager } = await import("@/lib/whatsapp");
+                    WhatsAppManager.sendMessage(cleanManagerPhone, { text: alertMsg }, resolvedTenantId).catch(err => console.error("[Order Alert] Failed to send to manager:", err));
+                  }
+                }
+              } catch (alertErr) {
+                console.error("[Order Alert Error]:", alertErr);
+              }
+
               toolResult = JSON.stringify({ success: true, message: `Order placed and saved to database successfully. Quantity: ${qty}. Total Price: ${finalPrice}. You may now confirm the final order details to the user.` });
             } catch (err: any) {
               console.error("[AI Handler] place_order error:", err);

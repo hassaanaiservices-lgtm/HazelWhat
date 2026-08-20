@@ -561,10 +561,19 @@ export default function DashboardPage() {
 
   // Sound Alert for Received Orders
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
-  const [newOrderBanner, setNewOrderBanner] = useState<{ id: string; customerName: string; productName: string; amount?: string; time: string } | null>(null);
+  const [newOrderBanner, setNewOrderBanner] = useState<{ id: string; phone?: string; customerName: string; productName: string; amount?: string; time: string } | null>(null);
   const knownOrderIdsRef = useRef<Set<string>>(new Set());
   const isFirstOrderFetchRef = useRef<boolean>(true);
   const lastLoggedStatusRef = useRef<string | null>(null);
+  const orderAlarmIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const stopOrderAlarm = () => {
+    if (orderAlarmIntervalRef.current) {
+      clearInterval(orderAlarmIntervalRef.current);
+      orderAlarmIntervalRef.current = null;
+    }
+    setNewOrderBanner(null);
+  };
 
   useEffect(() => {
     const storedSound = localStorage.getItem("hazel_order_sound_enabled");
@@ -846,15 +855,20 @@ export default function DashboardPage() {
           });
 
           if (brandNewOrder) {
-            // Play sweet sound alert if enabled
+            // Start continuous loud alarm bell if enabled until accepted
             if (soundEnabled) {
-              playSweetOrderSound(0.95);
+              playSweetOrderSound(0.98);
+              if (orderAlarmIntervalRef.current) clearInterval(orderAlarmIntervalRef.current);
+              orderAlarmIntervalRef.current = setInterval(() => {
+                playSweetOrderSound(0.98);
+              }, 1800);
             }
 
             // Trigger floating order alert banner
             const customerName = customers[brandNewOrder.phone]?.name || brandNewOrder.phone || "Customer";
             setNewOrderBanner({
               id: brandNewOrder.id,
+              phone: brandNewOrder.phone,
               customerName,
               productName: brandNewOrder.productName || "New Order",
               amount: brandNewOrder.price || brandNewOrder.amount || "",
@@ -1808,35 +1822,40 @@ export default function DashboardPage() {
   return (
     <div className="h-screen w-full flex bg-[#f5f6f8] font-sans overflow-hidden text-slate-800 relative">
       
-      {/* Floating Sweet Sound Order Alert Banner */}
+      {/* Floating Continuous Loud Order Alert Banner */}
       {newOrderBanner && (
-        <div className="fixed top-5 right-5 z-50 animate-bounce bg-gradient-to-r from-purple-700 via-indigo-700 to-purple-800 text-white p-4 rounded-2xl shadow-2xl border border-purple-300/40 flex items-center gap-4 max-w-md">
-          <div className="bg-white/20 p-3 rounded-xl flex items-center justify-center animate-pulse">
-            <Volume2 className="h-6 w-6 text-yellow-300" />
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-pulse bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white p-4 sm:p-5 rounded-2xl shadow-2xl border-2 border-yellow-300 flex items-center gap-5 max-w-xl w-[92%] sm:w-full">
+          <div className="bg-yellow-400 text-slate-900 p-3 rounded-full flex items-center justify-center animate-bounce shadow-lg flex-shrink-0">
+            <Volume2 className="h-7 w-7 text-red-700" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="bg-yellow-400 text-slate-900 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">🔔 New Order</span>
-              <span className="text-purple-200 text-xs">{newOrderBanner.time}</span>
+              <span className="bg-yellow-300 text-red-950 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">🚨 NEW ORDER RECEIVED!</span>
+              <span className="text-rose-100 text-xs font-bold">{newOrderBanner.time}</span>
             </div>
-            <h4 className="text-sm font-extrabold text-white truncate mt-1">{newOrderBanner.productName}</h4>
-            <p className="text-xs text-purple-100 truncate">Customer: <span className="font-bold text-white">{newOrderBanner.customerName}</span> {newOrderBanner.amount && `• ${newOrderBanner.amount}`}</p>
+            <h4 className="text-sm sm:text-base font-black text-white truncate mt-1">{newOrderBanner.productName}</h4>
+            <p className="text-xs text-rose-100 truncate">Customer: <span className="font-extrabold text-white">{newOrderBanner.customerName}</span> {newOrderBanner.amount && `• ${newOrderBanner.amount}`}</p>
           </div>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2 flex-shrink-0">
             <button 
               onClick={() => {
-                setActiveTab('orders');
-                setNewOrderBanner(null);
+                stopOrderAlarm();
+                if (newOrderBanner.phone) {
+                  setSelectedChat(newOrderBanner.phone);
+                  setActiveTab('inbox');
+                } else {
+                  setActiveTab('orders');
+                }
               }} 
-              className="px-3.5 py-1.5 bg-yellow-400 hover:bg-yellow-300 text-slate-900 text-xs font-extrabold rounded-lg transition-all shadow-md active:scale-95 cursor-pointer"
+              className="px-3.5 py-1.5 bg-yellow-400 hover:bg-yellow-300 text-slate-900 text-xs font-black rounded-xl transition-all shadow-lg active:scale-95 cursor-pointer flex items-center gap-1.5 justify-center"
             >
-              View Order
+              <MessageSquare className="w-4 h-4" /> Chat & View
             </button>
             <button 
-              onClick={() => setNewOrderBanner(null)} 
-              className="p-1 hover:bg-white/10 rounded text-purple-200 hover:text-white transition-all text-center cursor-pointer"
+              onClick={stopOrderAlarm} 
+              className="px-3.5 py-1 bg-white/20 hover:bg-white/30 text-white text-[11px] font-extrabold rounded-xl transition-all text-center cursor-pointer flex items-center justify-center gap-1"
             >
-              <X className="h-4 w-4 mx-auto" />
+              <CheckCircle2 className="w-3.5 h-3.5" /> Accept & Stop
             </button>
           </div>
         </div>
@@ -2288,6 +2307,18 @@ export default function DashboardPage() {
                     onChange={e => setConfig({...config, workingHours: e.target.value})}
                     className="w-full bg-slate-50 border border-slate-200/80 rounded-xl px-4 py-3 text-slate-900 font-semibold focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 text-sm transition-all"
                     placeholder="e.g. 9:00 AM - 5:00 PM"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-purple-700 mb-2 uppercase tracking-wider flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-purple-600" /> Kitchen / Manager WhatsApp Alert Number
+                  </label>
+                  <input 
+                    type="text" 
+                    value={config.managerPhone || ''} 
+                    onChange={e => setConfig({...config, managerPhone: e.target.value})}
+                    className="w-full bg-purple-50/50 border border-purple-200 rounded-xl px-4 py-3 text-slate-900 font-semibold focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 text-sm transition-all"
+                    placeholder="e.g. 923001234567 (Receive instant WhatsApp notifications for every new order!)"
                   />
                 </div>
               </div>
