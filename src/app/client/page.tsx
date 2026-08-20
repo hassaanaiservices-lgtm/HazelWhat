@@ -4848,18 +4848,18 @@ export default function DashboardPage() {
               {/* Filter Pills */}
               <div className="flex gap-2 mb-2 flex-wrap">
                 {[
-                  { id: 'all', label: 'All Items' },
-                  { id: 'new_order', label: 'New Order' },
-                  { id: 'under_baking', label: 'Under Baking' },
-                  { id: 'delivered', label: 'Delivered' },
-                  { id: 'cancelled', label: 'Cancelled' }
+                  { id: 'all', label: 'All Items', activeClass: 'bg-[#111111] text-white shadow-md' },
+                  { id: 'new_order', label: '🔵 New Order', activeClass: 'bg-blue-600 text-white shadow-md ring-2 ring-blue-400/40' },
+                  { id: 'under_baking', label: '🟠 Under Baking', activeClass: 'bg-amber-500 text-white shadow-md ring-2 ring-amber-400/40' },
+                  { id: 'delivered', label: '🟢 Delivered', activeClass: 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400/40' },
+                  { id: 'cancelled', label: '🔴 Cancelled', activeClass: 'bg-rose-600 text-white shadow-md ring-2 ring-rose-400/40' }
                 ].map(filter => (
                   <button
                     key={filter.id}
                     onClick={() => setOrderFilter(filter.id as any)}
-                    className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer ${
+                    className={`px-4 py-1.5 rounded-full text-xs font-black transition-all cursor-pointer ${
                       orderFilter === filter.id 
-                        ? 'bg-[#111111] text-white shadow-xs' 
+                        ? filter.activeClass 
                         : 'bg-[#ebe7e1] text-[#626260] hover:text-[#111111] hover:bg-[#e2ddd5]'
                     }`}
                   >
@@ -4990,7 +4990,7 @@ export default function DashboardPage() {
                                 )}
                               </td>
 
-                              {/* Interactive Text-Only Status Dropdown Select (No Pending / Confirmed) */}
+                              {/* Interactive High-Contrast Status Dropdown Select */}
                               <td className="py-3.5 px-4 align-top">
                                 <select
                                   value={order.status === 'pending' ? 'new_order' : order.status === 'confirmed' ? 'under_baking' : order.status}
@@ -5003,18 +5003,18 @@ export default function DashboardPage() {
                                     });
                                     fetchOrders();
                                   }}
-                                  className={`text-xs font-semibold px-2.5 py-1 rounded-lg border outline-none cursor-pointer transition-all ${
-                                    statusLower === 'new_order' || statusLower === 'new' || statusLower === 'new order' || statusLower === 'pending' ? 'bg-sky-50 text-sky-800 border-sky-300' :
-                                    statusLower === 'under_baking' || statusLower === 'under baking' || statusLower === 'under_booking' || statusLower === 'confirmed' ? 'bg-amber-50 text-amber-800 border-amber-300' :
-                                    statusLower === 'delivered' || statusLower === 'deliver' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' :
-                                    statusLower === 'cancelled' ? 'bg-rose-50 text-rose-800 border-rose-300' :
-                                    'bg-[#f5f1ec] text-[#626260] border-[#d3cec6]'
+                                  className={`text-xs font-black px-3 py-1.5 rounded-xl border-2 outline-none cursor-pointer transition-all shadow-sm ${
+                                    statusLower === 'new_order' || statusLower === 'new' || statusLower === 'new order' || statusLower === 'pending' ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-400/30 animate-pulse' :
+                                    statusLower === 'under_baking' || statusLower === 'under baking' || statusLower === 'under_booking' || statusLower === 'confirmed' ? 'bg-amber-500 text-white border-amber-600 ring-2 ring-amber-400/30' :
+                                    statusLower === 'delivered' || statusLower === 'deliver' ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400/30' :
+                                    statusLower === 'cancelled' ? 'bg-rose-600 text-white border-rose-700 ring-2 ring-rose-400/30' :
+                                    'bg-slate-700 text-white border-slate-800'
                                   }`}
                                 >
-                                  <option value="new_order" className="bg-white text-sky-800 font-semibold">New Order</option>
-                                  <option value="under_baking" className="bg-white text-amber-800 font-semibold">Under Baking</option>
-                                  <option value="delivered" className="bg-white text-emerald-800 font-semibold">Delivered</option>
-                                  <option value="cancelled" className="bg-white text-rose-800 font-semibold">Cancelled</option>
+                                  <option value="new_order" className="bg-blue-600 text-white font-extrabold py-1">🔵 New Order</option>
+                                  <option value="under_baking" className="bg-amber-600 text-white font-extrabold py-1">🟠 Under Baking</option>
+                                  <option value="delivered" className="bg-emerald-600 text-white font-extrabold py-1">🟢 Delivered</option>
+                                  <option value="cancelled" className="bg-rose-600 text-white font-extrabold py-1">🔴 Cancelled</option>
                                 </select>
                               </td>
 
@@ -5064,7 +5064,7 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="flex items-center gap-3">
-                      {/* Change Status Dropdown in Drawer (Clean Text Only, No Pending/Confirmed) */}
+                      {/* Change Status Dropdown in Drawer */}
                       <select
                         value={selectedOrderDetail.status === 'pending' ? 'new_order' : selectedOrderDetail.status === 'confirmed' ? 'under_baking' : selectedOrderDetail.status}
                         onChange={async (e) => {
@@ -5077,18 +5077,18 @@ export default function DashboardPage() {
                           selectedOrderDetail.status = newStatus;
                           fetchOrders();
                         }}
-                        className={`text-xs font-semibold px-3 py-1.5 rounded-lg border outline-none cursor-pointer transition-all ${
-                          selectedOrderDetail.status === 'new_order' || selectedOrderDetail.status === 'new' || selectedOrderDetail.status === 'pending' ? 'bg-sky-50 text-sky-800 border-sky-300' :
-                          selectedOrderDetail.status === 'under_baking' || selectedOrderDetail.status === 'under baking' || selectedOrderDetail.status === 'confirmed' ? 'bg-amber-50 text-amber-800 border-amber-300' :
-                          selectedOrderDetail.status === 'delivered' || selectedOrderDetail.status === 'deliver' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' :
-                          selectedOrderDetail.status === 'cancelled' ? 'bg-rose-50 text-rose-800 border-rose-300' :
-                          'bg-[#f5f1ec] text-[#626260] border-[#d3cec6]'
+                        className={`text-xs font-black px-3 py-1.5 rounded-xl border-2 outline-none cursor-pointer transition-all shadow-sm ${
+                          selectedOrderDetail.status === 'new_order' || selectedOrderDetail.status === 'new' || selectedOrderDetail.status === 'pending' ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-400/30 animate-pulse' :
+                          selectedOrderDetail.status === 'under_baking' || selectedOrderDetail.status === 'under baking' || selectedOrderDetail.status === 'confirmed' ? 'bg-amber-500 text-white border-amber-600 ring-2 ring-amber-400/30' :
+                          selectedOrderDetail.status === 'delivered' || selectedOrderDetail.status === 'deliver' ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400/30' :
+                          selectedOrderDetail.status === 'cancelled' ? 'bg-rose-600 text-white border-rose-700 ring-2 ring-rose-400/30' :
+                          'bg-slate-700 text-white border-slate-800'
                         }`}
                       >
-                        <option value="new_order" className="bg-white text-sky-800 font-semibold">New Order</option>
-                        <option value="under_baking" className="bg-white text-amber-800 font-semibold">Under Baking</option>
-                        <option value="delivered" className="bg-white text-emerald-800 font-semibold">Delivered</option>
-                        <option value="cancelled" className="bg-white text-rose-800 font-semibold">Cancelled</option>
+                        <option value="new_order" className="bg-blue-600 text-white font-extrabold py-1">🔵 New Order</option>
+                        <option value="under_baking" className="bg-amber-600 text-white font-extrabold py-1">🟠 Under Baking</option>
+                        <option value="delivered" className="bg-emerald-600 text-white font-extrabold py-1">🟢 Delivered</option>
+                        <option value="cancelled" className="bg-rose-600 text-white font-extrabold py-1">🔴 Cancelled</option>
                       </select>
 
                       <button 
