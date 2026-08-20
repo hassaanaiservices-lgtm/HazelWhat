@@ -1737,7 +1737,7 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     c. DO NOT ASK FOR PAYMENT METHOD! Always default to "Cash on Delivery" (COD). Never ask 1 or 2 for payment options or ask how they want to pay unless the customer explicitly requests online transfer.
     d. Do NOT ask for phone number (we already have it from WhatsApp).
     e. Call place_order tool with all details and paymentMethod set to "Cash on Delivery".
-    f. CRITICAL: NEVER say 'Order confirmed' until place_order tool has successfully run.
+    f. CRITICAL MANDATORY RULE: NEVER confirm an order in text alone without calling place_order tool! You MUST call place_order tool call whenever an order is confirmed so it is saved to the database.
 10. CATALOG ACCURACY: ONLY quote prices and products from the catalog. NEVER invent items or prices.
 11. PROACTIVE FOLLOW-UPS: If you promise to check back or follow up with the customer later, you MUST call schedule_followup tool with the appropriate time.
 12. CRM PROFILE UPDATES: When a customer tells you their name, shows strong buying interest, or reaches a milestone in the conversation, call update_customer_profile to save their info and update their pipeline stage.
@@ -2211,6 +2211,65 @@ This customer is a revived dead lead who recently responded to our re-engagement
       ) {
         console.warn("[AI Handler] Intercepted voice note refusal message from AI. Replacing with helpful greeting.");
         aiReply = "Hello! Thank you for your voice note. I am glad to assist you! How can I help you with our product catalog, pricing, or placing an order today?";
+      }
+
+      // FAIL-SAFE ORDER INTERCEPTOR:
+      // If AI reply confirms order placement (e.g. "Your order has been placed", "order confirmed", "delivering to")
+      // BUT no order was recorded in DB for this phone in the last 15 minutes, AUTO-SAVE IT IMMEDIATELY!
+      try {
+        const lowerAiReply = (aiReply || "").toLowerCase();
+        const isOrderConfirmationReply = 
+          lowerAiReply.includes("order has been placed") ||
+          lowerAiReply.includes("order is placed") ||
+          lowerAiReply.includes("order confirmed") ||
+          lowerAiReply.includes("order confirm kar") ||
+          lowerAiReply.includes("order note kar");
+
+        if (isOrderConfirmationReply) {
+          const existingOrders = await DB.getOrders(resolvedTenantId);
+          const fifteenMinutesAgo = new Date(Date.now() - 900 * 1000).toISOString();
+          const recentOrder = existingOrders.find(o => o.phone === from && (o.timestamp || o.createdAt) >= fifteenMinutesAgo);
+          
+          if (!recentOrder) {
+            console.warn(`[AI Handler Safeguard] Order confirmation detected in AI reply for ${from}, but no DB order record found! Auto-saving order to DB...`);
+            
+            // Auto-extract item name from AI reply
+            let extractedProduct = "WhatsApp Order";
+            const productMatch = aiReply.match(/(?:🍗|🍔|🍕|🥟|🍣|🧃|📦|Order:?)\s*([^\n—–\-•,]+)/i) || 
+                                 aiReply.match(/(?:placed|confirmed|for)\!?\s*([^\n—–\-•,]+)/i);
+            if (productMatch && productMatch[1]) {
+              extractedProduct = productMatch[1].trim();
+            }
+
+            // Auto-extract price from AI reply
+            let extractedPrice = "COD";
+            const priceMatch = aiReply.match(/(?:PKR|Rs\.?|\$)\s*\d+(?:,\d+)?/i) || aiReply.match(/\d+\s*(?:PKR|Rs\.?)/i);
+            if (priceMatch) {
+              extractedPrice = priceMatch[0].trim();
+            }
+
+            // Auto-extract delivery address from AI reply
+            let extractedAddress = "Address provided in chat";
+            const addressMatch = aiReply.match(/(?:delivering to|address:?|location:?)\s*([^\n.!\n]+)/i);
+            if (addressMatch && addressMatch[1]) {
+              extractedAddress = addressMatch[1].trim();
+            }
+
+            await DB.addOrder(from, {
+              productName: extractedProduct,
+              price: extractedPrice,
+              deliveryAddress: extractedAddress,
+              paymentMethod: "Cash on Delivery",
+              customerName: customer?.name || from,
+              notes: "Auto-captured by Fail-Safe Interceptor"
+            }, resolvedTenantId);
+
+            await DB.updateCustomer(from, { followUpLevel: 999, leadStatus: "cold", pipelineStage: "completed" }, resolvedTenantId);
+            console.log(`[AI Handler Safeguard] Successfully auto-saved fallback order for ${from}!`);
+          }
+        }
+      } catch (safeguardErr) {
+        console.error("[AI Handler Safeguard Error]:", safeguardErr);
       }
 
       sentMsg = await WhatsAppManager.sendMessage(from, aiReply);

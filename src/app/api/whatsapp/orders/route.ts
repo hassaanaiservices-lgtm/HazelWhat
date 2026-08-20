@@ -24,6 +24,18 @@ export async function GET(req: NextRequest) {
     }
 
     let orders = await DB.getOrders(effectiveTenantId);
+
+    // Resilient Fallback: Merge orders from active socket tenant if different
+    const activeFromSock = await WhatsAppManager.resolveActiveTenantFromSocket();
+    if (activeFromSock && activeFromSock !== effectiveTenantId) {
+      const sockOrders = await DB.getOrders(activeFromSock);
+      if (sockOrders.length > 0) {
+        const orderMap = new Map();
+        [...orders, ...sockOrders].forEach(o => orderMap.set(o.id, o));
+        orders = Array.from(orderMap.values());
+      }
+    }
+
     if (effectiveTenantId === 't-1007' && orders.length === 0) {
       await DB.addOrder("923337778899", {
         productName: "UI/UX Brand Design & System Package",
