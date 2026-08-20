@@ -221,102 +221,70 @@ export class WhatsAppManager {
         }
 
         // --- SYSTEM B: Generic Sequence Follow-ups ---
-        console.log(`\n--- [Cron Tick] System B Follow-up Check @ ${new Date(now).toLocaleTimeString()} ---`);
+        console.log(`--- [Cron Tick] System B Follow-up Check @ ${new Date(now).toLocaleTimeString()} ---`);
+        const configCache: Record<string, any> = {};
 
         for (const phone in chats) {
           const messages = chats[phone];
           if (!messages || messages.length === 0) continue;
 
-          // Only follow up if there is active customer interaction since session connected
-          const userMessages = messages.filter(m => m.role === 'user');
-          if (userMessages.length === 0) {
-            console.log(`  -> Skipping ${phone}: No user message in history.`);
-            continue;
-          }
-          const lastUserMessage = userMessages[userMessages.length - 1];
-          if (new Date(lastUserMessage.timestamp).getTime() < sessionConnectedAt) {
-            console.log(`  -> Skipping ${phone}: Last user message was before the active session connected.`);
-            continue;
-          }
-          
-          const itemTenantId = messages[0]?.tenantId || messages[messages.length - 1]?.tenantId;
-          const customer = await DB.getCustomer(phone, itemTenantId);
-          const tenantId = customer?.tenantId || itemTenantId;
-          const tenantConfig = await DB.getConfig(tenantId);
-          
-          if (!tenantConfig.followUps || tenantConfig.followUps.length === 0) continue;
-          
+          // FAST GUARD 1: We only follow up if the bot (assistant) was the last one to speak
           const lastMessage = messages[messages.length - 1];
+          if (!lastMessage || lastMessage.role !== 'assistant') continue;
+
+          // FAST GUARD 2: Check minimum elapsed time (at least 2 minutes) before hitting DB
           const elapsedMs = now - new Date(lastMessage.timestamp).getTime();
-          const elapsedMinutes = (elapsedMs / (1000 * 60)).toFixed(2);
+          if (elapsedMs < 2 * 60 * 1000) continue;
+
+          // FAST GUARD 3: Must have active user interaction since session connected
+          const userMessages = messages.filter(m => m.role === 'user');
+          if (userMessages.length === 0) continue;
+          const lastUserMessage = userMessages[userMessages.length - 1];
+          if (new Date(lastUserMessage.timestamp).getTime() < sessionConnectedAt) continue;
+
+          // CONFLICT RESOLUTIONS: Fast memory checks before DB calls
+          if (stillPendingSystemA.some(f => f.phone === phone)) continue;
+          if (pendingOrders.some(o => o.phone === phone)) continue;
+
+          // Passed fast guards — resolve tenant and config (with memory cache)
+          const itemTenantId = messages[0]?.tenantId || messages[messages.length - 1]?.tenantId || "t-1007";
+          if (!configCache[itemTenantId]) {
+            configCache[itemTenantId] = await DB.getConfig(itemTenantId);
+          }
+          const tenantConfig = configCache[itemTenantId];
+
+          if (!tenantConfig.followUps || tenantConfig.followUps.length === 0) continue;
+
+          const customer = await DB.getCustomer(phone, itemTenantId);
           const followUpLevel = customer?.followUpLevel || 0;
           const nextFollowUp = tenantConfig.followUps[followUpLevel];
-          const requiredMinutes = nextFollowUp?.delayMinutes || 0;
-          const exceedsWait = elapsedMs >= (requiredMinutes * 60 * 1000);
 
-          console.log(`[Phone: ${phone}] Last Msg: ${lastMessage.role} @ ${new Date(lastMessage.timestamp).toLocaleTimeString()} | Elapsed: ${elapsedMinutes}m | Required: ${requiredMinutes}m | Meets Time: ${exceedsWait} | Level: ${followUpLevel}`);
-
-          // We only follow up if the bot was the last one to speak
-          if (lastMessage.role !== 'assistant') {
-            console.log(`  -> Skipping ${phone}: Last message was from user.`);
-            continue;
-          }
-
-          // We only follow up if there is an active conversation (at least one user message)
-          const hasUserMessage = messages.some(m => m.role === 'user');
-          if (!hasUserMessage) {
-            console.log(`  -> Skipping ${phone}: No user message in history (broadcast only).`);
-            continue;
-          }
-
-          // CONFLICT RESOLUTION 1: Skip System B if System A has a pending follow-up for this customer
-          const hasPendingSystemA = stillPendingSystemA.some(f => f.phone === phone);
-          if (hasPendingSystemA) {
-            console.log(`  -> Skipping ${phone}: System A has a pending follow-up.`);
-            continue;
-          }
-
-          // CONFLICT RESOLUTION 2: Skip System B if customer has an active pending order (handled by System C)
-          const hasPendingOrder = pendingOrders.some(o => o.phone === phone);
-          if (hasPendingOrder) {
-            console.log(`  -> Skipping ${phone}: Customer has a pending order (handled by System C).`);
-            continue;
-          }
-
-          // If max follow-ups reached based on config, skip
           const maxConfigured = tenantConfig.maxFollowUps !== undefined ? tenantConfig.maxFollowUps : (tenantConfig.followUps?.length || 7);
           const totalFollowUpLevels = Math.min(tenantConfig.followUps?.length || 7, maxConfigured);
-          if (followUpLevel >= totalFollowUpLevels) {
-            console.log(`  -> Skipping ${phone}: Max follow-up level (${totalFollowUpLevels}) reached.`);
-            if (customer?.leadStatus !== "cold") await DB.updateCustomer(phone, { leadStatus: "cold" }, customer?.tenantId);
+
+          if (followUpLevel >= totalFollowUpLevels || !nextFollowUp || !nextFollowUp.enabled) {
+            if (customer?.leadStatus !== "cold") await DB.updateCustomer(phone, { leadStatus: "cold" }, customer?.tenantId || itemTenantId);
             continue;
           }
 
-          if (!nextFollowUp || !nextFollowUp.enabled) {
-            console.log(`  -> Skipping ${phone}: Follow-up level ${followUpLevel} is disabled or missing.`);
-            if (customer?.leadStatus !== "cold") await DB.updateCustomer(phone, { leadStatus: "cold" }, customer?.tenantId);
-            continue;
-          }
-
-          const delayMs = nextFollowUp.delayMinutes * 60 * 1000;
-          if (elapsedMs >= delayMs) {
+          const requiredMs = nextFollowUp.delayMinutes * 60 * 1000;
+          if (elapsedMs >= requiredMs) {
             console.log(`[System B Follow-up] Evaluating Sequence Level ${followUpLevel + 1} for ${phone}`);
-            
             try {
               const { shouldSendFollowUp } = await import('./ai-handler');
-              const evaluation = await shouldSendFollowUp(phone, undefined, customer?.tenantId);
+              const evaluation = await shouldSendFollowUp(phone, undefined, customer?.tenantId || itemTenantId);
 
               if (!evaluation.shouldFollowUp) {
                 console.log(`  -> Skipping follow-up for ${phone}: AI determined follow-up is not needed (Reason: ${evaluation.reason}).`);
-                await DB.updateCustomer(phone, { leadStatus: "cold", pipelineStage: "completed" }, customer?.tenantId);
+                await DB.updateCustomer(phone, { leadStatus: "cold", pipelineStage: "completed" }, customer?.tenantId || itemTenantId);
                 continue;
               }
 
-              const contextualMessage = await generateContextualFollowUp(phone, nextFollowUp.message, customer?.tenantId);
+              const contextualMessage = await generateContextualFollowUp(phone, nextFollowUp.message, customer?.tenantId || itemTenantId);
               const sentMsg = await this.sendMessage(phone, contextualMessage);
               
-              await DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage }, customer?.tenantId);
-              await DB.updateCustomer(phone, { followUpLevel: followUpLevel + 1 }, customer?.tenantId);
+              await DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage }, customer?.tenantId || itemTenantId);
+              await DB.updateCustomer(phone, { followUpLevel: followUpLevel + 1 }, customer?.tenantId || itemTenantId);
             } catch (err) {
               console.error(`[System B Follow-up] Error sending to ${phone}:`, err);
             }
@@ -325,7 +293,7 @@ export class WhatsAppManager {
       } catch (e) {
         console.error("[Follow-up Loop] Global Error during sync:", e);
       }
-    }, 60000); // 1 minute interval
+    }, 180000); // 3 minutes interval (was 60000)
   }
 
   static startRevivalSync() {
