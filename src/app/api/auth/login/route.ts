@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
         const jwtToken = await signJWT(sessionData, maxAge);
         const res = NextResponse.json({ success: true, user: sessionData, redirectTo: "/admin" });
         res.cookies.set("hazel_admin_session", jwtToken, opts);
+        res.cookies.set("hazel_client_session", "", { maxAge: 0, path: "/" });
         return res;
       }
     }
@@ -109,6 +110,7 @@ export async function POST(request: NextRequest) {
           const jwtToken = await signJWT(sessionData, maxAge);
           const res = NextResponse.json({ success: true, user: sessionData, redirectTo: "/admin" });
           res.cookies.set("hazel_admin_session", jwtToken, opts);
+          res.cookies.set("hazel_client_session", "", { maxAge: 0, path: "/" });
           return res;
         }
       }
@@ -206,6 +208,7 @@ export async function POST(request: NextRequest) {
     const jwtToken = await signJWT(sessionData, maxAge);
     const res = NextResponse.json({ success: true, user: sessionData, redirectTo: "/client" });
     res.cookies.set("hazel_client_session", jwtToken, opts);
+    res.cookies.set("hazel_admin_session", "", { maxAge: 0, path: "/" });
     return res;
 
   } catch (err: any) {

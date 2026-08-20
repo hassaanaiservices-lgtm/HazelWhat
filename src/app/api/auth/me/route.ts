@@ -30,11 +30,18 @@ export async function GET(request: NextRequest) {
 
     // ========== CLIENT PORTAL CHECK ==========
     if (portal === 'client') {
-      if (!session || session.role !== 'client') {
+      if (!session) {
         return NextResponse.json({ authenticated: false }, { status: 401 });
       }
 
-      const tenant = (await DB.getTenantById(session.tenantId)) || (await DB.getTenantByUsername(session.username || ""));
+      let targetTenantId = session.tenantId;
+      if (session.role === 'admin' && (!targetTenantId || targetTenantId === 'admin')) {
+        const tenants = await DB.getTenants();
+        const activeTenant = tenants.find(t => t.status !== 'suspended' && t.status !== 'blocked') || tenants[0];
+        if (activeTenant) targetTenantId = activeTenant.id;
+      }
+
+      const tenant = (await DB.getTenantById(targetTenantId)) || (await DB.getTenantByUsername(session.username || ""));
       if (!tenant) {
         console.error(`[Auth] Tenant not found for session:`, session);
         const res = NextResponse.json({ authenticated: false, error: "Tenant not found or invalid session" }, { status: 401 });
@@ -51,6 +58,7 @@ export async function GET(request: NextRequest) {
         authenticated: true,
         user: {
           ...session,
+          tenantId: tenant.id,
           name: tenant.name,
           businessName: tenant.businessName,
           email: tenant.email,

@@ -798,14 +798,20 @@ export default function DashboardPage() {
     fetchAnalytics();
     fetchRevivalCampaigns();
 
-    // Real-time polling interval (every 4 seconds) for live chats, orders, and multi-device config sync
+    // Optimized real-time polling interval to keep UI snappy without locking browser thread
     const pollInterval = setInterval(() => {
-      fetchChats();
       fetchOrders();
       fetchSession();
-    }, 4000);
+    }, 6000);
 
-    return () => clearInterval(pollInterval);
+    const chatPollInterval = setInterval(() => {
+      fetchChats();
+    }, 8000);
+
+    return () => {
+      clearInterval(pollInterval);
+      clearInterval(chatPollInterval);
+    };
   }, [savingConfig, savingKB, savingKeywords, savingFollowUps]);
 
 

@@ -43,46 +43,82 @@ export async function verifyJWT(token: string | undefined): Promise<any | null> 
 
 export async function getSessionFromCookies(request?: NextRequest): Promise<SessionUser | null> {
   try {
-    // PRIMARY: Read directly from NextRequest cookies (reliable in all Next.js route handlers)
+    const pathname = request?.nextUrl?.pathname || "";
+    const portal = request?.nextUrl?.searchParams?.get("portal");
+    const isClientContext = pathname.startsWith("/client") || pathname.startsWith("/api/whatsapp") || portal === "client";
+
+    // PRIMARY: Read directly from NextRequest cookies
     if (request?.cookies) {
       const clientCookieVal = request.cookies.get("hazel_client_session")?.value;
       const clientSession = await verifyJWT(clientCookieVal);
-      if (clientSession?.role === "client" && clientSession?.tenantId) {
-        return clientSession as SessionUser;
-      }
 
       const adminCookieVal = request.cookies.get("hazel_admin_session")?.value;
       const adminSession = await verifyJWT(adminCookieVal);
+
+      // In client context, prioritize valid client session
+      if (isClientContext && clientSession?.role === "client" && clientSession?.tenantId) {
+        return clientSession as SessionUser;
+      }
+
+      // If client session exists and no admin session, return clientSession
+      if (clientSession?.role === "client" && clientSession?.tenantId && !adminSession) {
+        return clientSession as SessionUser;
+      }
+
+      // If admin session exists
       if (adminSession?.role === "admin") {
         const queryTenantId = request.nextUrl?.searchParams?.get("tenantId");
+        let targetTenantId = queryTenantId || adminSession.tenantId;
+
+        // If admin is in client context and targetTenantId is "admin" or missing, fallback to client cookie tenant or default active tenant
+        if (isClientContext && (!targetTenantId || targetTenantId === "admin")) {
+          if (clientSession?.tenantId) {
+            targetTenantId = clientSession.tenantId;
+          }
+        }
+
         return {
           ...adminSession,
-          tenantId: queryTenantId || adminSession.tenantId || "admin"
+          tenantId: targetTenantId || "admin"
         } as SessionUser;
+      }
+
+      // Fallback: if not client context but clientSession exists
+      if (clientSession?.role === "client" && clientSession?.tenantId) {
+        return clientSession as SessionUser;
       }
     }
 
-    // FALLBACK: Use next/headers cookies() for server components / when no request object
+    // FALLBACK: Use next/headers cookies() for server components
     try {
       const { cookies } = await import("next/headers");
       const cookieStore = await cookies();
 
       const clientCookieVal = cookieStore.get("hazel_client_session")?.value;
       const clientSession = await verifyJWT(clientCookieVal);
-      if (clientSession?.role === "client" && clientSession?.tenantId) {
+      const adminCookieVal = cookieStore.get("hazel_admin_session")?.value;
+      const adminSession = await verifyJWT(adminCookieVal);
+
+      if (isClientContext && clientSession?.role === "client" && clientSession?.tenantId) {
         return clientSession as SessionUser;
       }
 
-      const adminCookieVal = cookieStore.get("hazel_admin_session")?.value;
-      const adminSession = await verifyJWT(adminCookieVal);
+      if (clientSession?.role === "client" && clientSession?.tenantId && !adminSession) {
+        return clientSession as SessionUser;
+      }
+
       if (adminSession?.role === "admin") {
         return {
           ...adminSession,
           tenantId: adminSession.tenantId || "admin"
         } as SessionUser;
       }
+
+      if (clientSession?.role === "client" && clientSession?.tenantId) {
+        return clientSession as SessionUser;
+      }
     } catch (innerErr) {
-      // next/headers not available in this context — that's fine
+      // next/headers not available
     }
   } catch (e) {
     console.error("[Session Helper] Error reading session cookie:", e);
