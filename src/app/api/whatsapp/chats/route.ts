@@ -19,27 +19,27 @@ export async function GET(req: NextRequest) {
     const session = await getSessionFromCookies(req);
     console.log(`${tag} Resolved session:`, session ? `role=${session.role}, tenantId=${session.tenantId}` : "NULL (unauthenticated)");
 
-    const tenantId = session?.tenantId;
+    let effectiveTenantId = tenantId;
 
     if (session?.role === 'admin') {
       const queryTenantId = req.nextUrl.searchParams.get('tenantId');
       const targetTenantId = queryTenantId && queryTenantId !== 'admin' ? queryTenantId : undefined;
-      console.log(`${tag} Admin request — fetching chats for targetTenantId:`, targetTenantId || 'all');
-      const allChats = targetTenantId ? await DB.getAllChats(targetTenantId) : await DB.getAllChatsAdminAllTenants();
-      const allCustomers = targetTenantId ? await DB.getAllCustomers(targetTenantId) : await DB.getAllCustomersAdminAllTenants();
-      console.log(`${tag} Admin — chats count: ${Object.keys(allChats).length}, customers: ${allCustomers.length}`);
-      return NextResponse.json({ success: true, chats: allChats, customers: allCustomers });
+      if (targetTenantId) {
+        effectiveTenantId = targetTenantId;
+      }
     }
 
-    if (!tenantId) {
-      console.warn(`${tag} No tenantId in session — returning empty chats`);
-      return NextResponse.json({ success: true, chats: {}, customers: [], _debug: "no_session" });
+    if (!effectiveTenantId || effectiveTenantId === 'admin') {
+      const { WhatsAppManager } = await import("@/lib/whatsapp");
+      const activeFromSock = await WhatsAppManager.resolveActiveTenantFromSocket();
+      effectiveTenantId = activeFromSock || WhatsAppManager.getActiveTenantId() || 't-1007';
+      console.log(`${tag} Resolved fallback tenantId: ${effectiveTenantId}`);
     }
 
     // Tenant-isolated fetch
-    console.log(`${tag} Fetching chats for tenantId: ${tenantId}`);
-    let chats = await DB.getAllChats(tenantId);
-    let customers = await DB.getAllCustomers(tenantId);
+    console.log(`${tag} Fetching chats for tenantId: ${effectiveTenantId}`);
+    let chats = await DB.getAllChats(effectiveTenantId);
+    let customers = await DB.getAllCustomers(effectiveTenantId);
 
     // Auto-seed atomixweb dummy customers, orders, and chats if empty
     if (tenantId === 't-1007' && Object.keys(chats).length === 0 && customers.length === 0) {

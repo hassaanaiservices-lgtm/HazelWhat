@@ -272,7 +272,7 @@ async function transcribeAudioWithGemini(buffer: Buffer, apiKey: string, mimetyp
                 }
               },
               {
-                text: "Transcribe this voice note audio accurately. The spoken language may be Pashto, Urdu, Roman Urdu, or English. Write down the exact spoken words verbatim in clear natural text. Return ONLY the transcribed text. Do not add any introduction, explanations, or quotes. If the audio is silent or completely unintelligible, return an empty string."
+                text: "Transcribe this voice note audio accurately. The spoken language may be Pashto, Urdu, Roman Urdu, or English. This may contain a Pakistani home address — extract house/flat/street numbers carefully; digits are often spoken digit-by-digit (e.g. 'one-two-three' or 'teen-do-ek') or as compound numbers. Write down numbers as clean digits (e.g. House #123, Street #5) where applicable. Return ONLY the transcribed text. Do not add any introduction, explanations, or quotes. If the audio is silent or completely unintelligible, return an empty string."
               }
             ]
           }
@@ -305,7 +305,7 @@ async function transcribeAudioWithGemini(buffer: Buffer, apiKey: string, mimetyp
                     }
                   },
                   {
-                    text: "Transcribe this voice note audio accurately. The spoken language may be Pashto, Urdu, Roman Urdu, or English. Write down the exact spoken words verbatim in clear natural text. Return ONLY the transcribed text. Do not add any introduction, explanations, or quotes. If the audio is silent or completely unintelligible, return an empty string."
+                    text: "Transcribe this voice note audio accurately. The spoken language may be Pashto, Urdu, Roman Urdu, or English. This may contain a Pakistani home address — extract house/flat/street numbers carefully; digits are often spoken digit-by-digit (e.g. 'one-two-three' or 'teen-do-ek') or as compound numbers. Write down numbers as clean digits (e.g. House #123, Street #5) where applicable. Return ONLY the transcribed text. Do not add any introduction, explanations, or quotes. If the audio is silent or completely unintelligible, return an empty string."
                   }
                 ]
               }
@@ -1494,7 +1494,19 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
       voiceTranscript = await transcribeAudio(audioBuffer, audioMime, config);
       
       if (voiceTranscript) {
-        content = `[Customer Voice Note Transcribed]: "${voiceTranscript}"`;
+        // Run regex digit extraction for address validation (STT Safeguard)
+        const digits = voiceTranscript.match(/\b(?:\d+|#\s*\d+|house\s*#?\s*\d+|street\s*#?\s*\d+|flat\s*#?\s*\d+)\b/gi) || [];
+        const isAddressRelated = /(address|house|makan|flat|street|gali|block|sector|town|colony|phase|road|scheme|iqbal|gulberg|dha|bahria|pechs)/i.test(voiceTranscript);
+
+        if (isAddressRelated) {
+          if (digits.length > 0) {
+            content = `[Customer Voice Note Transcribed - Extracted Digits: ${digits.join(', ')}]: "${voiceTranscript}"\n(System Note: Digit sequence detected in address voice note. Explicitly confirm back: "House #${digits[0].replace(/[^0-9]/g, '')}, [Area] — sahi hai?" Let customer verify or correct via text!)`;
+          } else {
+            content = `[Customer Voice Note Transcribed - NO CLEAR HOUSE DIGITS DETECTED]: "${voiceTranscript}"\n(System Note: This voice note mentions location/area but NO clear House # / Flat # digits were found. Explicitly request the customer to type their House/Flat number as a TYPED TEXT reply!)`;
+          }
+        } else {
+          content = `[Customer Voice Note Transcribed]: "${voiceTranscript}"`;
+        }
         console.log(`[AI Handler] Voice transcribed successfully! Content set to: "${content}"`);
       } else if (!content) {
         content = "[Customer sent a Voice Note]: (The audio was unclear or silent. Politely ask the customer to resend their audio or specify what they need.)";
@@ -1737,7 +1749,17 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
 15. MENU & CATALOG DISPLAY RULE:
    - When a customer asks for the menu, catalog, or available items (e.g. "menu", "menu bhajo", "show menu", "rate list"):
    - YOU MUST PRINT THE ITEMS AND THEIR PRICES IN YOUR TEXT RESPONSE formatted neatly with category headers!
-   - NEVER say "Menu bhej rahe hain" without actually writing out the items and prices in the message.`;
+   - NEVER say "Menu bhej rahe hain" without actually writing out the items and prices in the message.
+16. HOUSE NUMBER & STT ADDRESS ACCURACY GUARANTEE:
+   - DON'T RELY ON VOICE STT ALONE FOR DIGITS: House numbers & digits are a known weak spot for speech recognition.
+   - EXPLICITLY CONFIRM EXTRACTED DIGITS: After transcribing or reading an address, pull out any digit sequences and explicitly confirm back:
+     Example: "Aapka address note kar liya hai: *House #123, Model Town*. Yeh sahi hai? (Galti ho to text mein sahi House # write kar dein!)"
+   - REQUEST HOUSE NUMBER SEPARATELY AS TYPED TEXT IF AMBIGUOUS/MISSING:
+     If the area/street was spoken in voice note but the House/Flat # is missing or ambiguous, ask for the House/Flat # as a TYPED text reply (typed digits are 100% accurate).
+     Example: "Area samajh aa gaya hai! Khas taur par House # / Flat # please *text message* mein write karke bhej dein taake delivery mein galti na ho."
+   - ALWAYS SHOW FULL TRANSCRIBED ADDRESS BACK BEFORE PLACING ORDER:
+     Before executing place_order or finalizing the transaction, ALWAYS display the full transcribed address back to the customer:
+     Example: "Confirming delivery to: 📍 *[Full Transcribed Address]*\nReply 'yes' to confirm or send correct address."`;
 
     if (config.enabledFeatures && config.enabledFeatures.length > 0) {
       fullSystemPrompt += "\n\n=== ADVANCED FEATURES ENABLED ===\n";

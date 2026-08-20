@@ -818,6 +818,10 @@ export default function DashboardPage() {
   const fetchOrders = async () => {
     try {
       const res = await fetch("/api/whatsapp/orders");
+      if (!res.ok) {
+        console.warn("[Client] fetchOrders HTTP error:", res.status);
+        return; // Preserve existing orders!
+      }
       const data = await res.json();
       if (Array.isArray(data)) {
         setOrders(data);
@@ -963,9 +967,13 @@ export default function DashboardPage() {
           'Pragma': 'no-cache'
         }
       });
+      if (!res.ok) {
+        console.warn("[Client] fetchChats HTTP error:", res.status);
+        return; // Preserve existing chats in state! DO NOT clear state on HTTP error.
+      }
       const data = await res.json();
       
-      if (data.success) {
+      if (data.success && data.chats) {
         const mergedChats = { ...data.chats };
         const customersMap: Record<string, any> = {};
         if (data.customers) {
@@ -977,10 +985,21 @@ export default function DashboardPage() {
           });
         }
         
-        setChats(mergedChats);
-        setCustomers(customersMap);
+        // Non-destructive update: Only update if mergedChats has data or if current state is empty
+        setChats(prev => {
+          if (Object.keys(mergedChats).length > 0 || Object.keys(prev).length === 0) {
+            return mergedChats;
+          }
+          return prev;
+        });
+        setCustomers(prev => {
+          if (Object.keys(customersMap).length > 0 || Object.keys(prev).length === 0) {
+            return customersMap;
+          }
+          return prev;
+        });
       } else {
-         console.warn("[Client] fetchChats returned success: false", data);
+         console.warn("[Client] fetchChats returned success: false or invalid chats payload", data);
       }
     } catch (e) {
       console.error("[Client] fetchChats error:", e);
