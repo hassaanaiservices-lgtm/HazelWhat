@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { WhatsAppManager } from "./whatsapp";
 import { DB, DB_DIR, formatProductsToCatalog, ChatMessage } from "./db";
 import { ProductItem } from "./scraper";
+import { enqueueWhatsAppMessageJob, registerQueueWorker, CONCURRENCY_LIMIT } from "./queue-manager";
 import dns from "dns";
 import fs from "fs";
 import path from "path";
@@ -1107,7 +1108,7 @@ async function callLLM(
       return msg;
     });
 
-    let attempts = 3;
+    let attempts = 2;
     let res: Response | null = null;
     let lastError: any = null;
 
@@ -1116,7 +1117,7 @@ async function callLLM(
         console.log(`[callLLM] DeepSeek API attempt ${attempt} of ${attempts}...`);
         
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const timeoutId = setTimeout(() => controller.abort(), 7000);
 
         res = await fetch("https://api.deepseek.com/chat/completions", {
           method: "POST",
@@ -1339,55 +1340,66 @@ export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
     from = from?.replace("@s.whatsapp.net", "");
     if (!from) return;
 
-    // Acquire lock/queue for this customer phone number
-    let queue = customerLocks.get(from);
-    if (!queue) {
-      queue = {
-        promise: Promise.resolve(),
-        pendingCount: 0
-      };
-      customerLocks.set(from, queue);
-    }
-
-    queue.pendingCount++;
-    const previousPromise = queue.promise;
-    let resolveLock: () => void;
-    const currentPromise = new Promise<void>((resolve) => {
-      resolveLock = resolve;
-    });
-    queue.promise = currentPromise;
-
-    try {
-      await previousPromise;
-      const processPromise = processWhatsAppMessage(msg, from, inputTenantId);
-      const timeoutPromise = new Promise<void>((_, reject) => 
-        setTimeout(() => reject(new Error("Message processing timed out (25s)")), 25000)
-      );
-      await Promise.race([processPromise, timeoutPromise]);
-    } catch (error: any) {
-      console.error(`[AI Handler] Error/Timeout for customer ${from}:`, error.message || error);
-      try {
-        const fallback = "System par loads zyada hone ki waja se reply mein dair ho rahi hai. Humari team jald hi aapse raabta karegi! Shukriya! 🙏";
-        await WhatsAppManager.sendMessage(from, fallback);
-        const resolvedTenantId = inputTenantId || WhatsAppManager.getActiveTenantId() || undefined;
-        await DB.addChatMessage(from, { role: "assistant", content: fallback }, resolvedTenantId);
-      } catch (sendErr) {
-        console.error("[AI Handler] Failed to send fallback message:", sendErr);
-      }
-    } finally {
-      resolveLock!();
-      const currentQueue = customerLocks.get(from);
-      if (currentQueue) {
-        currentQueue.pendingCount--;
-        if (currentQueue.pendingCount <= 0) {
-          customerLocks.delete(from);
-        }
-      }
-    }
+    // Enqueue message into high-throughput BullMQ / Worker Queue Pool (Concurrency: 20)
+    await enqueueWhatsAppMessageJob(msg, inputTenantId);
   } catch (error) {
     console.error("[AI Handler] handleWhatsAppMessage outer error:", error);
   }
 }
+
+async function processWhatsAppWorkerJob(msg: any, inputTenantId?: string) {
+  let from = msg.key?.remoteJid;
+  if (from?.includes("@lid")) {
+    if (msg.key.remoteJidAlt) {
+      from = msg.key.remoteJidAlt;
+    } else {
+      return;
+    }
+  }
+  from = from?.replace("@s.whatsapp.net", "");
+  if (!from) return;
+
+  // Acquire lock/queue for this customer phone number to ensure per-customer sequential ordering
+  let queue = customerLocks.get(from);
+  if (!queue) {
+    queue = {
+      promise: Promise.resolve(),
+      pendingCount: 0
+    };
+    customerLocks.set(from, queue);
+  }
+
+  queue.pendingCount++;
+  const previousPromise = queue.promise;
+  let resolveLock: () => void;
+  const currentPromise = new Promise<void>((resolve) => {
+    resolveLock = resolve;
+  });
+  queue.promise = currentPromise;
+
+  try {
+    await previousPromise;
+    const processPromise = processWhatsAppMessage(msg, from, inputTenantId);
+    const timeoutPromise = new Promise<void>((_, reject) => 
+      setTimeout(() => reject(new Error("Message processing timed out (35s)")), 35000)
+    );
+    await Promise.race([processPromise, timeoutPromise]);
+  } catch (error: any) {
+    console.error(`[AI Handler] Error for customer ${from}:`, error.message || error);
+  } finally {
+    resolveLock!();
+    const currentQueue = customerLocks.get(from);
+    if (currentQueue) {
+      currentQueue.pendingCount--;
+      if (currentQueue.pendingCount <= 0) {
+        customerLocks.delete(from);
+      }
+    }
+  }
+}
+
+// Register high-throughput worker pool (Concurrency: 20)
+registerQueueWorker(processWhatsAppWorkerJob);
 
 async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: string) {
   try {
