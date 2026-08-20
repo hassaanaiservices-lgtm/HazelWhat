@@ -507,7 +507,7 @@ export class DB {
       return {};
     }
     try {
-      const { data, error } = await supabase.from('chat_messages').select('*').eq('tenant_id', tenantId).order('timestamp', { ascending: false }).limit(20000);
+      const { data, error } = await supabase.from('chat_messages').select('*').eq('tenant_id', tenantId).order('timestamp', { ascending: false }).limit(1000);
       if (error || !data) return {};
 
       const result: Record<string, ChatMessage[]> = {};
