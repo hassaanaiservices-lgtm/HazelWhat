@@ -2041,14 +2041,14 @@ This customer is a revived dead lead who recently responded to our re-engagement
 
               // Instant WhatsApp Alert Notification to Kitchen / Manager Phone!
               try {
-                const activeTenantConfig = await DB.getTenantConfig(resolvedTenantId);
+                const activeTenantConfig: any = await DB.getConfig(resolvedTenantId);
                 const managerPhone = activeTenantConfig?.managerPhone || activeTenantConfig?.notificationPhone;
                 if (managerPhone) {
                   const cleanManagerPhone = String(managerPhone).replace(/[^0-9]/g, '');
                   if (cleanManagerPhone) {
                     const alertMsg = `🚨 *NEW WHATSAPP ORDER RECEIVED!*\n\n📦 *Order*: ${orderData.productName}\n💰 *Price*: ${orderData.price}\n📍 *Address*: ${orderData.deliveryAddress || 'N/A'}\n👤 *Customer*: ${orderData.customerName} (+${from})\n💳 *Payment*: ${orderData.paymentMethod || 'COD'}\n⏰ *Time*: ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}\n\n*Please dispatch / prepare food immediately!*`;
-                    const { WhatsAppManager } = await import("@/lib/whatsapp");
-                    WhatsAppManager.sendMessage(cleanManagerPhone, { text: alertMsg }, resolvedTenantId).catch(err => console.error("[Order Alert] Failed to send to manager:", err));
+                    const { WhatsAppManager } = await import("./whatsapp");
+                    WhatsAppManager.sendMessage(cleanManagerPhone, alertMsg).catch(err => console.error("[Order Alert] Failed to send to manager:", err));
                   }
                 }
               } catch (alertErr) {
@@ -2228,7 +2228,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
         if (isOrderConfirmationReply) {
           const existingOrders = await DB.getOrders(resolvedTenantId);
           const fifteenMinutesAgo = new Date(Date.now() - 900 * 1000).toISOString();
-          const recentOrder = existingOrders.find(o => o.phone === from && (o.timestamp || o.createdAt) >= fifteenMinutesAgo);
+          const recentOrder = existingOrders.find(o => o.phone === from && (o.timestamp || (o as any).createdAt) >= fifteenMinutesAgo);
           
           if (!recentOrder) {
             console.warn(`[AI Handler Safeguard] Order confirmation detected in AI reply for ${from}, but no DB order record found! Auto-saving order to DB...`);

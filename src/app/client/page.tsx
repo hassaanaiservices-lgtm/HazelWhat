@@ -261,9 +261,9 @@ export default function DashboardPage() {
     }
   };
 
-  const [activeTab, setActiveTabRaw] = useState<"dashboard" | "inbox" | "agents" | "channels" | "promotions" | "orders" | "knowledge" | "contacts" | "analytics" | "settings" | "leads-revival">("dashboard");
+  const [activeTab, setActiveTabRaw] = useState<"dashboard" | "inbox" | "agents" | "channels" | "promotions" | "orders" | "knowledge" | "contacts" | "analytics" | "settings" | "leads-revival" | "logs">("dashboard");
 
-  const setActiveTab = (tab: "dashboard" | "inbox" | "agents" | "channels" | "promotions" | "orders" | "knowledge" | "contacts" | "analytics" | "settings" | "leads-revival") => {
+  const setActiveTab = (tab: "dashboard" | "inbox" | "agents" | "channels" | "promotions" | "orders" | "knowledge" | "contacts" | "analytics" | "settings" | "leads-revival" | "logs") => {
     setActiveTabRaw(tab);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -272,13 +272,49 @@ export default function DashboardPage() {
     }
   };
 
+  // Real-time Per-Client Observability Logger State
+  const [clientLogs, setClientLogs] = useState<any[]>([]);
+  const [isFetchingClientLogs, setIsFetchingClientLogs] = useState(false);
+  const [selectedClientLog, setSelectedClientLog] = useState<any | null>(null);
+  const [clientLogTypeFilter, setClientLogTypeFilter] = useState("all");
+  const [clientLogLevelFilter, setClientLogLevelFilter] = useState("all");
+  const [clientLogSearchQuery, setClientLogSearchQuery] = useState("");
+  const [clientLogAutoRefresh, setClientLogAutoRefresh] = useState(true);
+
+  const fetchClientLogs = async () => {
+    setIsFetchingClientLogs(true);
+    try {
+      const res = await fetch(`/api/admin/logs?type=${clientLogTypeFilter}&level=${clientLogLevelFilter}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.logs)) {
+          setClientLogs(data.logs);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch client logs:", e);
+    } finally {
+      setIsFetchingClientLogs(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "logs") {
+      fetchClientLogs();
+      if (clientLogAutoRefresh) {
+        const interval = setInterval(fetchClientLogs, 4000);
+        return () => clearInterval(interval);
+      }
+    }
+  }, [activeTab, clientLogTypeFilter, clientLogLevelFilter, clientLogAutoRefresh]);
+
   // Sync tab from URL query on initial load & popstate (browser back/forward)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const syncTabFromUrl = () => {
         const params = new URLSearchParams(window.location.search);
         const urlTab = params.get('tab');
-        const validTabs = ["dashboard", "inbox", "agents", "channels", "promotions", "orders", "knowledge", "contacts", "analytics", "settings", "leads-revival"];
+        const validTabs = ["dashboard", "inbox", "agents", "channels", "promotions", "orders", "knowledge", "contacts", "analytics", "settings", "leads-revival", "logs"];
         if (urlTab && validTabs.includes(urlTab)) {
           setActiveTabRaw(urlTab as any);
         }
@@ -1912,6 +1948,15 @@ export default function DashboardPage() {
           </button>
           <button onClick={() => setActiveTab('channels')} className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${activeTab === 'channels' ? 'bg-[#111111] text-white shadow-xs' : 'text-[#626260] hover:bg-[#ebe7e1] hover:text-[#111111]'}`}>
             <Network className={`h-4 w-4 ${activeTab === 'channels' ? 'text-[#ff5600]' : 'text-[#7b7b78]'}`} /> Channels
+          </button>
+          <button onClick={() => setActiveTab('logs')} className={`flex items-center justify-between w-full px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${activeTab === 'logs' ? 'bg-[#111111] text-white shadow-xs' : 'text-[#626260] hover:bg-[#ebe7e1] hover:text-[#111111]'}`}>
+            <div className="flex items-center gap-3">
+              <Activity className={`h-4 w-4 ${activeTab === 'logs' ? 'text-[#ff5600]' : 'text-[#7b7b78]'}`} />
+              <span>System Logs</span>
+            </div>
+            <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-emerald-500/20 text-emerald-700 border border-emerald-500/30 uppercase tracking-wider animate-pulse">
+              LIVE
+            </span>
           </button>
         </div>
 
@@ -5039,7 +5084,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* 70% Screen Width Side Panel Dialog / Drawer */}
+            {/* 70% Screen Width Side Panel Dialog / Drawer (Upgraded Order Details & Product Catalog UI) */}
             {selectedOrderDetail && (
               <div className="fixed inset-0 z-50 flex justify-end">
                 {/* Backdrop */}
@@ -5048,23 +5093,30 @@ export default function DashboardPage() {
                   onClick={() => setSelectedOrderDetail(null)}
                 />
 
-                {/* 70% Width Slide-over Drawer Panel */}
-                <div className="relative w-[70vw] max-w-5xl h-full bg-[#f5f1ec] shadow-2xl border-l border-[#d3cec6] z-50 flex flex-col overflow-y-auto animate-in slide-in-from-right duration-200">
+                {/* Slide-over Drawer Panel */}
+                <div className="relative w-[85vw] md:w-[70vw] max-w-5xl h-full bg-[#f8f6f2] shadow-2xl border-l border-[#d3cec6] z-50 flex flex-col overflow-y-auto animate-in slide-in-from-right duration-200">
                   
-                  {/* Drawer Header */}
-                  <div className="p-6 bg-white border-b border-[#d3cec6] flex items-center justify-between sticky top-0 z-10 shadow-xs">
+                  {/* Drawer Top Header */}
+                  <div className="p-5 bg-white border-b border-[#d3cec6] flex items-center justify-between sticky top-0 z-20 shadow-xs">
                     <div className="flex items-center gap-3">
-                      <div className="bg-[#111111] text-white p-2 rounded-lg">
-                        <ShoppingCart className="w-5 h-5 text-[#ff5600]" />
+                      <div className="bg-[#ff5600] text-white p-2.5 rounded-xl shadow-xs">
+                        <ShoppingCart className="w-5 h-5 text-white" />
                       </div>
                       <div>
-                        <h3 className="text-lg font-semibold text-[#111111] tracking-tight">Order Details</h3>
-                        <p className="text-xs text-[#7b7b78] font-mono">{selectedOrderDetail.id}</p>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-lg font-bold text-[#111111] tracking-tight">Order Details</h3>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#ebe7e1] text-[#626260] font-mono border border-[#d3cec6]">
+                            #{selectedOrderDetail.id}
+                          </span>
+                        </div>
+                        <p className="text-xs text-[#7b7b78] font-medium">
+                          Placed {isMounted ? new Date(selectedOrderDetail.timestamp).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : ""}
+                        </p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
-                      {/* Change Status Dropdown in Drawer */}
+                      {/* Change Status Dropdown in Drawer Header */}
                       <select
                         value={selectedOrderDetail.status === 'pending' ? 'new_order' : selectedOrderDetail.status === 'confirmed' ? 'under_baking' : selectedOrderDetail.status}
                         onChange={async (e) => {
@@ -5077,7 +5129,7 @@ export default function DashboardPage() {
                           selectedOrderDetail.status = newStatus;
                           fetchOrders();
                         }}
-                        className={`text-xs font-black px-3 py-1.5 rounded-xl border-2 outline-none cursor-pointer transition-all shadow-sm ${
+                        className={`text-xs font-black px-3.5 py-2 rounded-xl border-2 outline-none cursor-pointer transition-all shadow-xs ${
                           selectedOrderDetail.status === 'new_order' || selectedOrderDetail.status === 'new' || selectedOrderDetail.status === 'pending' ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-400/30 animate-pulse' :
                           selectedOrderDetail.status === 'under_baking' || selectedOrderDetail.status === 'under baking' || selectedOrderDetail.status === 'confirmed' ? 'bg-amber-500 text-white border-amber-600 ring-2 ring-amber-400/30' :
                           selectedOrderDetail.status === 'delivered' || selectedOrderDetail.status === 'deliver' ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400/30' :
@@ -5093,7 +5145,7 @@ export default function DashboardPage() {
 
                       <button 
                         onClick={() => setSelectedOrderDetail(null)}
-                        className="p-2 text-[#7b7b78] hover:text-[#111111] hover:bg-[#ebe7e1] rounded-lg transition-colors cursor-pointer"
+                        className="p-2 text-[#7b7b78] hover:text-[#111111] hover:bg-[#ebe7e1] rounded-xl transition-colors cursor-pointer"
                         title="Close Drawer"
                       >
                         <X className="w-5 h-5" />
@@ -5101,261 +5153,444 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* Drawer Main Body */}
-                  <div className="p-8 space-y-6 flex-1">
+                  {/* Drawer Main Body Container */}
+                  <div className="p-6 md:p-8 space-y-6 flex-1">
                     
-                    {/* Itemized Invoice & Pricing Breakdown Card (Full Width 100%) */}
-                    <div className="dash-card p-6 bg-white border border-[#d3cec6] rounded-xl shadow-xs space-y-5">
+                    {/* Top Task Info Quick Stats Bar (Image 1 UI Style) */}
+                    <div className="bg-white p-5 rounded-2xl border border-[#d3cec6] shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
                       
-                      {/* Invoice Card Header */}
-                      <div className="flex items-center justify-between pb-3 border-b border-[#ebe7e1]">
-                        <div className="flex items-center gap-2">
-                          <Receipt className="w-4 h-4 text-[#ff5600]" />
-                          <h4 className="text-xs font-semibold text-[#111111] uppercase tracking-wider">
-                            Invoice & Order Summary
-                          </h4>
+                      {/* Stat 1: Order / Preparing Time */}
+                      <div className="flex items-center gap-3 pr-4 border-r-0 md:border-r border-[#ebe7e1]">
+                        <div className="w-10 h-10 rounded-xl bg-orange-50 text-[#ff5600] flex items-center justify-center shrink-0 border border-orange-100">
+                          <Clock className="w-5 h-5" />
                         </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-[10px] text-[#7b7b78]">{isMounted ? new Date(selectedOrderDetail.timestamp).toLocaleString([], { month: '2-digit', day: '2-digit', hour: 'numeric', minute: '2-digit', hour12: true }) : ""}</span>
-                          <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#f5f1ec] text-[#626260] border border-[#d3cec6]">
-                            Total Products: 1
-                          </span>
+                        <div>
+                          <div className="text-[10px] text-[#7b7b78] uppercase font-bold tracking-wider">Preparing / Order Time</div>
+                          <div className="text-sm font-extrabold text-[#111111] font-mono mt-0.5">
+                            {isMounted ? new Date(selectedOrderDetail.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just Now"}
+                          </div>
                         </div>
                       </div>
 
-                      {/* Integrated Customer Banner & Quick Actions */}
-                      <div className="flex items-center justify-between flex-wrap gap-4 p-3.5 bg-[#f5f1ec] rounded-lg border border-[#d3cec6]">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-[#111111] text-white flex items-center justify-center font-medium text-sm shrink-0">
-                            <User className="w-5 h-5 text-white" />
+                      {/* Stat 2: Delivery Address */}
+                      <div className="flex items-center gap-3 pr-4 border-r-0 md:border-r border-[#ebe7e1]">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
+                          <MapPin className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[10px] text-[#7b7b78] uppercase font-bold tracking-wider">Delivery Destination</div>
+                          <div className="text-xs font-semibold text-[#111111] truncate mt-0.5" title={selectedOrderDetail.deliveryAddress || 'Pending Address'}>
+                            {selectedOrderDetail.deliveryAddress || 'Pending Address'}
                           </div>
-                          <div>
-                            <div className="text-xs text-[#7b7b78] uppercase font-semibold text-[10px]">Customer / Lead</div>
-                            <h3 className="text-sm font-semibold text-[#111111]">
-                              {customers[selectedOrderDetail.phone]?.name || selectedOrderDetail.customerName || selectedOrderDetail.phone}
-                            </h3>
-                            <p className="text-xs text-[#626260] font-mono">{selectedOrderDetail.phone}</p>
+                        </div>
+                      </div>
+
+                      {/* Stat 3: Customer & Quick Communication Buttons */}
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-sm shrink-0 border border-emerald-100">
+                            <User className="w-5 h-5" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-[#111111] truncate">
+                              {customers[selectedOrderDetail.phone]?.name || selectedOrderDetail.customerName || "Customer"}
+                            </div>
+                            <div className="text-[11px] text-[#626260] font-mono">{selectedOrderDetail.phone}</div>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <a 
+                            href={`https://wa.me/${selectedOrderDetail.phone.replace(/[^0-9]/g, '')}`} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="p-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl transition-all shadow-xs flex items-center justify-center cursor-pointer"
+                            title="Message on WhatsApp"
+                          >
+                            <Phone className="w-4 h-4 text-white" />
+                          </a>
+
                           <button
                             onClick={() => {
                               setSelectedChat(selectedOrderDetail.phone);
                               setActiveTab("inbox");
                               setSelectedOrderDetail(null);
                             }}
-                            className="py-1.5 px-3 bg-[#111111] hover:bg-black text-white text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                            className="p-2.5 bg-[#111111] hover:bg-black text-white rounded-xl transition-all shadow-xs flex items-center justify-center cursor-pointer"
+                            title="Open Chat History in Inbox"
                           >
-                            <MessageSquare className="w-3.5 h-3.5 text-[#ff5600]" />
-                            Chat History
-                          </button>
-                          
-                          <a 
-                            href={`https://wa.me/${selectedOrderDetail.phone.replace(/[^0-9]/g, '')}`} 
-                            target="_blank" 
-                            rel="noreferrer" 
-                            className="py-1.5 px-3 bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                            WhatsApp
-                          </a>
-                        </div>
-                      </div>
-
-                        {/* Invoice Table / Products Breakdown */}
-                        <div className="overflow-x-auto border border-[#ebe7e1] rounded-lg">
-                          <table className="w-full text-left text-xs border-collapse">
-                            <thead>
-                              <tr className="bg-[#f5f1ec] border-b border-[#d3cec6] text-[10px] font-semibold text-[#7b7b78] uppercase">
-                                <th className="py-2.5 px-3 w-14">Item</th>
-                                <th className="py-2.5 px-3">Product Name & Specs</th>
-                                <th className="py-2.5 px-3 text-center">Qty</th>
-                                <th className="py-2.5 px-3 text-right">Unit Price</th>
-                                <th className="py-2.5 px-3 text-right">Total Price</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-[#ebe7e1]">
-                              <tr className="hover:bg-[#f5f1ec]/50">
-                                {/* Thumbnail Image or Icon */}
-                                <td className="py-3 px-3 align-middle">
-                                  {selectedOrderDetail.productImageUrl ? (
-                                    <img 
-                                      src={selectedOrderDetail.productImageUrl} 
-                                      alt={selectedOrderDetail.productName} 
-                                      className="w-10 h-10 object-cover rounded-md border border-[#d3cec6]" 
-                                    />
-                                  ) : (
-                                    <div className="w-10 h-10 rounded-md bg-[#f5f1ec] border border-[#d3cec6] flex items-center justify-center text-[#ff5600]">
-                                      <Package className="w-5 h-5" />
-                                    </div>
-                                  )}
-                                </td>
-
-                                {/* Product Name & Specs */}
-                                <td className="py-3 px-3 align-middle">
-                                  <div className="font-semibold text-[#111111] text-xs">
-                                    {selectedOrderDetail.productName}
-                                  </div>
-                                  <div className="flex flex-wrap gap-1 mt-1">
-                                    {selectedOrderDetail.size && (
-                                      <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-[#ebe7e1] text-[#626260]">
-                                        Size: {selectedOrderDetail.size}
-                                      </span>
-                                    )}
-                                    {selectedOrderDetail.color && (
-                                      <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-[#ebe7e1] text-[#626260]">
-                                        Color: {selectedOrderDetail.color}
-                                      </span>
-                                    )}
-                                    {selectedOrderDetail.paymentMethod && (
-                                      <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-[#f5f1ec] text-[#ff5600] border border-[#ff5600]/20">
-                                        {selectedOrderDetail.paymentMethod}
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-
-                                {/* Quantity */}
-                                <td className="py-3 px-3 align-middle text-center font-mono font-medium text-[#111111]">
-                                  1x
-                                </td>
-
-                                {/* Each Cost / Unit Price */}
-                                <td className="py-3 px-3 align-middle text-right font-medium text-[#626260]">
-                                  {selectedOrderDetail.price || 'Booking'}
-                                </td>
-
-                                {/* Line Total */}
-                                <td className="py-3 px-3 align-middle text-right font-semibold text-[#111111]">
-                                  {selectedOrderDetail.price || 'Booking'}
-                                </td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-
-                        {/* Invoice Calculation Summary Box */}
-                        <div className="bg-[#f5f1ec] p-4 rounded-lg border border-[#d3cec6] space-y-2">
-                          <div className="flex justify-between text-xs text-[#626260]">
-                            <span>Subtotal (1 Product)</span>
-                            <span className="font-medium text-[#111111]">{selectedOrderDetail.price || 'N/A'}</span>
-                          </div>
-                          <div className="flex justify-between text-xs text-[#626260]">
-                            <span>Delivery / Shipping Fee</span>
-                            <span className="font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded text-[10px] border border-emerald-200">Free / Included</span>
-                          </div>
-                          <div className="flex justify-between text-xs text-[#626260]">
-                            <span>Payment Method</span>
-                            <span className="font-medium text-[#111111]">{selectedOrderDetail.paymentMethod || 'Cash on Delivery'}</span>
-                          </div>
-                          <div className="pt-2 border-t border-[#d3cec6] flex justify-between items-center">
-                            <span className="text-xs font-bold uppercase tracking-wider text-[#111111]">Total Order Price</span>
-                            <span className="text-lg font-bold text-[#ff5600]">
-                              {selectedOrderDetail.price || 'N/A'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Delivery Location Note */}
-                        <div className="pt-1">
-                          <span className="text-[10px] text-[#7b7b78] font-semibold uppercase block mb-1">Delivery Destination</span>
-                          <p className="text-xs font-medium text-[#111111] bg-white p-3 rounded-lg border border-[#d3cec6] flex items-start gap-2">
-                            <MapPin className="w-4 h-4 text-[#ff5600] shrink-0 mt-0.5" />
-                            <span>{selectedOrderDetail.deliveryAddress || 'Pending Customer Address Details'}</span>
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* AI Call Summary & Notes Section */}
-                    <div className="dash-card p-6 bg-white border border-[#d3cec6] rounded-xl shadow-xs space-y-4">
-                      <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-[#ebe7e1]">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-[#111111]">
-                          <FileText className="w-5 h-5 text-[#ff5600]" />
-                          <span>Call Summary & Client Requirements</span>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={async () => {
-                              setGeneratingNotesId(selectedOrderDetail.id);
-                              try {
-                                const res = await fetch('/api/whatsapp/orders', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ id: selectedOrderDetail.id, phone: selectedOrderDetail.phone })
-                                });
-                                const data = await res.json();
-                                if (data.notes) {
-                                  selectedOrderDetail.notes = data.notes;
-                                  fetchOrders();
-                                }
-                              } catch (e) {
-                                console.error(e);
-                              } finally {
-                                setGeneratingNotesId(null);
-                              }
-                            }}
-                            disabled={generatingNotesId === selectedOrderDetail.id}
-                            className="text-xs font-medium text-[#111111] hover:text-black bg-white border border-[#d3cec6] hover:border-[#b8b3ab] px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
-                          >
-                            {generatingNotesId === selectedOrderDetail.id ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[#ff5600]" /> : <Sparkles className="w-3.5 h-3.5 text-[#ff5600]" />}
-                            <span>{generatingNotesId === selectedOrderDetail.id ? 'Generating AI Notes...' : 'Generate AI Notes'}</span>
-                          </button>
-
-                          <button
-                            onClick={() => {
-                              if (editingNotesId === selectedOrderDetail.id) {
-                                setEditingNotesId(null);
-                              } else {
-                                setEditingNotesId(selectedOrderDetail.id);
-                                setNotesInput(selectedOrderDetail.notes || "");
-                              }
-                            }}
-                            className="text-xs font-medium text-[#626260] hover:text-[#111111] bg-white border border-[#d3cec6] hover:border-[#b8b3ab] px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
-                          >
-                            <Edit3 className="w-3.5 h-3.5 text-[#7b7b78]" />
-                            <span>{editingNotesId === selectedOrderDetail.id ? 'Cancel' : 'Edit'}</span>
+                            <MessageSquare className="w-4 h-4 text-[#ff5600]" />
                           </button>
                         </div>
                       </div>
-
-                      {editingNotesId === selectedOrderDetail.id ? (
-                        <div className="space-y-3 pt-1">
-                          <textarea
-                            value={notesInput}
-                            onChange={(e) => setNotesInput(e.target.value)}
-                            placeholder="Add custom call summary, client requirements, or special instructions..."
-                            className="w-full p-4 text-xs bg-[#f5f1ec] border border-[#d3cec6] rounded-xl focus:ring-2 focus:ring-[#ff5600]/20 outline-none text-[#111111] font-medium min-h-[120px]"
-                          />
-                          <div className="flex justify-end gap-2">
-                            <button
-                              onClick={async () => {
-                                await fetch('/api/whatsapp/orders', {
-                                  method: 'PATCH',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ id: selectedOrderDetail.id, notes: notesInput })
-                                });
-                                selectedOrderDetail.notes = notesInput;
-                                setEditingNotesId(null);
-                                fetchOrders();
-                              }}
-                              className="px-4 py-2 bg-[#111111] hover:bg-black text-white text-xs font-medium rounded-lg transition-colors cursor-pointer shadow-xs"
-                            >
-                              Save Notes
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-xs text-[#111111] font-normal leading-relaxed bg-[#f5f1ec] p-4 rounded-xl border border-[#d3cec6] min-h-[100px]">
-                          {selectedOrderDetail.notes ? (
-                            <p className="whitespace-pre-wrap">{selectedOrderDetail.notes}</p>
-                          ) : (
-                            <span className="text-[#7b7b78] italic text-xs">No summary notes recorded yet. Click "Generate AI Notes" or "Edit" to record details.</span>
-                          )}
-                        </div>
-                      )}
                     </div>
+
+                    {/* Section Switcher Tabs inside Order Drawer */}
+                    {(() => {
+                      // Internal drawer sub-tab state helper
+                      const matchedCatalogProducts = (config.products || []).filter((p: any) => {
+                        const searchLower = (selectedOrderDetail.productName || "").toLowerCase();
+                        return p.title && searchLower.includes(p.title.toLowerCase().trim());
+                      });
+
+                      return (
+                        <div className="space-y-6">
+                          
+                          {/* Main Order Items & Invoice Breakdown Card (Image 1 UI Layout) */}
+                          <div className="bg-white rounded-2xl border border-[#d3cec6] shadow-sm overflow-hidden p-6 md:p-8 space-y-6">
+                            
+                            <div className="flex items-center justify-between pb-4 border-b border-[#ebe7e1]">
+                              <div className="flex items-center gap-2.5">
+                                <Package className="w-5 h-5 text-[#ff5600]" />
+                                <h4 className="text-sm font-extrabold text-[#111111] uppercase tracking-wider">
+                                  Task Info & Itemized Breakdown
+                                </h4>
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold px-3 py-1 rounded-full bg-[#f5f1ec] text-[#626260] border border-[#d3cec6]">
+                                  {matchedCatalogProducts.length > 0 ? `${matchedCatalogProducts.length} Matched from Catalog` : 'Custom WhatsApp Order'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Itemized Order List (Image 1 Layout with Thumbnails, Qty x1/x2, Specs, & Line Price) */}
+                            <div className="divide-y divide-[#ebe7e1]">
+                              {(() => {
+                                // Split multi-item product names if comma/newline separated
+                                const rawItems = (selectedOrderDetail.productName || "General Order").split(/,|\n/).map((s: string) => s.trim()).filter(Boolean);
+                                
+                                return rawItems.map((itemStr: string, idx: number) => {
+                                  // Extract quantity if formatted as "2x item" or "item (x2)"
+                                  let qty = 1;
+                                  let itemName = itemStr;
+                                  const qtyMatch = itemStr.match(/^(\d+)\s*x\s*(.+)$/i) || itemStr.match(/^(.+)\s*\(x?(\d+)\)$/i);
+                                  if (qtyMatch) {
+                                    if (/^\d+$/.test(qtyMatch[1])) {
+                                      qty = parseInt(qtyMatch[1]);
+                                      itemName = qtyMatch[2].trim();
+                                    } else {
+                                      itemName = qtyMatch[1].trim();
+                                      qty = parseInt(qtyMatch[2]);
+                                    }
+                                  }
+
+                                  // Match against store product catalog items
+                                  const matchedCat = (config.products || []).find((p: any) => 
+                                    p.title && (itemName.toLowerCase().includes(p.title.toLowerCase().trim()) || p.title.toLowerCase().trim().includes(itemName.toLowerCase()))
+                                  );
+
+                                  const imgUrl = matchedCat?.image || selectedOrderDetail.productImageUrl;
+                                  const displayPrice = matchedCat?.price || selectedOrderDetail.price || "COD";
+
+                                  return (
+                                    <div key={idx} className="py-4 first:pt-0 last:pb-0 flex items-center justify-between gap-4 flex-wrap hover:bg-[#f5f1ec]/40 p-2 rounded-xl transition-all">
+                                      
+                                      {/* Left: Product Thumbnail & Details */}
+                                      <div className="flex items-center gap-4 min-w-[240px] flex-1">
+                                        <div className="w-16 h-16 rounded-xl bg-[#f5f1ec] border border-[#d3cec6] overflow-hidden shrink-0 shadow-xs flex items-center justify-center">
+                                          {imgUrl ? (
+                                            <img src={imgUrl} alt={itemName} className="w-full h-full object-cover" />
+                                          ) : (
+                                            <Package className="w-8 h-8 text-[#ff5600]/80" />
+                                          )}
+                                        </div>
+
+                                        <div className="space-y-1 min-w-0">
+                                          <h5 className="font-bold text-[#111111] text-sm leading-snug">
+                                            {itemName}
+                                          </h5>
+                                          
+                                          {/* Specifications / Notes Pill */}
+                                          <div className="flex flex-wrap gap-1.5 items-center">
+                                            {selectedOrderDetail.size && (
+                                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-[#ebe7e1] text-[#626260]">
+                                                {selectedOrderDetail.size}
+                                              </span>
+                                            )}
+                                            {selectedOrderDetail.color && (
+                                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-[#ebe7e1] text-[#626260]">
+                                                Color: {selectedOrderDetail.color}
+                                              </span>
+                                            )}
+                                            {matchedCat?.category && (
+                                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
+                                                {matchedCat.category}
+                                              </span>
+                                            )}
+                                            {selectedOrderDetail.paymentMethod && (
+                                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                                                {selectedOrderDetail.paymentMethod}
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          {matchedCat?.description && (
+                                            <p className="text-[11px] text-[#7b7b78] line-clamp-1 italic">
+                                              {matchedCat.description}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Center: Quantity Pill (Image 1 Style "x2") */}
+                                      <div className="flex items-center justify-center px-4 py-1.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-xl font-mono text-xs font-black text-[#111111]">
+                                        x{qty}
+                                      </div>
+
+                                      {/* Right: Line Item Total */}
+                                      <div className="text-right font-extrabold text-[#111111] text-sm min-w-[90px]">
+                                        {displayPrice}
+                                      </div>
+                                    </div>
+                                  );
+                                });
+                              })()}
+                            </div>
+
+                            {/* Large Total Price & Calculation Summary Card (Image 1 Big Price Style) */}
+                            <div className="bg-[#f5f1ec] p-5 rounded-2xl border border-[#d3cec6] space-y-3">
+                              <div className="flex justify-between text-xs font-semibold text-[#626260]">
+                                <span>Subtotal Order Items</span>
+                                <span className="font-bold text-[#111111]">{selectedOrderDetail.price || 'COD'}</span>
+                              </div>
+                              
+                              <div className="flex justify-between text-xs font-semibold text-[#626260]">
+                                <span>Delivery / Shipping Charge</span>
+                                <span className="font-bold text-emerald-700 bg-emerald-100/80 px-2.5 py-0.5 rounded-md text-[10px] border border-emerald-300">
+                                  Free / Included
+                                </span>
+                              </div>
+
+                              <div className="flex justify-between text-xs font-semibold text-[#626260]">
+                                <span>Payment Mode</span>
+                                <span className="font-bold text-[#111111]">{selectedOrderDetail.paymentMethod || 'Cash on Delivery (COD)'}</span>
+                              </div>
+
+                              <div className="pt-3 border-t border-[#d3cec6] flex justify-between items-center">
+                                <div className="space-y-0.5">
+                                  <span className="text-xs font-black uppercase tracking-wider text-[#111111] block">
+                                    Grand Total Price
+                                  </span>
+                                  <span className="text-[10px] text-[#7b7b78] font-medium block">Taxes included</span>
+                                </div>
+
+                                <div className="text-2xl md:text-3xl font-black text-[#ff5600] tracking-tight font-mono">
+                                  {selectedOrderDetail.price || 'COD'}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Bottom Primary Action Button (Image 1 Vibrant CTA Style) */}
+                            <div className="pt-2">
+                              {selectedOrderDetail.status === 'delivered' || selectedOrderDetail.status === 'deliver' ? (
+                                <button
+                                  disabled
+                                  className="w-full py-4 bg-emerald-600 text-white font-extrabold rounded-2xl shadow-md flex items-center justify-center gap-2 cursor-not-allowed opacity-90"
+                                >
+                                  <Check className="w-5 h-5 text-white" />
+                                  <span>Order Delivered & Completed</span>
+                                </button>
+                              ) : selectedOrderDetail.status === 'under_baking' || selectedOrderDetail.status === 'confirmed' ? (
+                                <button
+                                  onClick={async () => {
+                                    await fetch('/api/whatsapp/orders', {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ id: selectedOrderDetail.id, status: 'delivered' })
+                                    });
+                                    selectedOrderDetail.status = 'delivered';
+                                    fetchOrders();
+                                  }}
+                                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                                >
+                                  <Check className="w-5 h-5 text-white" />
+                                  <span>Mark Order as Delivered 🟢</span>
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={async () => {
+                                    await fetch('/api/whatsapp/orders', {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ id: selectedOrderDetail.id, status: 'under_baking' })
+                                    });
+                                    selectedOrderDetail.status = 'under_baking';
+                                    fetchOrders();
+                                  }}
+                                  className="w-full py-4 bg-[#ff5600] hover:bg-[#e04c00] text-white font-extrabold text-sm rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                                >
+                                  <ShoppingCart className="w-5 h-5 text-white" />
+                                  <span>Accept & Start Preparing Order 🟠</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Store Product Catalog Inspector & Quick-Add Section */}
+                          <div className="bg-white rounded-2xl border border-[#d3cec6] shadow-sm p-6 space-y-5">
+                            <div className="flex items-center justify-between pb-3 border-b border-[#ebe7e1]">
+                              <div className="flex items-center gap-2.5">
+                                <BookOpen className="w-5 h-5 text-[#ff5600]" />
+                                <h4 className="text-xs font-bold text-[#111111] uppercase tracking-wider">
+                                  Store Product Catalog ({config.products?.length || 0} Available Items)
+                                </h4>
+                              </div>
+                              <span className="text-[11px] text-[#7b7b78] font-medium">Click any catalog item to append or copy specs</span>
+                            </div>
+
+                            {(!config.products || config.products.length === 0) ? (
+                              <div className="p-8 text-center bg-[#f5f1ec] rounded-xl border border-dashed border-[#d3cec6] text-xs text-[#7b7b78] space-y-2">
+                                <p className="font-semibold">No products found in store catalog.</p>
+                                <p className="text-[11px]">Go to <button onClick={() => { setActiveTab('knowledge'); setSelectedOrderDetail(null); }} className="text-[#ff5600] font-bold underline cursor-pointer">Knowledge Base &gt; Products</button> to add your store menu.</p>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[350px] overflow-y-auto pr-1">
+                                {config.products.map((prod: any, pIdx: number) => {
+                                  const isSelected = (selectedOrderDetail.productName || "").toLowerCase().includes((prod.title || "").toLowerCase());
+                                  
+                                  return (
+                                    <div 
+                                      key={prod.id || pIdx} 
+                                      className={`p-3.5 rounded-xl border transition-all flex items-center justify-between gap-3 ${
+                                        isSelected 
+                                          ? 'bg-orange-50/80 border-[#ff5600] ring-1 ring-[#ff5600]/30 shadow-xs' 
+                                          : 'bg-[#f5f1ec] border-[#d3cec6] hover:bg-white hover:border-[#b8b3ab]'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                                        <div className="w-12 h-12 rounded-lg bg-white border border-[#d3cec6] overflow-hidden shrink-0 flex items-center justify-center">
+                                          {prod.image ? (
+                                            <img src={prod.image} alt={prod.title} className="w-full h-full object-cover" />
+                                          ) : (
+                                            <Package className="w-6 h-6 text-[#ff5600]" />
+                                          )}
+                                        </div>
+
+                                        <div className="min-w-0">
+                                          <div className="text-xs font-bold text-[#111111] truncate">{prod.title}</div>
+                                          <div className="text-[11px] font-semibold text-[#ff5600]">{prod.price || 'COD'}</div>
+                                          {prod.category && (
+                                            <span className="text-[9px] text-[#626260] font-medium block truncate">{prod.category}</span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        onClick={async () => {
+                                          const newProductName = `${selectedOrderDetail.productName}, ${prod.title}`;
+                                          await fetch('/api/whatsapp/orders', {
+                                            method: 'PATCH',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ id: selectedOrderDetail.id, productName: newProductName })
+                                          });
+                                          selectedOrderDetail.productName = newProductName;
+                                          fetchOrders();
+                                        }}
+                                        className="px-2.5 py-1.5 bg-[#111111] hover:bg-black text-white text-[10px] font-bold rounded-lg transition-all shrink-0 cursor-pointer active:scale-95 flex items-center gap-1"
+                                        title="Append product to this order"
+                                      >
+                                        <Plus className="w-3 h-3 text-[#ff5600]" /> Add
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* AI Call Summary & Requirements Card */}
+                          <div className="bg-white p-6 rounded-2xl border border-[#d3cec6] shadow-sm space-y-4">
+                            <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-[#ebe7e1]">
+                              <div className="flex items-center gap-2 text-sm font-bold text-[#111111]">
+                                <FileText className="w-5 h-5 text-[#ff5600]" />
+                                <span>Call Summary & AI Client Requirements</span>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={async () => {
+                                    setGeneratingNotesId(selectedOrderDetail.id);
+                                    try {
+                                      const res = await fetch('/api/whatsapp/orders', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ id: selectedOrderDetail.id, phone: selectedOrderDetail.phone })
+                                      });
+                                      const data = await res.json();
+                                      if (data.notes) {
+                                        selectedOrderDetail.notes = data.notes;
+                                        fetchOrders();
+                                      }
+                                    } catch (e) {
+                                      console.error(e);
+                                    } finally {
+                                      setGeneratingNotesId(null);
+                                    }
+                                  }}
+                                  disabled={generatingNotesId === selectedOrderDetail.id}
+                                  className="text-xs font-bold text-[#111111] hover:text-black bg-[#f5f1ec] border border-[#d3cec6] hover:border-[#b8b3ab] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                                >
+                                  {generatingNotesId === selectedOrderDetail.id ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[#ff5600]" /> : <Sparkles className="w-3.5 h-3.5 text-[#ff5600]" />}
+                                  <span>{generatingNotesId === selectedOrderDetail.id ? 'Generating AI Notes...' : 'Generate AI Notes'}</span>
+                                </button>
+
+                                <button
+                                  onClick={() => {
+                                    if (editingNotesId === selectedOrderDetail.id) {
+                                      setEditingNotesId(null);
+                                    } else {
+                                      setEditingNotesId(selectedOrderDetail.id);
+                                      setNotesInput(selectedOrderDetail.notes || "");
+                                    }
+                                  }}
+                                  className="text-xs font-bold text-[#626260] hover:text-[#111111] bg-[#f5f1ec] border border-[#d3cec6] hover:border-[#b8b3ab] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5 text-[#7b7b78]" />
+                                  <span>{editingNotesId === selectedOrderDetail.id ? 'Cancel' : 'Edit Notes'}</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {editingNotesId === selectedOrderDetail.id ? (
+                              <div className="space-y-3 pt-1">
+                                <textarea
+                                  value={notesInput}
+                                  onChange={(e) => setNotesInput(e.target.value)}
+                                  placeholder="Add custom call summary, client requirements, or special instructions..."
+                                  className="w-full p-4 text-xs bg-[#f5f1ec] border border-[#d3cec6] rounded-xl focus:ring-2 focus:ring-[#ff5600]/20 outline-none text-[#111111] font-medium min-h-[120px]"
+                                />
+                                <div className="flex justify-end gap-2">
+                                  <button
+                                    onClick={async () => {
+                                      await fetch('/api/whatsapp/orders', {
+                                        method: 'PATCH',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ id: selectedOrderDetail.id, notes: notesInput })
+                                      });
+                                      selectedOrderDetail.notes = notesInput;
+                                      setEditingNotesId(null);
+                                      fetchOrders();
+                                    }}
+                                    className="px-4 py-2 bg-[#111111] hover:bg-black text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shadow-xs"
+                                  >
+                                    Save Notes
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="text-xs text-[#111111] font-normal leading-relaxed bg-[#f5f1ec] p-4 rounded-xl border border-[#d3cec6] min-h-[90px]">
+                                {selectedOrderDetail.notes ? (
+                                  <p className="whitespace-pre-wrap">{selectedOrderDetail.notes}</p>
+                                ) : (
+                                  <span className="text-[#7b7b78] italic text-xs">No summary notes recorded yet. Click "Generate AI Notes" or "Edit Notes" to record details.</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -5736,6 +5971,294 @@ export default function DashboardPage() {
                       })}
                   </tbody>
                 </table>
+              )}
+            </div>
+          )}
+
+          {/* ================= TAB: SYSTEM & REQUEST OBSERVE LOGGER ================= */}
+          {activeTab === "logs" && (
+            <div className="space-y-6 animate-in fade-in">
+              {/* Header Bar */}
+              <div className="bg-white p-6 rounded-2xl border border-[#d3cec6] shadow-xs flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-[#111111] flex items-center gap-2 tracking-tight">
+                    <Activity className="w-6 h-6 text-[#ff5600] animate-pulse" />
+                    <span>Real-Time Observability System Logger</span>
+                  </h2>
+                  <p className="text-xs text-[#626260] font-normal mt-1">
+                    Accurate live tracking of incoming customer WhatsApp messages, AI turn outputs, STT audio transcriptions, order captures, and system alerts.
+                  </p>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={() => setClientLogAutoRefresh(!clientLogAutoRefresh)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center space-x-2 border cursor-pointer ${
+                      clientLogAutoRefresh
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : 'bg-[#f5f1ec] text-[#626260] border-[#d3cec6]'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${clientLogAutoRefresh ? 'bg-emerald-500 animate-ping' : 'bg-[#7b7b78]'}`} />
+                    <span>{clientLogAutoRefresh ? 'Live Auto-Polling (4s)' : 'Polling Paused'}</span>
+                  </button>
+
+                  <button
+                    onClick={fetchClientLogs}
+                    disabled={isFetchingClientLogs}
+                    className="px-4 py-2 bg-[#111111] hover:bg-black disabled:opacity-50 text-white rounded-lg text-xs font-medium flex items-center space-x-2 shadow-xs transition cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 text-[#ff5600] ${isFetchingClientLogs ? 'animate-spin' : ''}`} />
+                    <span>Refresh Now</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Grid Layout: Main Logs (2 Cols) + Side Error Drawer (1 Col) */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                {/* Left 2 Columns: Live System Stream & Filters */}
+                <div className="lg:col-span-2 space-y-4">
+                  {/* Filter Bar */}
+                  <div className="bg-white p-4 rounded-xl border border-[#d3cec6] shadow-xs flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2 flex-1">
+                      <div className="relative flex-1 min-w-[180px]">
+                        <Search className="w-4 h-4 text-[#7b7b78] absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Filter phone, query, or action..."
+                          value={clientLogSearchQuery}
+                          onChange={e => setClientLogSearchQuery(e.target.value)}
+                          className="w-full pl-9 pr-3 py-1.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg text-xs font-medium text-[#111111] placeholder-[#7b7b78] focus:outline-none focus:border-[#ff5600]"
+                        />
+                      </div>
+
+                      <select
+                        value={clientLogTypeFilter}
+                        onChange={e => setClientLogTypeFilter(e.target.value)}
+                        className="px-2.5 py-1.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg text-xs font-semibold text-[#111111] focus:outline-none focus:border-[#ff5600] cursor-pointer"
+                      >
+                        <option value="all">⚡ All Log Types</option>
+                        <option value="WHATSAPP_MESSAGE">💬 WhatsApp Turns</option>
+                        <option value="TOOL_EXECUTION">🛠 Tool Actions</option>
+                        <option value="STT_TRANSCRIPTION">🎙 Voice STT</option>
+                        <option value="ORDER_CREATED">📦 Orders</option>
+                        <option value="API_ALERT">🚨 Alerts</option>
+                      </select>
+
+                      <select
+                        value={clientLogLevelFilter}
+                        onChange={e => setClientLogLevelFilter(e.target.value)}
+                        className="px-2.5 py-1.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg text-xs font-semibold text-[#111111] focus:outline-none focus:border-[#ff5600] cursor-pointer"
+                      >
+                        <option value="all">🎯 All Severities</option>
+                        <option value="info">ℹ️ Info</option>
+                        <option value="success">✅ Success</option>
+                        <option value="warn">⚠️ Warning</option>
+                        <option value="error">❌ Error</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Log Cards List */}
+                  <div className="bg-white rounded-2xl border border-[#d3cec6] shadow-xs overflow-hidden">
+                    {clientLogs.length === 0 ? (
+                      <div className="p-10 text-center space-y-2">
+                        <Activity className="w-10 h-10 text-[#d3cec6] mx-auto animate-pulse" />
+                        <h4 className="text-sm font-bold text-[#111111]">No Log Events Captured Yet</h4>
+                        <p className="text-xs text-[#626260]">All incoming WhatsApp messages, voice transcripts, and AI execution turns will stream here in real time.</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-[#ebe7e1]">
+                        {clientLogs
+                          .filter(l => 
+                            !clientLogSearchQuery || 
+                            l.summary?.toLowerCase().includes(clientLogSearchQuery.toLowerCase()) || 
+                            l.phone?.includes(clientLogSearchQuery) ||
+                            l.query?.toLowerCase().includes(clientLogSearchQuery.toLowerCase()) ||
+                            l.response?.toLowerCase().includes(clientLogSearchQuery.toLowerCase())
+                          )
+                          .map((log) => {
+                            const isError = log.level === 'error';
+                            const isWarn = log.level === 'warn';
+                            const isSuccess = log.level === 'success';
+
+                            return (
+                              <div
+                                key={log.id}
+                                onClick={() => setSelectedClientLog(log)}
+                                className="p-4 hover:bg-[#f5f1ec]/60 transition-colors cursor-pointer space-y-2 group"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex items-center space-x-2">
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                                      log.type === 'WHATSAPP_MESSAGE' ? 'bg-purple-100 text-purple-800' :
+                                      log.type === 'TOOL_EXECUTION' ? 'bg-indigo-100 text-indigo-800' :
+                                      log.type === 'ORDER_CREATED' ? 'bg-emerald-100 text-emerald-800' :
+                                      log.type === 'STT_TRANSCRIPTION' ? 'bg-cyan-100 text-cyan-800' :
+                                      'bg-rose-100 text-rose-800'
+                                    }`}>
+                                      {log.type.replace('_', ' ')}
+                                    </span>
+
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+                                      isError ? 'bg-rose-600 text-white' :
+                                      isWarn ? 'bg-amber-500 text-white' :
+                                      isSuccess ? 'bg-emerald-600 text-white' :
+                                      'bg-slate-200 text-slate-700'
+                                    }`}>
+                                      {log.level}
+                                    </span>
+
+                                    {log.phone && (
+                                      <span className="text-xs font-mono font-bold text-[#111111]">
+                                        +{log.phone}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center space-x-2 text-[11px] font-mono text-[#7b7b78]">
+                                    <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
+                                    <span className="text-[#ff5600] font-bold group-hover:underline">Inspect →</span>
+                                  </div>
+                                </div>
+
+                                <p className="text-xs font-semibold text-[#111111]">
+                                  {log.summary}
+                                </p>
+
+                                {log.query && (
+                                  <div className="bg-[#f5f1ec] p-2 rounded-lg text-xs font-mono text-slate-700">
+                                    <span className="font-bold text-[#7b7b78] uppercase text-[9px] block mb-0.5">User Query:</span>
+                                    {log.query}
+                                  </div>
+                                )}
+
+                                {log.response && (
+                                  <div className="bg-purple-50/60 p-2 rounded-lg border border-purple-100 text-xs font-mono text-slate-800">
+                                    <span className="font-bold text-purple-600 uppercase text-[9px] block mb-0.5">AI Response:</span>
+                                    {log.response}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Column: LIVE ERROR & ALERT SIDEBAR DRAWER (as requested in voice message) */}
+                <div className="space-y-4">
+                  <div className="bg-white p-5 rounded-2xl border border-rose-200/80 shadow-xs space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-rose-100">
+                      <div className="flex items-center space-x-2">
+                        <AlertCircle className="w-5 h-5 text-rose-600 animate-bounce" />
+                        <h3 className="text-sm font-bold text-slate-900">Recent Errors & System Alerts</h3>
+                      </div>
+                      <span className="px-2 py-0.5 bg-rose-100 text-rose-700 font-extrabold text-[10px] rounded-full uppercase font-mono">
+                        {clientLogs.filter(l => l.level === 'error' || l.level === 'warn').length} Issues
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-slate-500 font-normal leading-relaxed">
+                      Instant side screen tracking unexpected errors, failed API requests, socket drops, or tool execution issues by minute & timestamp.
+                    </p>
+
+                    <div className="space-y-2.5 max-h-[520px] overflow-y-auto pr-1">
+                      {clientLogs.filter(l => l.level === 'error' || l.level === 'warn').length === 0 ? (
+                        <div className="p-6 text-center bg-emerald-50/60 rounded-xl border border-emerald-200/80 space-y-1">
+                          <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
+                          <div className="text-xs font-bold text-emerald-900">0 Active System Errors</div>
+                          <div className="text-[10px] text-emerald-700">All WhatsApp turns, tool calls, and API providers are operating smoothly.</div>
+                        </div>
+                      ) : (
+                        clientLogs
+                          .filter(l => l.level === 'error' || l.level === 'warn')
+                          .map((errLog) => (
+                            <div
+                              key={`side-err-${errLog.id}`}
+                              onClick={() => setSelectedClientLog(errLog)}
+                              className="p-3 bg-rose-50/80 hover:bg-rose-100/80 border border-rose-200 rounded-xl transition cursor-pointer space-y-1.5 group"
+                            >
+                              <div className="flex items-center justify-between text-[10px] font-mono font-bold">
+                                <span className="text-rose-700 uppercase bg-rose-200/80 px-1.5 py-0.5 rounded">
+                                  {errLog.level} • {errLog.type.replace('_', ' ')}
+                                </span>
+                                <span className="text-slate-500">{new Date(errLog.timestamp).toLocaleTimeString()}</span>
+                              </div>
+                              <div className="text-xs font-bold text-slate-900 group-hover:text-rose-700 line-clamp-2">
+                                {errLog.summary}
+                              </div>
+                              {errLog.phone && (
+                                <div className="text-[10px] font-mono text-slate-500">
+                                  Customer: +{errLog.phone}
+                                </div>
+                              )}
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Log Detail Inspector Modal */}
+              {selectedClientLog && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                  <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                      <div>
+                        <span className="text-[10px] font-mono font-bold text-[#ff5600] uppercase">Log Entry Inspector Payload</span>
+                        <h3 className="text-base font-bold text-slate-900">{selectedClientLog.summary}</h3>
+                      </div>
+                      <button
+                        onClick={() => setSelectedClientLog(null)}
+                        className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 cursor-pointer"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+                      <div className="grid grid-cols-2 gap-3 text-xs font-mono bg-[#f5f1ec] p-3 rounded-xl border border-[#d3cec6]">
+                        <div>
+                          <span className="text-slate-400 font-bold block text-[10px]">TIMESTAMP</span>
+                          <span className="text-slate-900 font-bold">{new Date(selectedClientLog.timestamp).toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-bold block text-[10px]">EVENT TYPE</span>
+                          <span className="text-[#ff5600] font-bold">{selectedClientLog.type}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-bold block text-[10px]">LEVEL</span>
+                          <span className="text-slate-900 font-bold uppercase">{selectedClientLog.level}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-bold block text-[10px]">CUSTOMER PHONE</span>
+                          <span className="text-slate-900 font-bold">{selectedClientLog.phone || 'N/A'}</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1">Raw Event Payload & Technical Traces</span>
+                        <pre className="bg-slate-950 text-emerald-400 p-4 rounded-xl text-[11px] font-mono overflow-x-auto max-h-72 border border-slate-800 leading-relaxed">
+                          {JSON.stringify(selectedClientLog.details || selectedClientLog, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-100 flex justify-end">
+                      <button
+                        onClick={() => setSelectedClientLog(null)}
+                        className="px-5 py-2 bg-[#111111] text-white font-bold rounded-xl text-xs shadow-sm cursor-pointer"
+                      >
+                        Close Inspector
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           )}

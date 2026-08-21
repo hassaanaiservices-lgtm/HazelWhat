@@ -1101,11 +1101,19 @@ export class WhatsAppManager {
   }
 
   static async sendMessage(to: string, text: string) {
-    const sock = await this.ensureConnected();
-    const jid = await this.resolveJid(to);
-    await sock.sendPresenceUpdate('paused', jid);
-    const sentMsg = await sock.sendMessage(jid, { text });
-    return sentMsg;
+    try {
+      const sock = await this.ensureConnected();
+      const jid = await this.resolveJid(to);
+      await sock.sendPresenceUpdate('paused', jid);
+      const sentMsg = await sock.sendMessage(jid, { text });
+      return sentMsg;
+    } catch (err: any) {
+      if (err?.message?.includes("WhatsApp not connected")) {
+        console.warn(`[WhatsApp] Socket not connected — skipping outgoing message send to ${to}`);
+        return null;
+      }
+      throw err;
+    }
   }
 
   static async sendImageUrl(to: string, imageUrl: string, caption?: string) {

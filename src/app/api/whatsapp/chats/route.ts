@@ -17,7 +17,8 @@ export async function GET(req: NextRequest) {
     console.log(`${tag} hazel_admin_session present:`, !!rawAdminCookie);
 
     const session = await getSessionFromCookies(req);
-    console.log(`${tag} Resolved session:`, session ? `role=${session.role}, tenantId=${session.tenantId}` : "NULL (unauthenticated)");
+    const tenantId = session?.tenantId;
+    console.log(`${tag} Resolved session:`, session ? `role=${session.role}, tenantId=${tenantId}` : "NULL (unauthenticated)");
 
     let effectiveTenantId = tenantId;
 
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
     let customers = await DB.getAllCustomers(effectiveTenantId);
 
     // Auto-seed atomixweb dummy customers, orders, and chats if empty
-    if (tenantId === 't-1007' && Object.keys(chats).length === 0 && customers.length === 0) {
+    if (effectiveTenantId === 't-1007' && Object.keys(chats).length === 0 && customers.length === 0) {
       console.log(`${tag} Auto-seeding dummy contacts, chats, and orders for atomixweb (t-1007)...`);
       const dummyCustomers = [
         {
@@ -102,8 +103,8 @@ export async function GET(req: NextRequest) {
         customerName: "Ali Raza"
       }, 't-1007');
 
-      chats = await DB.getAllChats(tenantId);
-      customers = await DB.getAllCustomers(tenantId);
+      chats = await DB.getAllChats(effectiveTenantId);
+      customers = await DB.getAllCustomers(effectiveTenantId);
     }
     console.log(`${tag} Primary fetch — chats: ${Object.keys(chats).length}, customers: ${customers.length}`);
 
@@ -115,7 +116,7 @@ export async function GET(req: NextRequest) {
       chats, 
       customers,
       _debug: { 
-        tenantId, 
+        tenantId: effectiveTenantId, 
         chatPhones: Object.keys(chats),
         supabaseConnected: isSupabaseConfigured
       }

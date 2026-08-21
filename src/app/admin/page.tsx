@@ -131,9 +131,9 @@ const defaultFallbackTenant: Tenant = {
 };
 
 export default function VoiceSaaSApp() {
-  const [activeTab, setActiveTabRaw] = useState<'dashboard' | 'clients' | 'admins' | 'settings'>('dashboard');
+  const [activeTab, setActiveTabRaw] = useState<'dashboard' | 'clients' | 'admins' | 'settings' | 'logs'>('dashboard');
 
-  const setActiveTab = (tab: 'dashboard' | 'clients' | 'admins' | 'settings') => {
+  const setActiveTab = (tab: 'dashboard' | 'clients' | 'admins' | 'settings' | 'logs') => {
     setActiveTabRaw(tab);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -141,6 +141,42 @@ export default function VoiceSaaSApp() {
       window.history.replaceState({}, '', url.toString());
     }
   };
+
+  // Real-time System & Request Logger State
+  const [systemLogs, setSystemLogs] = useState<any[]>([]);
+  const [isFetchingLogs, setIsFetchingLogs] = useState(false);
+  const [selectedLogEntry, setSelectedLogEntry] = useState<any | null>(null);
+  const [logTypeFilter, setLogTypeFilter] = useState('all');
+  const [logLevelFilter, setLogLevelFilter] = useState('all');
+  const [logSearchQuery, setLogSearchQuery] = useState('');
+  const [logAutoRefresh, setLogAutoRefresh] = useState(true);
+
+  const fetchSystemLogs = async () => {
+    setIsFetchingLogs(true);
+    try {
+      const res = await fetch(`/api/admin/logs?type=${logTypeFilter}&level=${logLevelFilter}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.logs)) {
+          setSystemLogs(data.logs);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch system logs:", e);
+    } finally {
+      setIsFetchingLogs(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'logs' || (activeTab === 'clients' && clientSubTab === 'setup')) {
+      fetchSystemLogs();
+      if (logAutoRefresh) {
+        const interval = setInterval(fetchSystemLogs, 4000);
+        return () => clearInterval(interval);
+      }
+    }
+  }, [activeTab, clientSubTab, logTypeFilter, logLevelFilter, logAutoRefresh]);
 
   const handleAdminLogout = async () => {
     try {
@@ -882,6 +918,24 @@ export default function VoiceSaaSApp() {
             >
               <ShieldCheck className="w-5 h-5" />
               <span>Team Admins</span>
+            </button>
+
+            {/* TAB 4: SYSTEM LOGGER */}
+            <button
+              onClick={() => setActiveTab('logs')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-semibold transition-all cursor-pointer ${
+                activeTab === 'logs'
+                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <div className="flex items-center space-x-3">
+                <Activity className="w-5 h-5" />
+                <span>System Logger</span>
+              </div>
+              <span className="px-2 py-0.5 text-[9px] font-black rounded-full bg-emerald-400/20 text-emerald-600 dark:text-emerald-300 border border-emerald-400/30 uppercase tracking-wider animate-pulse">
+                LIVE
+              </span>
             </button>
 
           </nav>
@@ -1945,6 +1999,241 @@ export default function VoiceSaaSApp() {
 
                   </div>
 
+                  {/* ⚡ REAL-TIME SYSTEM & REQUEST OBSERVABILITY LOGGER FOR THIS CLIENT */}
+                  <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
+                    {/* Logger Header */}
+                    <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                      <div>
+                        <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2 tracking-tight">
+                          <Activity className="w-5 h-5 text-purple-600 animate-pulse" />
+                          <span>Live System Observability & Activity Logger</span>
+                          <span className="px-2.5 py-0.5 bg-purple-100 text-purple-800 text-[10px] font-black rounded-full uppercase font-mono">
+                            Client #{selectedTenant.clientNumber}
+                          </span>
+                        </h2>
+                        <p className="text-xs text-slate-500 font-medium mt-1">
+                          Real-time live monitoring of incoming WhatsApp messages, AI turn outputs, STT voice transcripts, orders, and system health alerts for <span className="font-bold text-slate-800">{selectedTenant.name}</span>.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center space-x-3">
+                        <button
+                          onClick={() => setLogAutoRefresh(!logAutoRefresh)}
+                          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 border cursor-pointer ${
+                            logAutoRefresh
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-slate-100 text-slate-600 border-slate-200'
+                          }`}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${logAutoRefresh ? 'bg-emerald-500 animate-ping' : 'bg-slate-400'}`} />
+                          <span>{logAutoRefresh ? 'Live Auto-Polling (4s)' : 'Polling Paused'}</span>
+                        </button>
+
+                        <button
+                          onClick={fetchSystemLogs}
+                          disabled={isFetchingLogs}
+                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center space-x-2 shadow-sm transition cursor-pointer"
+                        >
+                          <RefreshCw className={`w-4 h-4 ${isFetchingLogs ? 'animate-spin' : ''}`} />
+                          <span>Refresh Now</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 3-Column Grid: Main Logs (2 Cols) + Side Error Panel (1 Col) */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                      {/* Left 2 Columns: Live System Stream & Filters */}
+                      <div className="lg:col-span-2 space-y-4">
+                        {/* Filters Bar */}
+                        <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[260px]">
+                            {/* Search Query */}
+                            <div className="relative flex-1 min-w-[160px]">
+                              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                              <input
+                                type="text"
+                                placeholder="Search phone, text, tool..."
+                                value={logSearchQuery}
+                                onChange={e => setLogSearchQuery(e.target.value)}
+                                className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                              />
+                            </div>
+
+                            {/* Filter by Log Type */}
+                            <select
+                              value={logTypeFilter}
+                              onChange={e => setLogTypeFilter(e.target.value)}
+                              className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                            >
+                              <option value="all">⚡ All Log Types</option>
+                              <option value="WHATSAPP_MESSAGE">💬 WhatsApp Messages</option>
+                              <option value="TOOL_EXECUTION">🛠 Tool Executions</option>
+                              <option value="STT_TRANSCRIPTION">🎙 Voice STT</option>
+                              <option value="ORDER_CREATED">📦 Orders</option>
+                              <option value="API_ALERT">🚨 API Health Alerts</option>
+                            </select>
+
+                            {/* Filter by Severity */}
+                            <select
+                              value={logLevelFilter}
+                              onChange={e => setLogLevelFilter(e.target.value)}
+                              className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                            >
+                              <option value="all">🎯 All Severities</option>
+                              <option value="info">ℹ️ Info</option>
+                              <option value="success">✅ Success</option>
+                              <option value="warn">⚠️ Warning</option>
+                              <option value="error">❌ Error</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Log Stream List */}
+                        <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden">
+                          {systemLogs.length === 0 ? (
+                            <div className="p-10 text-center space-y-3">
+                              <Activity className="w-10 h-10 text-slate-300 mx-auto animate-pulse" />
+                              <h4 className="text-sm font-bold text-slate-700">No Activity Logs Found</h4>
+                              <p className="text-xs text-slate-400">Incoming WhatsApp customer turns and system events for this client will appear here in real-time.</p>
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-slate-100">
+                              {systemLogs
+                                .filter(l => 
+                                  !logSearchQuery || 
+                                  l.summary?.toLowerCase().includes(logSearchQuery.toLowerCase()) || 
+                                  l.phone?.includes(logSearchQuery) ||
+                                  l.query?.toLowerCase().includes(logSearchQuery.toLowerCase()) ||
+                                  l.response?.toLowerCase().includes(logSearchQuery.toLowerCase())
+                                )
+                                .map((log) => {
+                                  const isError = log.level === 'error';
+                                  const isWarn = log.level === 'warn';
+                                  const isSuccess = log.level === 'success';
+
+                                  return (
+                                    <div
+                                      key={`client-setup-log-${log.id}`}
+                                      onClick={() => setSelectedLogEntry(log)}
+                                      className="p-3.5 hover:bg-slate-50/80 transition-colors cursor-pointer space-y-1.5 group"
+                                    >
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="flex items-center space-x-2">
+                                          <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                                            log.type === 'WHATSAPP_MESSAGE' ? 'bg-purple-100 text-purple-800' :
+                                            log.type === 'TOOL_EXECUTION' ? 'bg-indigo-100 text-indigo-800' :
+                                            log.type === 'ORDER_CREATED' ? 'bg-emerald-100 text-emerald-800' :
+                                            log.type === 'STT_TRANSCRIPTION' ? 'bg-cyan-100 text-cyan-800' :
+                                            'bg-rose-100 text-rose-800'
+                                          }`}>
+                                            {log.type.replace('_', ' ')}
+                                          </span>
+
+                                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+                                            isError ? 'bg-rose-600 text-white' :
+                                            isWarn ? 'bg-amber-500 text-white' :
+                                            isSuccess ? 'bg-emerald-600 text-white' :
+                                            'bg-slate-200 text-slate-700'
+                                          }`}>
+                                            {log.level}
+                                          </span>
+
+                                          {log.phone && (
+                                            <span className="text-xs font-mono font-semibold text-slate-600">
+                                              {log.phone}
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        <div className="flex items-center space-x-2 text-[10px] font-mono text-slate-400">
+                                          <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
+                                          <span className="text-purple-600 font-bold group-hover:underline">Inspect →</span>
+                                        </div>
+                                      </div>
+
+                                      <p className="text-xs font-semibold text-slate-800">
+                                        {log.summary}
+                                      </p>
+
+                                      {log.query && (
+                                        <div className="bg-slate-50 p-2 rounded-lg border border-slate-200/60 text-[11px] font-mono text-slate-700">
+                                          <span className="font-bold text-slate-400 uppercase text-[9px] block">User Input:</span>
+                                          {log.query}
+                                        </div>
+                                      )}
+
+                                      {log.response && (
+                                        <div className="bg-purple-50/50 p-2 rounded-lg border border-purple-100 text-[11px] font-mono text-slate-800">
+                                          <span className="font-bold text-purple-500 uppercase text-[9px] block">AI Output:</span>
+                                          {log.response}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Right Column: LIVE ERROR & ALERT SIDEBAR DRAWER */}
+                      <div className="space-y-4">
+                        <div className="bg-slate-50/70 p-4 rounded-2xl border border-rose-200/80 space-y-3">
+                          <div className="flex items-center justify-between pb-2 border-b border-rose-100">
+                            <div className="flex items-center space-x-2">
+                              <AlertCircle className="w-4 h-4 text-rose-600 animate-bounce" />
+                              <h3 className="text-xs font-bold text-slate-900">Recent Errors & System Alerts</h3>
+                            </div>
+                            <span className="px-2 py-0.5 bg-rose-100 text-rose-700 font-extrabold text-[9px] rounded-full uppercase font-mono">
+                              {systemLogs.filter(l => l.level === 'error' || l.level === 'warn').length} Issues
+                            </span>
+                          </div>
+
+                          <p className="text-[10px] text-slate-500 font-medium leading-tight">
+                            Live alerts showing runtime failures, API rate limits, or missing tool payload details for this client setup.
+                          </p>
+
+                          <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                            {systemLogs.filter(l => l.level === 'error' || l.level === 'warn').length === 0 ? (
+                              <div className="p-5 text-center bg-emerald-50/60 rounded-xl border border-emerald-200/80 space-y-1">
+                                <CheckCircle2 className="w-6 h-6 text-emerald-600 mx-auto" />
+                                <div className="text-xs font-bold text-emerald-900">0 Active Client Errors</div>
+                                <div className="text-[10px] text-emerald-700">Client AI agent operating smoothly.</div>
+                              </div>
+                            ) : (
+                              systemLogs
+                                .filter(l => l.level === 'error' || l.level === 'warn')
+                                .map((errLog) => (
+                                  <div
+                                    key={`setup-side-err-${errLog.id}`}
+                                    onClick={() => setSelectedLogEntry(errLog)}
+                                    className="p-3 bg-rose-50/80 hover:bg-rose-100/80 border border-rose-200 rounded-xl transition cursor-pointer space-y-1 group"
+                                  >
+                                    <div className="flex items-center justify-between text-[9px] font-mono font-bold">
+                                      <span className="text-rose-700 uppercase bg-rose-200/80 px-1.5 py-0.5 rounded">
+                                        {errLog.level} • {errLog.type.replace('_', ' ')}
+                                      </span>
+                                      <span className="text-slate-500">{new Date(errLog.timestamp).toLocaleTimeString()}</span>
+                                    </div>
+                                    <div className="text-xs font-bold text-slate-900 group-hover:text-rose-700 line-clamp-2">
+                                      {errLog.summary}
+                                    </div>
+                                    {errLog.phone && (
+                                      <div className="text-[10px] text-slate-500 font-mono">
+                                        +{errLog.phone}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+
                 </div>
               )}
 
@@ -2247,6 +2536,304 @@ export default function VoiceSaaSApp() {
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ================= TAB 5: SYSTEM & REQUEST LOGGER ================= */}
+          {activeTab === 'logs' && (
+            <div className="space-y-6 animate-in fade-in">
+              {/* Header Bar */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2 tracking-tight">
+                    <Activity className="w-6 h-6 text-purple-600 animate-pulse" />
+                    <span>Live System & Request Observability Logger</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 font-medium mt-1">
+                    Real-time monitoring of all incoming WhatsApp customer messages, AI turns, STT audio transcripts, tool calls, and API health alerts.
+                  </p>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  {/* Auto-Refresh Toggle */}
+                  <button
+                    onClick={() => setLogAutoRefresh(!logAutoRefresh)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 border cursor-pointer ${
+                      logAutoRefresh
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-slate-100 text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${logAutoRefresh ? 'bg-emerald-500 animate-ping' : 'bg-slate-400'}`} />
+                    <span>{logAutoRefresh ? 'Live Auto-Polling (4s)' : 'Polling Paused'}</span>
+                  </button>
+
+                  <button
+                    onClick={fetchSystemLogs}
+                    disabled={isFetchingLogs}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center space-x-2 shadow-sm transition cursor-pointer"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isFetchingLogs ? 'animate-spin' : ''}`} />
+                    <span>Refresh Now</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 3-Column Grid: Main Logs (2 Cols) + Side Error Panel (1 Col) */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                {/* Left 2 Columns: Live System Stream & Filters */}
+                <div className="lg:col-span-2 space-y-4">
+                  {/* Filters Bar */}
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+                      {/* Search Query */}
+                      <div className="relative flex-1 min-w-[180px]">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Search phone, text, tool..."
+                          value={logSearchQuery}
+                          onChange={e => setLogSearchQuery(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                      </div>
+
+                      {/* Filter by Log Type */}
+                      <select
+                        value={logTypeFilter}
+                        onChange={e => setLogTypeFilter(e.target.value)}
+                        className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                      >
+                        <option value="all">⚡ All Log Types</option>
+                        <option value="WHATSAPP_MESSAGE">💬 WhatsApp Messages</option>
+                        <option value="TOOL_EXECUTION">🛠 Tool Executions</option>
+                        <option value="STT_TRANSCRIPTION">🎙 Voice STT</option>
+                        <option value="ORDER_CREATED">📦 Orders</option>
+                        <option value="API_ALERT">🚨 API Health Alerts</option>
+                      </select>
+
+                      {/* Filter by Severity */}
+                      <select
+                        value={logLevelFilter}
+                        onChange={e => setLogLevelFilter(e.target.value)}
+                        className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                      >
+                        <option value="all">🎯 All Severities</option>
+                        <option value="info">ℹ️ Info</option>
+                        <option value="success">✅ Success</option>
+                        <option value="warn">⚠️ Warning</option>
+                        <option value="error">❌ Error</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Log Stream List */}
+                  <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+                    {systemLogs.length === 0 ? (
+                      <div className="p-12 text-center space-y-3">
+                        <Activity className="w-12 h-12 text-slate-300 mx-auto animate-pulse" />
+                        <h4 className="text-base font-bold text-slate-700">No System Logs Found</h4>
+                        <p className="text-xs text-slate-400">Incoming WhatsApp messages, AI turn executions, and API health alerts will appear here in real-time.</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-slate-100">
+                        {systemLogs
+                          .filter(l => 
+                            !logSearchQuery || 
+                            l.summary?.toLowerCase().includes(logSearchQuery.toLowerCase()) || 
+                            l.phone?.includes(logSearchQuery) ||
+                            l.query?.toLowerCase().includes(logSearchQuery.toLowerCase()) ||
+                            l.response?.toLowerCase().includes(logSearchQuery.toLowerCase())
+                          )
+                          .map((log) => {
+                            const isError = log.level === 'error';
+                            const isWarn = log.level === 'warn';
+                            const isSuccess = log.level === 'success';
+
+                            return (
+                              <div
+                                key={log.id}
+                                onClick={() => setSelectedLogEntry(log)}
+                                className="p-4 hover:bg-slate-50/80 transition-colors cursor-pointer space-y-2 group"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex items-center space-x-2.5">
+                                    {/* Type Badge */}
+                                    <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
+                                      log.type === 'WHATSAPP_MESSAGE' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                                      log.type === 'TOOL_EXECUTION' ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' :
+                                      log.type === 'ORDER_CREATED' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                                      log.type === 'STT_TRANSCRIPTION' ? 'bg-cyan-100 text-cyan-800 border border-cyan-200' :
+                                      'bg-rose-100 text-rose-800 border border-rose-200'
+                                    }`}>
+                                      {log.type.replace('_', ' ')}
+                                    </span>
+
+                                    {/* Level Badge */}
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                                      isError ? 'bg-rose-600 text-white' :
+                                      isWarn ? 'bg-amber-500 text-white' :
+                                      isSuccess ? 'bg-emerald-600 text-white' :
+                                      'bg-slate-200 text-slate-700'
+                                    }`}>
+                                      {log.level}
+                                    </span>
+
+                                    {/* Business Name & Phone */}
+                                    <span className="text-xs font-bold text-slate-900">
+                                      {log.businessName || 'System'}
+                                    </span>
+
+                                    {log.phone && (
+                                      <span className="text-xs font-mono font-semibold text-slate-500">
+                                        • {log.phone}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center space-x-3 text-[11px] font-mono text-slate-400">
+                                    <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
+                                    <span className="text-purple-600 font-bold group-hover:underline">Inspect Details →</span>
+                                  </div>
+                                </div>
+
+                                <p className="text-xs font-semibold text-slate-800">
+                                  {log.summary}
+                                </p>
+
+                                {log.query && (
+                                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/60 text-xs font-mono text-slate-700">
+                                    <span className="font-bold text-slate-400 uppercase text-[10px] block mb-0.5">User Input:</span>
+                                    {log.query}
+                                  </div>
+                                )}
+
+                                {log.response && (
+                                  <div className="bg-purple-50/50 p-2.5 rounded-xl border border-purple-100 text-xs font-mono text-slate-800">
+                                    <span className="font-bold text-purple-500 uppercase text-[10px] block mb-0.5">AI Agent Output:</span>
+                                    {log.response}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Column: LIVE ERROR & ALERT SIDEBAR DRAWER */}
+                <div className="space-y-4">
+                  <div className="bg-white p-5 rounded-3xl border border-rose-200/80 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-rose-100">
+                      <div className="flex items-center space-x-2">
+                        <AlertCircle className="w-5 h-5 text-rose-600 animate-bounce" />
+                        <h3 className="text-sm font-bold text-slate-900">Recent Errors & System Alerts</h3>
+                      </div>
+                      <span className="px-2 py-0.5 bg-rose-100 text-rose-700 font-extrabold text-[10px] rounded-full uppercase font-mono">
+                        {systemLogs.filter(l => l.level === 'error' || l.level === 'warn').length} Issues
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                      Instant side screen highlighting runtime errors, API rate limits, tool execution failures, or system alerts by exact minute & timestamp.
+                    </p>
+
+                    <div className="space-y-2.5 max-h-[550px] overflow-y-auto pr-1">
+                      {systemLogs.filter(l => l.level === 'error' || l.level === 'warn').length === 0 ? (
+                        <div className="p-6 text-center bg-emerald-50/60 rounded-2xl border border-emerald-200/80 space-y-1">
+                          <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
+                          <div className="text-xs font-bold text-emerald-900">0 Active System Errors</div>
+                          <div className="text-[10px] text-emerald-700">All system components and client WhatsApp agents are operating smoothly.</div>
+                        </div>
+                      ) : (
+                        systemLogs
+                          .filter(l => l.level === 'error' || l.level === 'warn')
+                          .map((errLog) => (
+                            <div
+                              key={`admin-side-err-${errLog.id}`}
+                              onClick={() => setSelectedLogEntry(errLog)}
+                              className="p-3.5 bg-rose-50/80 hover:bg-rose-100/80 border border-rose-200 rounded-2xl transition cursor-pointer space-y-1.5 group"
+                            >
+                              <div className="flex items-center justify-between text-[10px] font-mono font-bold">
+                                <span className="text-rose-700 uppercase bg-rose-200/80 px-1.5 py-0.5 rounded">
+                                  {errLog.level} • {errLog.type.replace('_', ' ')}
+                                </span>
+                                <span className="text-slate-500">{new Date(errLog.timestamp).toLocaleTimeString()}</span>
+                              </div>
+                              <div className="text-xs font-bold text-slate-900 group-hover:text-rose-700 line-clamp-2">
+                                {errLog.summary}
+                              </div>
+                              <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                                <span>{errLog.businessName || 'System'}</span>
+                                {errLog.phone && <span>+{errLog.phone}</span>}
+                              </div>
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Log Detail Inspector Modal */}
+              {selectedLogEntry && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                  <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                      <div>
+                        <span className="text-[10px] font-mono font-bold text-purple-600 uppercase">Log Entry Payload Inspector</span>
+                        <h3 className="text-base font-bold text-slate-900">{selectedLogEntry.summary}</h3>
+                      </div>
+                      <button
+                        onClick={() => setSelectedLogEntry(null)}
+                        className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 cursor-pointer"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+                      <div className="grid grid-cols-2 gap-3 text-xs font-mono bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                        <div>
+                          <span className="text-slate-400 font-bold block text-[10px]">TIMESTAMP</span>
+                          <span className="text-slate-900 font-bold">{new Date(selectedLogEntry.timestamp).toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-bold block text-[10px]">EVENT TYPE</span>
+                          <span className="text-purple-600 font-bold">{selectedLogEntry.type}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-bold block text-[10px]">CLIENT / TENANT</span>
+                          <span className="text-slate-900 font-bold">{selectedLogEntry.businessName} ({selectedLogEntry.tenantId || 'global'})</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-bold block text-[10px]">CUSTOMER PHONE</span>
+                          <span className="text-slate-900 font-bold">{selectedLogEntry.phone || 'N/A'}</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1">Raw JSON Payload & Traces</span>
+                        <pre className="bg-slate-950 text-emerald-400 p-4 rounded-2xl text-[11px] font-mono overflow-x-auto max-h-72 border border-slate-800 leading-relaxed">
+                          {JSON.stringify(selectedLogEntry.details || selectedLogEntry, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-100 flex justify-end">
+                      <button
+                        onClick={() => setSelectedLogEntry(null)}
+                        className="px-5 py-2.5 bg-purple-600 text-white font-bold rounded-xl text-xs shadow-md shadow-purple-600/20 cursor-pointer"
+                      >
+                        Close Inspector
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
