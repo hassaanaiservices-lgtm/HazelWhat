@@ -1500,7 +1500,7 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
 
         if (isAddressRelated) {
           if (digits.length > 0) {
-            content = `[Customer Voice Note Transcribed - Extracted Digits: ${digits.join(', ')}]: "${voiceTranscript}"\n(System Note: Digit sequence detected in address voice note. Explicitly confirm back: "House #${digits[0].replace(/[^0-9]/g, '')}, [Area] — sahi hai?" Let customer verify or correct via text!)`;
+            content = `[Customer Voice Note Transcribed - Extracted Digits: ${digits.join(', ')}]: "${voiceTranscript}"\n(System Note: Digit sequence detected in address voice note. Explicitly confirm back: "House #${(digits[0] || '').replace(/[^0-9]/g, '')}, [Area] — sahi hai?" Let customer verify or correct via text!)`;
           } else {
             content = `[Customer Voice Note Transcribed - NO CLEAR HOUSE DIGITS DETECTED]: "${voiceTranscript}"\n(System Note: This voice note mentions location/area but NO clear House # / Flat # digits were found. Explicitly request the customer to type their House/Flat number as a TYPED TEXT reply!)`;
           }

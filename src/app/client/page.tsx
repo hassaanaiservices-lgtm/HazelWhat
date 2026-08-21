@@ -5974,6 +5974,9 @@ export default function DashboardPage() {
               )}
             </div>
           )}
+        </div>
+      </div>
+    )}
 
           {/* ================= TAB: SYSTEM & REQUEST OBSERVE LOGGER ================= */}
           {activeTab === "logs" && (
@@ -6262,10 +6265,6 @@ export default function DashboardPage() {
               )}
             </div>
           )}
-          </div>
         </div>
-      )}
-
-    </div>
   );
 }

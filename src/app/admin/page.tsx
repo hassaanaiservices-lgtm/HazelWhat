@@ -16,6 +16,7 @@ import {
   Zap,
   Volume2,
   CheckCircle,
+  CheckCircle2,
   Copy,
   DollarSign,
   Lock,
@@ -142,6 +143,9 @@ export default function VoiceSaaSApp() {
     }
   };
 
+  // Sub-tab State
+  const [clientSubTab, setClientSubTab] = useState<'setup' | 'directory'>('directory');
+
   // Real-time System & Request Logger State
   const [systemLogs, setSystemLogs] = useState<any[]>([]);
   const [isFetchingLogs, setIsFetchingLogs] = useState(false);
@@ -203,7 +207,6 @@ export default function VoiceSaaSApp() {
     }
   }, []);
 
-  const [clientSubTab, setClientSubTab] = useState<'setup' | 'directory'>('directory');
   const [tenants, setTenants] = useState<Tenant[]>(initialTenants);
   const [partners, setPartners] = useState<Partner[]>(initialPartners);
   const [callLogs, setCallLogs] = useState<CallLog[]>(initialLogs);
