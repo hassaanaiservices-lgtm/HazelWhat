@@ -1,4 +1,4 @@
-import { makeWASocket, DisconnectReason, WAMessageStatus, downloadMediaMessage, generateWAMessageFromContent, prepareWAMessageMedia, fetchLatestBaileysVersion, Browsers, DEFAULT_CONNECTION_CONFIG } from "@whiskeysockets/baileys";
+import { makeWASocket, DisconnectReason, WAMessageStatus, downloadMediaMessage, generateWAMessageFromContent, prepareWAMessageMedia, fetchLatestBaileysVersion, Browsers, DEFAULT_CONNECTION_CONFIG, AuthenticationState } from "@whiskeysockets/baileys";
 import { DB, DB_DIR, supabase } from "./db";
 import { Boom } from "@hapi/boom";
 import QRCode from "qrcode";
@@ -7,34 +7,139 @@ import path from "path";
 import fs from "fs";
 import { useSupabaseAuthState } from "./whatsapp-auth";
 import { scrapeStore } from "./scraper";
+
+import { WhatsAppSessionRegistry } from "./whatsapp-session-registry";
+import { getInstanceId } from "./instance-identity";
+
 const AUTH_FOLDER = path.join(DB_DIR, ".baileys_auth");
 
+export type SessionStatus = 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'LOGGING_OUT' | 'FAILED';
+
+export interface TenantSession {
+  tenantId: string;
+  status: SessionStatus;
+  qrCode: string | null;
+  qrGeneratedAt: number | null;
+  sock: any | null;
+  reconnectAttempts: number;
+  reconnectTimeout: any | null;
+  sessionConnectedAt: number | null;
+  lastError: string | null;
+  lastStatusCode: number | null;
+  initLockPromise?: Promise<any> | null;
+}
+
 const globalForBaileys = global as unknown as {
-  baileysSession: any;
+  baileysSessions: Map<string, TenantSession>;
   autoSyncInterval: any;
   followUpInterval: any;
-  reconnectTimeout: any;
   revivalInterval: any;
   watchdogInterval: any;
-  revivalProcessing: boolean;
-  startPromise?: Promise<any> | null;
-  reconnectAttempts: number;
   activeTenantId?: string | null;
-  lastError?: string | null;
-  lastStatusCode?: number | null;
   sessionConnectedAt?: number | null;
+  baileysSession?: any; // legacy property
+  reconnectAttempts?: number; // legacy property
+  lastError?: string | null; // legacy property
+  lastStatusCode?: number | null; // legacy property
 };
+
+if (!globalForBaileys.baileysSessions) {
+  globalForBaileys.baileysSessions = new Map<string, TenantSession>();
+}
 
 if (globalForBaileys.sessionConnectedAt === undefined) {
   globalForBaileys.sessionConnectedAt = Date.now();
 }
 
-if (!globalForBaileys.baileysSession) {
-  globalForBaileys.baileysSession = { status: "disconnected", qrCode: null, qrGeneratedAt: null, sock: null };
+// Reconnect backoff with bounded exponential backoff and jitter
+function getReconnectBackoff(attempts: number): number {
+  const base = Math.min(30000, Math.pow(2, attempts) * 1000);
+  const jitter = base * 0.2 * (Math.random() * 2 - 1);
+  return Math.max(1000, Math.round(base + jitter));
 }
-if (globalForBaileys.reconnectAttempts === undefined) {
-  globalForBaileys.reconnectAttempts = 0;
+
+// Graceful shutdown hook to release owned session leases and terminate sockets cleanly
+if (typeof process !== "undefined") {
+  const shutdown = async () => {
+    console.log("[WhatsApp] Graceful shutdown: releasing session leases & closing active tenant sessions...");
+    try {
+      await WhatsAppSessionRegistry.releaseAllOwnedLeases();
+    } catch (_) {}
+    if (globalForBaileys.baileysSessions) {
+      for (const [tenantId, session] of globalForBaileys.baileysSessions.entries()) {
+        if (session.sock) {
+          try {
+            session.sock.end(undefined);
+          } catch (_) {}
+        }
+      }
+    }
+  };
+  process.on("SIGINT", async () => {
+    await shutdown();
+    process.exit(0);
+  });
+  process.on("SIGTERM", async () => {
+    await shutdown();
+    process.exit(0);
+  });
 }
+
+// Preserve legacy globalForBaileys.baileysSession object using a dynamic proxy/getter
+Object.defineProperty(globalForBaileys, "baileysSession", {
+  get() {
+    const tenantId = globalForBaileys.activeTenantId || "default";
+    let session = globalForBaileys.baileysSessions.get(tenantId);
+    if (!session) {
+      session = {
+        tenantId,
+        status: "DISCONNECTED",
+        qrCode: null,
+        qrGeneratedAt: null,
+        sock: null,
+        reconnectAttempts: 0,
+        reconnectTimeout: null,
+        sessionConnectedAt: null,
+        lastError: null,
+        lastStatusCode: null,
+      };
+      globalForBaileys.baileysSessions.set(tenantId, session);
+    }
+    return {
+      status: session.status.toLowerCase(),
+      qrCode: session.qrCode,
+      qrGeneratedAt: session.qrGeneratedAt,
+      sock: session.sock,
+    };
+  },
+  set(val) {
+    const tenantId = globalForBaileys.activeTenantId || "default";
+    let session = globalForBaileys.baileysSessions.get(tenantId);
+    if (!session) {
+      session = {
+        tenantId,
+        status: "DISCONNECTED",
+        qrCode: null,
+        qrGeneratedAt: null,
+        sock: null,
+        reconnectAttempts: 0,
+        reconnectTimeout: null,
+        sessionConnectedAt: null,
+        lastError: null,
+        lastStatusCode: null,
+      };
+      globalForBaileys.baileysSessions.set(tenantId, session);
+    }
+    if (val) {
+      if (val.status) session.status = val.status.toUpperCase() as SessionStatus;
+      if (val.qrCode !== undefined) session.qrCode = val.qrCode;
+      if (val.qrGeneratedAt !== undefined) session.qrGeneratedAt = val.qrGeneratedAt;
+      if (val.sock !== undefined) session.sock = val.sock;
+    }
+  },
+  configurable: true,
+  enumerable: true
+});
 
 export class WhatsAppManager {
   static setActiveTenantId(tenantId?: string | null) {
@@ -58,9 +163,50 @@ export class WhatsAppManager {
     return globalForBaileys.activeTenantId || null;
   }
 
-  static async resolveActiveTenantFromSocket(): Promise<string | null> {
+  static getOrCreateSession(tenantId: string): TenantSession {
+    let session = globalForBaileys.baileysSessions.get(tenantId);
+    if (!session) {
+      session = {
+        tenantId,
+        status: "DISCONNECTED",
+        qrCode: null,
+        qrGeneratedAt: null,
+        sock: null,
+        reconnectAttempts: 0,
+        reconnectTimeout: null,
+        sessionConnectedAt: null,
+        lastError: null,
+        lastStatusCode: null,
+      };
+      globalForBaileys.baileysSessions.set(tenantId, session);
+    }
+    return session;
+  }
+
+  static getTenantSession(tenantId: string): TenantSession {
+    return this.getOrCreateSession(tenantId);
+  }
+
+  static getSessionStatus(tenantId: string): SessionStatus {
+    return this.getOrCreateSession(tenantId).status;
+  }
+
+  static async resolveTenantForPhone(phone: string): Promise<string> {
     try {
-      const sockUserId = globalForBaileys.baileysSession?.sock?.user?.id;
+      const cleanPhone = phone.replace(/[^\d]/g, "");
+      const customer = await DB.getCustomer(cleanPhone);
+      if (customer && customer.tenantId) {
+        return customer.tenantId;
+      }
+    } catch (_) {}
+    return this.getActiveTenantId() || "default";
+  }
+
+  static async resolveActiveTenantFromSocket(tenantId?: string): Promise<string | null> {
+    try {
+      const tId = tenantId || this.getActiveTenantId() || "default";
+      const session = this.getOrCreateSession(tId);
+      const sockUserId = session.sock?.user?.id;
       if (!sockUserId) {
         return null;
       }
@@ -72,10 +218,10 @@ export class WhatsAppManager {
       });
       if (matchedTenant) {
         globalForBaileys.activeTenantId = matchedTenant.id;
-        console.log(`[WhatsApp] resolveActiveTenantFromSocket resolved connected phone: ${cleanPhone} -> ${matchedTenant.id}`);
+        console.log(`[WhatsApp] resolveActiveTenantFromSocket resolved connected phone for ${tId}: ${cleanPhone} -> ${matchedTenant.id}`);
         return matchedTenant.id;
       } else {
-        console.log(`[WhatsApp] resolveActiveTenantFromSocket: No tenant matches connected phone number: ${cleanPhone}`);
+        console.log(`[WhatsApp] resolveActiveTenantFromSocket: No tenant matches connected phone number for ${tId}: ${cleanPhone}`);
         return null;
       }
     } catch (err) {
@@ -85,7 +231,6 @@ export class WhatsAppManager {
   }
 
   static startAutoSync() {
-    // Disabled to prevent automatic catalog sync from overwriting manual configurations
     console.log("[Auto-Sync] Auto-Sync is disabled.");
   }
 
@@ -97,12 +242,9 @@ export class WhatsAppManager {
     if (globalForBaileys.followUpInterval) {
       clearInterval(globalForBaileys.followUpInterval);
     }
-    // Run every 15 seconds for higher precision
     globalForBaileys.followUpInterval = setInterval(async () => {
       try {
-        const config = await DB.getConfig();
         const now = Date.now();
-        const sessionConnectedAt = globalForBaileys.sessionConnectedAt || Date.now();
         const { generateContextualFollowUp, generateScheduledFollowUp } = await import('./ai-handler');
         
         // --- SYSTEM A: Proactive AI-Scheduled Follow-ups ---
@@ -112,11 +254,9 @@ export class WhatsAppManager {
           const sendAtMs = new Date(fu.sendAt).getTime();
           if (now >= sendAtMs) {
             console.log(`[System A Follow-up] Triggering scheduled follow-up for ${fu.phone}`);
-            
             try {
               const aiMessage = await generateScheduledFollowUp(fu.phone, fu.context, fu.tenantId);
-              const sentMsg = await this.sendMessage(fu.phone, aiMessage);
-              
+              const sentMsg = await this.sendMessage(fu.phone, aiMessage, fu.tenantId);
               await DB.addChatMessage(fu.phone, { id: sentMsg?.key?.id, role: "assistant", content: aiMessage }, fu.tenantId);
               await DB.updateFollowUpStatus(fu.id, "sent", fu.tenantId);
             } catch (err) {
@@ -126,92 +266,76 @@ export class WhatsAppManager {
           }
         }
 
-        // Re-fetch in case statuses just changed to 'sent'
         const stillPendingSystemA = (await DB.getAllScheduledFollowUpsAdminAllTenants()).filter(f => f.status === 'pending');
         const chats = await DB.getAllChatsAdminAllTenants();
         const orders = await DB.getOrdersAdminAllTenants();
         const pendingOrders = orders.filter(o => o.status === "pending");
-        console.log(`[Follow-up Sync] stillPendingSystemA count: ${stillPendingSystemA.length}`);
-        console.log(`[Follow-up Sync] chats count (keys): ${Object.keys(chats).length}`);
-        console.log(`[Follow-up Sync] orders count: ${orders.length}, pendingOrders count: ${pendingOrders.length}`);
         
         // --- SYSTEM C: Abandoned Order Recovery Engine ---
-        console.log(`\n--- [Cron Tick] System C Abandoned Order Check @ ${new Date(now).toLocaleTimeString()} ---`);
         for (const order of pendingOrders) {
           const phone = order.phone;
           const messages = chats[phone];
           if (!messages || messages.length === 0) continue;
 
-          // Only recover if there is active customer interaction since session connected
+          const session = this.getOrCreateSession(order.tenantId || "default");
+          const sessionConnectedAt = session.sessionConnectedAt || Date.now();
+
           const userMessages = messages.filter(m => m.role === 'user');
           if (userMessages.length === 0) continue;
           const lastUserMessage = userMessages[userMessages.length - 1];
           if (new Date(lastUserMessage.timestamp).getTime() < sessionConnectedAt) {
-            console.log(`[System C Recovery] Skipping ${phone}: Last user message was before the active session connected.`);
             continue;
           }
           
           const lastMessage = messages[messages.length - 1];
-          // We only recover order if the bot was the last to speak (waiting for details)
-          if (lastMessage.role !== 'assistant') {
-            console.log(`[System C Recovery] Skipping ${phone}: Last message was from user.`);
-            continue;
-          }
+          if (lastMessage.role !== 'assistant') continue;
 
           const elapsedMs = now - new Date(order.timestamp).getTime();
           const elapsedMinutes = elapsedMs / (1000 * 60);
           const currentStage = order.recoveryStage || 0;
 
-          // Stage 1: 30 minutes (30 mins)
+          // Stage 1: 30 minutes
           if (currentStage < 1 && elapsedMinutes >= 30) {
-            console.log(`[System C Recovery] Triggering Stage 1 for order ${order.id} (${phone})`);
             try {
               const template = `Hey! I noticed we got cut off while finalizing your order for the ${order.productName}. I've gone ahead and reserved one in our system for you. Where would you like me to ship it?`;
-              const contextualMessage = await generateContextualFollowUp(phone, template);
-              const sentMsg = await this.sendMessage(phone, contextualMessage);
-              
+              const contextualMessage = await generateContextualFollowUp(phone, template, order.tenantId);
+              const sentMsg = await this.sendMessage(phone, contextualMessage, order.tenantId);
               await DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage }, order.tenantId);
               await DB.updateOrder(order.id, { recoveryStage: 1 }, order.tenantId);
             } catch (err) {
               console.error(`[System C Stage 1] Failed for ${phone}:`, err);
             }
           }
-          // Stage 2: 6 hours (360 mins)
+          // Stage 2: 6 hours
           else if (currentStage < 2 && elapsedMinutes >= 360) {
-            console.log(`[System C Recovery] Triggering Stage 2 for order ${order.id} (${phone})`);
             try {
               const template = `Hi! Just a quick heads-up: we have a lot of interest in the ${order.productName} today, and I can only hold your reservation for another hour before releasing it. Would you like to confirm your details to secure it?`;
               const contextualMessage = await generateContextualFollowUp(phone, template, order.tenantId);
-              const sentMsg = await this.sendMessage(phone, contextualMessage);
-              
+              const sentMsg = await this.sendMessage(phone, contextualMessage, order.tenantId);
               await DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage }, order.tenantId);
               await DB.updateOrder(order.id, { recoveryStage: 2 }, order.tenantId);
             } catch (err) {
               console.error(`[System C Stage 2] Failed for ${phone}:`, err);
             }
           }
-          // Stage 3: 24 hours (1440 mins)
+          // Stage 3: 24 hours
           else if (currentStage < 3 && elapsedMinutes >= 1440) {
-            console.log(`[System C Recovery] Triggering Stage 3 for order ${order.id} (${phone})`);
             try {
-              const template = `Hey! I really want to help you get this outfit. If we finalize your order for the ${order.productName} today, I can throw in free shipping. Let me know if you want me to add that in! ðŸŽ`;
+              const template = `Hey! I really want to help you get this outfit. If we finalize your order for the ${order.productName} today, I can throw in free shipping. Let me know if you want me to add that in! 🎁`;
               const contextualMessage = await generateContextualFollowUp(phone, template, order.tenantId);
-              const sentMsg = await this.sendMessage(phone, contextualMessage);
-              
+              const sentMsg = await this.sendMessage(phone, contextualMessage, order.tenantId);
               await DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage }, order.tenantId);
               await DB.updateOrder(order.id, { recoveryStage: 3 }, order.tenantId);
             } catch (err) {
               console.error(`[System C Stage 3] Failed for ${phone}:`, err);
             }
           }
-          // Stage 4: 48 hours (2880 mins)
+          // Stage 4: 48 hours
           else if (currentStage < 4 && elapsedMinutes >= 2880) {
-            console.log(`[System C Recovery] Triggering Stage 4 for order ${order.id} (${phone})`);
             try {
               const template = `Hi, since we haven't heard back, I've cancelled your pending order for the ${order.productName} and released the hold on the stock. If you decide to order it later, just send me a message here.`;
               const contextualMessage = await generateContextualFollowUp(phone, template, order.tenantId);
-              const sentMsg = await this.sendMessage(phone, contextualMessage);
-              
+              const sentMsg = await this.sendMessage(phone, contextualMessage, order.tenantId);
               await DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage }, order.tenantId);
               await DB.updateOrder(order.id, { recoveryStage: 4, status: "cancelled" }, order.tenantId);
             } catch (err) {
@@ -221,38 +345,33 @@ export class WhatsAppManager {
         }
 
         // --- SYSTEM B: Generic Sequence Follow-ups ---
-        console.log(`--- [Cron Tick] System B Follow-up Check @ ${new Date(now).toLocaleTimeString()} ---`);
         const configCache: Record<string, any> = {};
-
         for (const phone in chats) {
-          const messages = chats[phone];
+          const messages = chats[phone] as any[];
           if (!messages || messages.length === 0) continue;
 
-          // FAST GUARD 1: We only follow up if the bot (assistant) was the last one to speak
           const lastMessage = messages[messages.length - 1];
           if (!lastMessage || lastMessage.role !== 'assistant') continue;
 
-          // FAST GUARD 2: Check minimum elapsed time (at least 2 minutes) before hitting DB
           const elapsedMs = now - new Date(lastMessage.timestamp).getTime();
           if (elapsedMs < 2 * 60 * 1000) continue;
 
-          // FAST GUARD 3: Must have active user interaction since session connected
+          const itemTenantId = messages[0]?.tenantId || messages[messages.length - 1]?.tenantId || "t-1007";
+          const session = this.getOrCreateSession(itemTenantId);
+          const sessionConnectedAt = session.sessionConnectedAt || Date.now();
+
           const userMessages = messages.filter(m => m.role === 'user');
           if (userMessages.length === 0) continue;
           const lastUserMessage = userMessages[userMessages.length - 1];
           if (new Date(lastUserMessage.timestamp).getTime() < sessionConnectedAt) continue;
 
-          // CONFLICT RESOLUTIONS: Fast memory checks before DB calls
           if (stillPendingSystemA.some(f => f.phone === phone)) continue;
           if (pendingOrders.some(o => o.phone === phone)) continue;
 
-          // Passed fast guards — resolve tenant and config (with memory cache)
-          const itemTenantId = messages[0]?.tenantId || messages[messages.length - 1]?.tenantId || "t-1007";
           if (!configCache[itemTenantId]) {
             configCache[itemTenantId] = await DB.getConfig(itemTenantId);
           }
           const tenantConfig = configCache[itemTenantId];
-
           if (!tenantConfig.followUps || tenantConfig.followUps.length === 0) continue;
 
           const customer = await DB.getCustomer(phone, itemTenantId);
@@ -269,20 +388,17 @@ export class WhatsAppManager {
 
           const requiredMs = nextFollowUp.delayMinutes * 60 * 1000;
           if (elapsedMs >= requiredMs) {
-            console.log(`[System B Follow-up] Evaluating Sequence Level ${followUpLevel + 1} for ${phone}`);
             try {
               const { shouldSendFollowUp } = await import('./ai-handler');
               const evaluation = await shouldSendFollowUp(phone, undefined, customer?.tenantId || itemTenantId);
 
               if (!evaluation.shouldFollowUp) {
-                console.log(`  -> Skipping follow-up for ${phone}: AI determined follow-up is not needed (Reason: ${evaluation.reason}).`);
                 await DB.updateCustomer(phone, { leadStatus: "cold", pipelineStage: "completed" }, customer?.tenantId || itemTenantId);
                 continue;
               }
 
               const contextualMessage = await generateContextualFollowUp(phone, nextFollowUp.message, customer?.tenantId || itemTenantId);
-              const sentMsg = await this.sendMessage(phone, contextualMessage);
-              
+              const sentMsg = await this.sendMessage(phone, contextualMessage, customer?.tenantId || itemTenantId);
               await DB.addChatMessage(phone, { id: sentMsg?.key?.id, role: "assistant", content: contextualMessage }, customer?.tenantId || itemTenantId);
               await DB.updateCustomer(phone, { followUpLevel: followUpLevel + 1 }, customer?.tenantId || itemTenantId);
             } catch (err) {
@@ -293,11 +409,10 @@ export class WhatsAppManager {
       } catch (e) {
         console.error("[Follow-up Loop] Global Error during sync:", e);
       }
-    }, 180000); // 3 minutes interval (was 60000)
+    }, 180000);
   }
 
   static startRevivalSync() {
-    // Revival has been disabled completely.
     return;
   }
 
@@ -308,25 +423,18 @@ export class WhatsAppManager {
 
     for (const campaign of activeCampaigns) {
       try {
-        // Check delay between individual messages
         const delayMin = campaign.delayMinutes || 5;
         if (campaign.lastSentAt) {
           const lastSentTime = new Date(campaign.lastSentAt).getTime();
           const nextSendTime = lastSentTime + delayMin * 60 * 1000;
-          if (Date.now() < nextSendTime) {
-            const secsLeft = Math.ceil((nextSendTime - Date.now()) / 1000);
-            console.log(`[Revival] Campaign ${campaign.id} is waiting. ${secsLeft} seconds remaining.`);
-            continue;
-          }
+          if (Date.now() < nextSendTime) continue;
         }
 
-        // Check if WhatsApp is connected
-        if (globalForBaileys.baileysSession.status !== "connected" || !globalForBaileys.baileysSession.sock) {
-          console.log("[Revival] WhatsApp not connected. Skipping.");
+        const session = this.getOrCreateSession(campaign.tenantId || "default");
+        if (session.status !== "CONNECTED" || !session.sock) {
           continue;
         }
 
-        // Check active time slot window (e.g. 09:00 to 21:00)
         const now = new Date();
         const currentHour = now.getHours();
         const currentMin = now.getMinutes();
@@ -335,11 +443,9 @@ export class WhatsAppManager {
         const slotEndMinutes = parseInt((campaign.timeSlotEnd || "21:00").split(":")[0]) * 60 + parseInt((campaign.timeSlotEnd || "21:00").split(":")[1] || "0");
 
         if (currentTimeMinutes < slotStartMinutes || currentTimeMinutes >= slotEndMinutes) {
-          console.log(`[Revival] Outside time slot (${campaign.timeSlotStart}-${campaign.timeSlotEnd}). Skipping.`);
           continue;
         }
 
-        // Reset daily counter if new day
         const today = now.toISOString().split("T")[0];
         let sentToday = campaign.sentToday || 0;
         if (campaign.lastSentDate !== today) {
@@ -347,16 +453,9 @@ export class WhatsAppManager {
           await DB.updateRevivalCampaign(campaign.id, { sentToday: 0, lastSentDate: today }, campaign.tenantId);
         }
 
-        // Check daily cap
-        if (sentToday >= (campaign.dailyCap || 80)) {
-          console.log(`[Revival] Daily cap reached (${sentToday}/${campaign.dailyCap}). Waiting for tomorrow.`);
-          continue;
-        }
+        if (sentToday >= (campaign.dailyCap || 80)) continue;
 
-        // Initialize leadProgress if missing
         let progressMap: Record<string, any> = campaign.leadProgress || {};
-
-        // 1. Check for Phase 1 sends (Introductory Send to leads not yet sent Intro)
         const sentSet = new Set([...(campaign.sentPhones || []), ...(campaign.failedPhones || [])]);
         const phase1Remaining = (campaign.targetPhones || []).filter(p => !sentSet.has(p));
 
@@ -366,13 +465,11 @@ export class WhatsAppManager {
         if (phase1Remaining.length > 0) {
           targetPhone = phase1Remaining[0];
         } else if (campaign.phase2Settings && campaign.phase2Settings.enabled) {
-          // Phase 1 completed, look for Phase 2 follow-ups that are due
           const intervalDays = campaign.phase2Settings.intervalDays || 3;
           const maxFollowUps = campaign.phase2Settings.maxFollowUps || 3;
           const intervalMs = intervalDays * 24 * 60 * 60 * 1000;
 
           for (const phone of (campaign.sentPhones || [])) {
-            // Skip if lead opted out or replied
             const customer = await DB.getCustomer(phone, campaign.tenantId);
             if (customer?.isOptedOut || (customer?.tags && customer.tags.includes("revival-replied"))) {
               continue;
@@ -403,13 +500,10 @@ export class WhatsAppManager {
         }
 
         if (!targetPhone) {
-          // Check if all leads are completed
           const p2Enabled = campaign.phase2Settings?.enabled;
           if (!p2Enabled) {
-            console.log(`[Revival] Campaign ${campaign.id} completed (Phase 1 finished, Phase 2 disabled).`);
             await DB.updateRevivalCampaign(campaign.id, { status: "completed" }, campaign.tenantId);
           } else {
-            // Phase 2 is enabled. Check if ALL sent leads have finished Phase 2 follow-ups.
             const maxFollowUps = campaign.phase2Settings?.maxFollowUps || 3;
             let allCompleted = true;
             for (const phone of (campaign.sentPhones || [])) {
@@ -427,16 +521,11 @@ export class WhatsAppManager {
               }
             }
             if (allCompleted) {
-              console.log(`[Revival] Campaign ${campaign.id} completed (All leads finished Phase 2 follow-ups).`);
               await DB.updateRevivalCampaign(campaign.id, { status: "completed" }, campaign.tenantId);
-            } else {
-              console.log(`[Revival] Campaign ${campaign.id} is active but waiting for next Phase 2 intervals.`);
             }
           }
           continue;
         }
-
-        console.log(`[Revival] Processing ${isPhase2FollowUp ? 'Phase 2 Follow-up' : 'Phase 1 Intro'} for ${targetPhone} in campaign ${campaign.id}`);
 
         let sentSuccess = false;
         const currentSentPhones = [...(campaign.sentPhones || [])];
@@ -444,15 +533,14 @@ export class WhatsAppManager {
 
         try {
           if (!isPhase2FollowUp) {
-            // Phase 1 send: Text, Media, or Voice Note
             if (campaign.messageType === "voice" && campaign.voiceBase64) {
               const buffer = Buffer.from(campaign.voiceBase64.split(",")[1] || campaign.voiceBase64, "base64");
-              await this.sendMedia(targetPhone, buffer, campaign.voiceMimetype || "audio/mp4", "voice_note.mp4", "", true);
+              await this.sendMedia(targetPhone, buffer, campaign.voiceMimetype || "audio/mp4", "voice_note.mp4", "", true, campaign.tenantId);
             } else if (campaign.mediaBase64 && campaign.mimetype) {
               const buffer = Buffer.from(campaign.mediaBase64.split(",")[1] || campaign.mediaBase64, "base64");
-              await this.sendMedia(targetPhone, buffer, campaign.mimetype, campaign.fileName || "document", campaign.message);
+              await this.sendMedia(targetPhone, buffer, campaign.mimetype, campaign.fileName || "document", campaign.message, false, campaign.tenantId);
             } else {
-              await this.sendMessage(targetPhone, campaign.message || "Hello! We miss you!");
+              await this.sendMessage(targetPhone, campaign.message || "Hello! We miss you!", campaign.tenantId);
             }
 
             await DB.addChatMessage(targetPhone, {
@@ -481,7 +569,6 @@ export class WhatsAppManager {
             }
             sentSuccess = true;
           } else {
-            // Phase 2 Follow-up Send
             const p2 = campaign.phase2Settings!;
             const currentCount = (progressMap[targetPhone]?.followUpCount || 0) + 1;
             
@@ -495,12 +582,12 @@ export class WhatsAppManager {
 
             if (msgType === "voice" && p2.voiceBase64) {
               const buffer = Buffer.from(p2.voiceBase64.split(",")[1] || p2.voiceBase64, "base64");
-              await this.sendMedia(targetPhone, buffer, p2.voiceMimetype || "audio/mp4", "followup_voice.mp4", "", true);
+              await this.sendMedia(targetPhone, buffer, p2.voiceMimetype || "audio/mp4", "followup_voice.mp4", "", true, campaign.tenantId);
             } else if (msgType === "media" && p2.mediaBase64) {
               const buffer = Buffer.from(p2.mediaBase64.split(",")[1] || p2.mediaBase64, "base64");
-              await this.sendMedia(targetPhone, buffer, p2.mediaMimetype || "image/jpeg", "followup_media", followUpText);
+              await this.sendMedia(targetPhone, buffer, p2.mediaMimetype || "image/jpeg", "followup_media", followUpText, false, campaign.tenantId);
             } else {
-              await this.sendMessage(targetPhone, followUpText);
+              await this.sendMessage(targetPhone, followUpText, campaign.tenantId);
             }
 
             await DB.addChatMessage(targetPhone, {
@@ -538,8 +625,6 @@ export class WhatsAppManager {
           lastSentAt: new Date().toISOString(),
           leadProgress: progressMap,
         }, campaign.tenantId);
-
-        console.log(`[Revival] Progress updated. Total: ${currentSentPhones.length}/${campaign.targetPhones.length}, Today: ${updatedSentToday}/${campaign.dailyCap}`);
       } catch (e) {
         console.error(`[Revival] Campaign loop error for ${campaign.id}:`, e);
       }
@@ -554,27 +639,24 @@ export class WhatsAppManager {
     if (globalForBaileys.watchdogInterval) {
       clearInterval(globalForBaileys.watchdogInterval);
     }
-    // Check session health every 30 seconds
     globalForBaileys.watchdogInterval = setInterval(async () => {
       try {
-        const tenantId = this.getActiveTenantId() || "default";
-        const hasSupabaseCreds = await DB.hasSavedCredentials(tenantId);
-        const localCredsFile = path.join(DB_DIR, `.baileys_auth_${tenantId}`, "creds.json");
-        const hasLocalCreds = fs.existsSync(localCredsFile);
-        const hasSavedCreds = hasLocalCreds || hasSupabaseCreds;
+        if (!globalForBaileys.baileysSessions) return;
+        for (const [tenantId, session] of globalForBaileys.baileysSessions.entries()) {
+          const hasSupabaseCreds = await DB.hasSavedCredentials(tenantId);
+          const localCredsFile = path.join(DB_DIR, `.baileys_auth_${tenantId}`, "creds.json");
+          const hasLocalCreds = fs.existsSync(localCredsFile);
+          const hasSavedCreds = hasLocalCreds || hasSupabaseCreds;
 
-        const currentStatus = globalForBaileys.baileysSession?.status;
-        const sock = globalForBaileys.baileysSession?.sock;
-
-        // If credentials exist but status is disconnected or socket is null, auto-reconnect
-        if (hasSavedCreds && (currentStatus === "disconnected" || !sock) && !globalForBaileys.startPromise) {
-          console.log("[Watchdog] Saved credentials found but WhatsApp is disconnected. Healing connection...");
-          const { handleWhatsAppMessage } = await import("./ai-handler");
-          this.startSession(async (msg) => {
-            await handleWhatsAppMessage(msg);
-          }).catch((err) => {
-            console.error("[Watchdog] Auto-heal reconnection failed:", err);
-          });
+          if (hasSavedCreds && (session.status === "DISCONNECTED" || !session.sock) && !session.initLockPromise) {
+            console.log(`[Watchdog] Reconnecting active session for tenant ${tenantId}...`);
+            const { handleWhatsAppMessage } = await import("./ai-handler");
+            this.connectTenant(tenantId, async (msg) => {
+              await handleWhatsAppMessage(msg);
+            }).catch((err) => {
+              console.error(`[Watchdog] Auto-heal reconnection failed for ${tenantId}:`, err);
+            });
+          }
         }
       } catch (e) {
         console.error("[Watchdog] Error during health check:", e);
@@ -582,28 +664,33 @@ export class WhatsAppManager {
     }, 30000);
   }
 
-  static async ensureConnected() {
-    if (globalForBaileys.baileysSession.status === "connected" && globalForBaileys.baileysSession.sock) {
-      return globalForBaileys.baileysSession.sock;
+  static async ensureConnected(tenantId?: string) {
+    const tId = tenantId || this.getActiveTenantId() || "default";
+    const session = this.getOrCreateSession(tId);
+    if (session.status === "CONNECTED" && session.sock) {
+      return session.sock;
     }
 
-    const authFolder = AUTH_FOLDER;
-    const credsFile = path.join(authFolder, "creds.json");
-    if (fs.existsSync(credsFile)) {
-      console.log("[Baileys] Socket not connected when operation requested. Attempting quick auto-reconnect...");
+    const hasSupabaseCreds = await DB.hasSavedCredentials(tId);
+    const localCredsFile = path.join(DB_DIR, `.baileys_auth_${tId}`, "creds.json");
+    const hasLocalCreds = fs.existsSync(localCredsFile);
+    const hasSavedCreds = hasLocalCreds || hasSupabaseCreds;
+
+    if (hasSavedCreds) {
+      console.log(`[Baileys] Socket not connected for tenant ${tId}. Auto-reconnecting...`);
       const { handleWhatsAppMessage } = await import("./ai-handler");
-      await this.startSession(async (msg) => {
+      await this.connectTenant(tId, async (msg) => {
         await handleWhatsAppMessage(msg);
       });
-      if (globalForBaileys.baileysSession.status === "connected" && globalForBaileys.baileysSession.sock) {
-        return globalForBaileys.baileysSession.sock;
+      if (session.status === "CONNECTED" && session.sock) {
+        return session.sock;
       }
     }
 
-    throw new Error("WhatsApp not connected. Please connect WhatsApp from the dashboard.");
+    throw new Error(`WhatsApp not connected for tenant ${tId}. Please connect WhatsApp.`);
   }
 
-  static async startSession(onMessage: (msg: any) => void) {
+  static async startSession(onMessage: (msg: any) => void, tenantId?: string) {
     if (!globalForBaileys.autoSyncInterval) {
       this.startAutoSync();
     }
@@ -617,61 +704,62 @@ export class WhatsAppManager {
       this.startSessionWatchdog();
     }
 
-    if (globalForBaileys.startPromise) {
-      console.log("[Baileys] startSession call received while initialization is in progress. Awaiting existing promise...");
-      return globalForBaileys.startPromise;
+    const tId = tenantId || this.getActiveTenantId() || "default";
+    return this.connectTenant(tId, onMessage);
+  }
+
+  static async connectTenant(tenantId: string, onMessage?: (msg: any) => void) {
+    const session = this.getOrCreateSession(tenantId);
+
+    if (session.initLockPromise) {
+      console.log(`[WhatsApp] Connection initialization already in progress for tenant ${tenantId}.`);
+      return session.initLockPromise;
     }
 
-    if (globalForBaileys.baileysSession.status === "connected" && globalForBaileys.baileysSession.sock) {
-      console.log(`[Baileys] startSession called but socket is already connected. Returning existing instance.`);
-      return globalForBaileys.baileysSession.sock;
+    if (session.status === "CONNECTED" && session.sock) {
+      return session.sock;
     }
 
-    globalForBaileys.baileysSession.status = "connecting";
-
-    // Load active tenant from Supabase on startup
-    if (supabase) {
-      try {
-        const { data } = await supabase
-          .from('whatsapp_auth')
-          .select('key_data')
-          .eq('tenant_id', 'default')
-          .eq('key_id', 'active_tenant')
-          .single();
-        if (data?.key_data?.activeTenantId) {
-          globalForBaileys.activeTenantId = data.key_data.activeTenantId;
-          console.log(`[WhatsApp] Loaded active tenant from database on boot: ${globalForBaileys.activeTenantId}`);
-        }
-      } catch (e) {
-        console.warn("[WhatsApp] Could not load active tenant on boot:", e);
+    // Phase 6B: Acquire distributed lease ownership before creating socket
+    const lease = await WhatsAppSessionRegistry.acquireLease(tenantId, () => {
+      console.warn(`[WhatsApp] Ownership lease lost for tenant ${tenantId}! Shutting down active socket on instance ${getInstanceId()}...`);
+      const s = WhatsAppManager.getOrCreateSession(tenantId);
+      s.status = "DISCONNECTED";
+      if (s.sock) {
+        try { s.sock.end(undefined); } catch (_) {}
+        s.sock = null;
       }
+    });
+
+    if (!lease.acquired) {
+      console.log(`[WhatsApp] Tenant ${tenantId} session is owned by another instance (${lease.reason}). Skipping local socket creation on instance ${getInstanceId()}.`);
+      session.status = "DISCONNECTED";
+      return null;
     }
+
+    session.status = "CONNECTING";
 
     const initPromise = (async () => {
-      const { state, saveCreds } = await useSupabaseAuthState("default");
+      const { state, saveCreds } = await useSupabaseAuthState(tenantId);
       const logger = pino({ level: "silent" });
 
-      // Fetch the latest WA version with a timeout, falling back to DEFAULT_CONNECTION_CONFIG
       let version = DEFAULT_CONNECTION_CONFIG.version;
-      let isLatest = false;
       try {
         const latestPromise = fetchLatestBaileysVersion();
         const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3000));
         const latest = await Promise.race([latestPromise, timeoutPromise]) as { version: [number, number, number], isLatest: boolean };
         version = latest.version;
-        isLatest = latest.isLatest;
-        console.log(`[Baileys] Successfully fetched latest WA version: v${version.join('.')}`);
+        console.log(`[Baileys] Successfully fetched latest WA version for ${tenantId}: v${version.join('.')}`);
       } catch (err) {
-        console.warn("[Baileys] Failed to fetch latest WA version, using stable default v" + version.join('.') + ":", err);
+        console.warn(`[Baileys] Failed to fetch latest WA version for ${tenantId}, using stable default v` + version.join('.') + ":", err);
       }
 
-      // If an existing socket instance was present, cleanly detach listeners before creating a new one
-      if (globalForBaileys.baileysSession.sock) {
+      if (session.sock) {
         try {
-          globalForBaileys.baileysSession.sock.ev.removeAllListeners("connection.update");
-          globalForBaileys.baileysSession.sock.ev.removeAllListeners("creds.update");
-          globalForBaileys.baileysSession.sock.ev.removeAllListeners("messages.upsert");
-          globalForBaileys.baileysSession.sock.end(undefined);
+          session.sock.ev.removeAllListeners("connection.update");
+          session.sock.ev.removeAllListeners("creds.update");
+          session.sock.ev.removeAllListeners("messages.upsert");
+          session.sock.end(undefined);
         } catch (e) {}
       }
 
@@ -683,7 +771,7 @@ export class WhatsAppManager {
         browser: Browsers.ubuntu("Chrome"),
       });
 
-      globalForBaileys.baileysSession.sock = sock;
+      session.sock = sock;
 
       sock.ev.on("creds.update", saveCreds);
 
@@ -693,97 +781,98 @@ export class WhatsAppManager {
         if (qr) {
           try {
             const qrCodeDataUri = await QRCode.toDataURL(qr, { errorCorrectionLevel: 'M', margin: 2, width: 512 });
-            console.log("[Baileys] New QR code generated at", new Date().toISOString());
-            globalForBaileys.baileysSession.status = "connecting";
-            globalForBaileys.baileysSession.qrCode = qrCodeDataUri;
-            globalForBaileys.baileysSession.qrGeneratedAt = Date.now();
+            console.log(`[Baileys] New QR code generated for ${tenantId}`);
+            session.status = "CONNECTING";
+            session.qrCode = qrCodeDataUri;
+            session.qrGeneratedAt = Date.now();
           } catch (err) {
-            console.error("[Baileys] Error generating QR:", err);
+            console.error(`[Baileys] Error generating QR for ${tenantId}:`, err);
           }
         }
 
         if (connection === "close") {
-          console.log("[WhatsApp] Connection state: disconnected");
-          // If we explicitly disconnected, do not reconnect
-          if (globalForBaileys.baileysSession.status === "disconnected") {
-            console.log("[Baileys] Socket closed after explicit disconnect. Skipping reconnect.");
-            globalForBaileys.baileysSession.sock = null;
+          console.log(`[WhatsApp] Connection closed for tenant ${tenantId}`);
+          
+          if (session.status === "LOGGING_OUT" || session.status === "DISCONNECTED") {
+            console.log(`[Baileys] Socket closed for ${tenantId} after explicit disconnect.`);
+            session.sock = null;
             return;
           }
 
-          const credsFile = path.join(AUTH_FOLDER, "creds.json");
-          const hasLocalCreds = fs.existsSync(credsFile);
-          const hasSupabaseCreds = await DB.hasSavedCredentials("default");
+          // Phase 6B Requirement 12: Verify ownership BEFORE attempting reconnect
+          const stillOwner = await WhatsAppSessionRegistry.isOwner(tenantId);
+          if (!stillOwner) {
+            console.log(`[WhatsApp] Reconnection cancelled for ${tenantId}: instance ${getInstanceId()} no longer holds session lease.`);
+            session.status = "DISCONNECTED";
+            session.sock = null;
+            return;
+          }
+
+          const localCredsFile = path.join(DB_DIR, `.baileys_auth_${tenantId}`, "creds.json");
+          const hasLocalCreds = fs.existsSync(localCredsFile);
+          const hasSupabaseCreds = await DB.hasSavedCredentials(tenantId);
           const hasCreds = hasLocalCreds || hasSupabaseCreds;
 
           const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
           const errorMsg = lastDisconnect?.error?.message || "";
           
-          globalForBaileys.lastStatusCode = statusCode || null;
-          globalForBaileys.lastError = errorMsg || null;
+          session.lastStatusCode = statusCode || null;
+          session.lastError = errorMsg || null;
           
-          console.log(`[Baileys] Connection closed. Status code: ${statusCode || 'unknown'}. Error: ${errorMsg}`);
-          globalForBaileys.baileysSession.sock = null;
+          console.log(`[Baileys] Connection closed for tenant ${tenantId}. Status code: ${statusCode || 'unknown'}. Error: ${errorMsg}`);
+          session.sock = null;
 
-          // If auth credentials exist or if socket closed during QR generation/re-pairing, attempt reconnection
-          if (hasCreds || globalForBaileys.baileysSession.qrCode) {
-            const currentAttempts = (globalForBaileys.reconnectAttempts || 0) + 1;
-            globalForBaileys.reconnectAttempts = currentAttempts;
+          if (hasCreds || session.qrCode) {
+            const currentAttempts = (session.reconnectAttempts || 0) + 1;
+            session.reconnectAttempts = currentAttempts;
 
-            // Only clear creds if WhatsApp explicitly logged out device from phone AFTER repeated retries (5+ retries)
             if (statusCode === DisconnectReason.loggedOut && currentAttempts > 5) {
-              console.log("[WhatsApp] Connection state: failing to connect (explicit logout from phone).");
-              globalForBaileys.baileysSession.status = "disconnected";
-              globalForBaileys.baileysSession.qrCode = null;
-              globalForBaileys.reconnectAttempts = 0;
+              console.log(`[WhatsApp] Connection state: FAILED (explicit logout from phone) for ${tenantId}.`);
+              session.status = "FAILED";
+              session.qrCode = null;
+              session.reconnectAttempts = 0;
               try {
                 const { useSupabaseAuthState } = await import("./whatsapp-auth");
-                const { removeCreds } = await useSupabaseAuthState("default");
+                const { removeCreds } = await useSupabaseAuthState(tenantId);
                 await removeCreds();
               } catch (e) {}
-              if (fs.existsSync(AUTH_FOLDER)) {
-                try {
-                  fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
-                } catch (e) {
-                  console.error("Failed to delete auth folder:", e);
-                }
-              }
               return;
             }
 
-            globalForBaileys.baileysSession.status = "connecting";
+            session.status = "RECONNECTING";
 
-            if (!globalForBaileys.reconnectTimeout) {
-              const backoffMs = Math.min(10000, Math.pow(2, Math.min(currentAttempts, 4)) * 1000);
-              console.log(`[WhatsApp] Connection state: trying to connect... (attempt #${currentAttempts} scheduled in ${backoffMs / 1000}s)`);
+            if (!session.reconnectTimeout) {
+              const backoffMs = getReconnectBackoff(currentAttempts);
+              console.log(`[WhatsApp] Reconnecting tenant ${tenantId} in ${backoffMs / 1000}s (attempt #${currentAttempts})`);
 
-              globalForBaileys.reconnectTimeout = setTimeout(() => {
-                globalForBaileys.reconnectTimeout = null;
-                this.startSession(onMessage).catch(err => {
-                  console.error(`[WhatsApp] Connection state: failing to connect. Auto-reconnect attempt #${currentAttempts} failed:`, err);
+              session.reconnectTimeout = setTimeout(() => {
+                session.reconnectTimeout = null;
+                this.connectTenant(tenantId, onMessage).catch(err => {
+                  console.error(`[WhatsApp] Reconnection failed for tenant ${tenantId}:`, err);
                 });
               }, backoffMs);
             }
           } else {
-            console.log("[WhatsApp] Connection state: disconnected (no saved credentials).");
-            globalForBaileys.baileysSession.status = "disconnected";
-            globalForBaileys.baileysSession.qrCode = null;
-            globalForBaileys.reconnectAttempts = 0;
+            console.log(`[WhatsApp] Disconnected tenant ${tenantId} (no credentials).`);
+            session.status = "DISCONNECTED";
+            session.qrCode = null;
+            session.reconnectAttempts = 0;
           }
         } else if (connection === "open") {
-          console.log("[WhatsApp] Connection state: connected successfully!");
-          globalForBaileys.baileysSession.status = "connected";
-          globalForBaileys.baileysSession.qrCode = null;
-          globalForBaileys.reconnectAttempts = 0;
-          if (globalForBaileys.reconnectTimeout) {
-            clearTimeout(globalForBaileys.reconnectTimeout);
-            globalForBaileys.reconnectTimeout = null;
+          console.log(`[WhatsApp] Connected successfully for tenant ${tenantId}!`);
+          session.status = "CONNECTED";
+          session.qrCode = null;
+          session.reconnectAttempts = 0;
+          if (session.reconnectTimeout) {
+            clearTimeout(session.reconnectTimeout);
+            session.reconnectTimeout = null;
           }
-          globalForBaileys.sessionConnectedAt = Date.now();
+          session.sessionConnectedAt = Date.now();
 
-          // Auto-resolve active tenant from the connected phone number
-          WhatsAppManager.resolveActiveTenantFromSocket().catch(err => {
-            console.error("[WhatsApp] Error resolving active tenant on connection open:", err);
+          await WhatsAppSessionRegistry.updateStatus(tenantId, "CONNECTED", "active");
+
+          WhatsAppManager.resolveActiveTenantFromSocket(tenantId).catch(err => {
+            console.error(`[WhatsApp] Error resolving active tenant on connection open for ${tenantId}:`, err);
           });
         }
       });
@@ -796,9 +885,13 @@ export class WhatsAppManager {
               continue;
             }
             if (!msg.key.fromMe && msg.message) {
-              onMessage(msg);
+              if (onMessage) {
+                onMessage(msg);
+              } else {
+                const { handleWhatsAppMessage } = await import("./ai-handler");
+                await handleWhatsAppMessage(msg, tenantId);
+              }
             } else if (msg.key.fromMe && msg.message) {
-              // Message sent by the bot owner (e.g. from their actual phone or by our code)
               const textContent = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || "";
               const hasImage = !!msg.message?.imageMessage;
               const isSticker = !!msg.message?.stickerMessage;
@@ -814,13 +907,12 @@ export class WhatsAppManager {
                 
                 if (from) {
                   if (originalJid) {
-                    await DB.updateCustomer(from, { jid: originalJid }, globalForBaileys.activeTenantId || undefined);
+                    await DB.updateCustomer(from, { jid: originalJid }, tenantId);
                   }
                   const history = await DB.getChats(from);
                   const exists = history.some((chatMsg: any) => chatMsg.id === msg.key.id);
                   if (!exists) {
-                    // Save the owner's manual message as 'assistant' so it appears on the dashboard
-                    await DB.addChatMessage(from, { id: msg.key.id || undefined, role: "assistant", content }, globalForBaileys.activeTenantId || undefined);
+                    await DB.addChatMessage(from, { id: msg.key.id || undefined, role: "assistant", content }, tenantId);
                   }
                 }
               }
@@ -837,8 +929,7 @@ export class WhatsAppManager {
         }
       });
 
-      sock.ev.on("messaging-history.set", async ({ contacts, messages, isLatest }) => {
-        // Sync contacts including Groups
+      sock.ev.on("messaging-history.set", async ({ contacts, messages }) => {
         for (const contact of contacts) {
           if (contact.id && contact.id !== "status@broadcast" && !contact.id.endsWith("@newsletter")) {
             const phone = contact.id.replace("@s.whatsapp.net", "").replace("@lid", "");
@@ -847,12 +938,11 @@ export class WhatsAppManager {
               await DB.updateCustomer(phone, { 
                 name: contact.name || contact.notify || (isGroup ? `Group: ${phone.split('@')[0]}` : phone),
                 jid: contact.id
-              }, globalForBaileys.activeTenantId || undefined);
+              }, tenantId);
             }
           }
         }
 
-        // Sync historical messages if available
         if (messages) {
           for (const msg of messages) {
             const remoteJid = msg.key.remoteJid;
@@ -868,14 +958,14 @@ export class WhatsAppManager {
                   if (msg.key.remoteJidAlt) {
                     from = msg.key.remoteJidAlt;
                   } else {
-                    continue; // Skip ghost chat if real number is unknown
+                    continue;
                   }
                 }
                 from = from?.replace("@s.whatsapp.net", "");
                 
                 if (from) {
                   if (originalJid) {
-                    await DB.updateCustomer(from, { jid: originalJid }, globalForBaileys.activeTenantId || undefined);
+                    await DB.updateCustomer(from, { jid: originalJid }, tenantId);
                   }
                   const history = await DB.getChats(from);
                   const exists = history.some((chatMsg: any) => chatMsg.id === msg.key.id);
@@ -889,7 +979,7 @@ export class WhatsAppManager {
                       role: msg.key.fromMe ? "assistant" : "user", 
                       content,
                       timestamp: timestampStr
-                    }, globalForBaileys.activeTenantId || undefined);
+                    }, tenantId);
                   }
                 }
               }
@@ -907,7 +997,7 @@ export class WhatsAppManager {
               await DB.updateCustomer(phone, { 
                 name: contact.name || contact.notify || (isGroup ? `Group: ${phone.split('@')[0]}` : phone),
                 jid: contact.id
-              }, globalForBaileys.activeTenantId || undefined);
+              }, tenantId);
             }
           }
         }
@@ -916,39 +1006,53 @@ export class WhatsAppManager {
       return sock;
     })();
 
-    globalForBaileys.startPromise = initPromise;
+    session.initLockPromise = initPromise;
     try {
       const sock = await initPromise;
       return sock;
     } finally {
-      globalForBaileys.startPromise = null;
+      session.initLockPromise = null;
     }
   }
 
-  static getStatus() {
+  static getStatus(tenantId?: string) {
+    const tId = tenantId || this.getActiveTenantId() || "default";
+    const session = this.getOrCreateSession(tId);
     return {
-      status: globalForBaileys.baileysSession.status,
-      qrCode: globalForBaileys.baileysSession.qrCode,
-      qrGeneratedAt: globalForBaileys.baileysSession.qrGeneratedAt,
-      phoneNumber: globalForBaileys.baileysSession.sock?.user?.id?.split(":")[0],
-      displayName: globalForBaileys.baileysSession.sock?.user?.name || "WhatsApp Business",
-      lastError: globalForBaileys.lastError || null,
-      lastStatusCode: globalForBaileys.lastStatusCode || null,
-      reconnectAttempts: globalForBaileys.reconnectAttempts || 0,
+      status: session.status.toLowerCase(),
+      qrCode: session.qrCode,
+      qrGeneratedAt: session.qrGeneratedAt,
+      phoneNumber: session.sock?.user?.id?.split(":")[0],
+      displayName: session.sock?.user?.name || "WhatsApp Business",
+      lastError: session.lastError || null,
+      lastStatusCode: session.lastStatusCode || null,
+      reconnectAttempts: session.reconnectAttempts || 0,
     };
   }
 
-  static async requestPairingCode(phoneNumber: string): Promise<string> {
+  static getAllSessions() {
+    if (!globalForBaileys.baileysSessions) return [];
+    return Array.from(globalForBaileys.baileysSessions.entries()).map(([tenantId, session]) => ({
+      tenantId,
+      status: session.status.toLowerCase(),
+      phoneNumber: session.sock?.user?.id?.split(":")[0] || null,
+      displayName: session.sock?.user?.name || "WhatsApp Business",
+    }));
+  }
+
+  static async requestPairingCode(phoneNumber: string, tenantId?: string): Promise<string> {
+    const tId = tenantId || this.getActiveTenantId() || "default";
     const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
     if (!cleanPhone) {
       throw new Error("Invalid phone number format. Please enter full phone number with country code.");
     }
 
-    if (!globalForBaileys.baileysSession.sock) {
-      await this.startSession(async () => {});
+    const session = this.getOrCreateSession(tId);
+    if (!session.sock) {
+      await this.connectTenant(tId, async () => {});
     }
 
-    const sock = globalForBaileys.baileysSession.sock;
+    const sock = session.sock;
     if (!sock) {
       throw new Error("WhatsApp connection socket is not ready.");
     }
@@ -957,125 +1061,97 @@ export class WhatsAppManager {
     return rawCode?.match(/.{1,4}/g)?.join('-') || rawCode;
   }
 
-  /**
-   * Soft reset: closes the socket and deletes local credentials WITHOUT
-   * calling sock.logout(). This is used when re-generating a QR code so
-   * WhatsApp servers don't flag the account for rapid re-pairing.
-   */
-  static async softReset() {
-    // Cancel any pending reconnect
-    if (globalForBaileys.reconnectTimeout) {
-      clearTimeout(globalForBaileys.reconnectTimeout);
-      globalForBaileys.reconnectTimeout = null;
+  static async disconnectTenant(tenantId: string) {
+    // Release distributed session lease
+    await WhatsAppSessionRegistry.releaseLease(tenantId);
+
+    const session = this.getOrCreateSession(tenantId);
+    if (session.reconnectTimeout) {
+      clearTimeout(session.reconnectTimeout);
+      session.reconnectTimeout = null;
     }
 
-    // Mark as disconnected first so connection.update handler doesn't try to reconnect
-    globalForBaileys.baileysSession.status = "disconnected";
+    session.status = "DISCONNECTED";
 
-    if (globalForBaileys.baileysSession.sock) {
+    if (session.sock) {
       try {
-        globalForBaileys.baileysSession.sock.end(undefined);
+        session.sock.logout();
+      } catch (e) {}
+      try {
+        session.sock.end(undefined);
       } catch (e) {}
     }
-
-    // Allow time for graceful shutdown and file locks to release
+    
     await new Promise(resolve => setTimeout(resolve, 1000));
-
-    globalForBaileys.baileysSession = { status: "disconnected", qrCode: null, qrGeneratedAt: null, sock: null };
-    globalForBaileys.startPromise = null;
-
-    const authFolder = AUTH_FOLDER;
-    if (fs.existsSync(authFolder)) {
+    
+    session.sock = null;
+    session.qrCode = null;
+    session.reconnectAttempts = 0;
+    
+    const localDir = path.join(DB_DIR, `.baileys_auth_${tenantId}`);
+    if (fs.existsSync(localDir)) {
       try {
-        fs.rmSync(authFolder, { recursive: true, force: true });
-        console.log("[Baileys] Auth folder deleted for fresh QR generation.");
+        fs.rmSync(localDir, { recursive: true, force: true });
       } catch (e) {
         console.error("Failed to delete auth folder:", e);
       }
     }
 
-    // Also clear Supabase auth credentials for fresh pairing!
     try {
       const { useSupabaseAuthState } = await import("./whatsapp-auth");
-      const tenantId = this.getActiveTenantId() || "default";
-      // Clear "default" credentials as well since startSession defaults to "default"
-      const { removeCreds: removeDefault } = await useSupabaseAuthState("default");
-      await removeDefault();
-      if (tenantId !== "default") {
-        const { removeCreds: removeTenant } = await useSupabaseAuthState(tenantId);
-        await removeTenant();
-      }
-      console.log(`[Baileys] Supabase credentials cleared for fresh QR pairing.`);
+      const { removeCreds } = await useSupabaseAuthState(tenantId);
+      await removeCreds();
+      console.log(`[Baileys] Supabase credentials cleared for tenant ${tenantId}.`);
     } catch (e) {
       console.error("[Baileys] Failed to clear Supabase credentials:", e);
     }
   }
 
-  /**
-   * Full disconnect: calls sock.logout() which tells WhatsApp servers to
-   * permanently deregister this linked device. Only use when the user
-   * explicitly clicks "Disconnect Device".
-   */
-  static async disconnect() {
-    // Cancel any pending reconnect
-    if (globalForBaileys.reconnectTimeout) {
-      clearTimeout(globalForBaileys.reconnectTimeout);
-      globalForBaileys.reconnectTimeout = null;
+  static async reconnectTenant(tenantId: string) {
+    const session = this.getOrCreateSession(tenantId);
+    if (session.reconnectTimeout) {
+      clearTimeout(session.reconnectTimeout);
+      session.reconnectTimeout = null;
     }
 
-    // Mark as disconnected first so connection.update handler doesn't try to reconnect
-    globalForBaileys.baileysSession.status = "disconnected";
+    session.status = "RECONNECTING";
 
-    if (globalForBaileys.baileysSession.sock) {
+    if (session.sock) {
       try {
-        globalForBaileys.baileysSession.sock.logout();
-      } catch (e) {}
-      try {
-        globalForBaileys.baileysSession.sock.end(undefined);
+        session.sock.end(undefined);
       } catch (e) {}
     }
     
-    // Allow time for graceful shutdown and file locks to release
     await new Promise(resolve => setTimeout(resolve, 1000));
+    session.sock = null;
     
-    globalForBaileys.baileysSession = { status: "disconnected", qrCode: null, qrGeneratedAt: null, sock: null };
-    globalForBaileys.startPromise = null;
-    
-    const authFolder = AUTH_FOLDER;
-    if (fs.existsSync(authFolder)) {
-      try {
-        fs.rmSync(authFolder, { recursive: true, force: true });
-      } catch (e) {
-        console.error("Failed to delete auth folder:", e);
-      }
-    }
-
-    // Also clear Supabase auth credentials!
-    try {
-      const { useSupabaseAuthState } = await import("./whatsapp-auth");
-      const tenantId = this.getActiveTenantId() || "default";
-      const { removeCreds: removeDefault } = await useSupabaseAuthState("default");
-      await removeDefault();
-      if (tenantId !== "default") {
-        const { removeCreds: removeTenant } = await useSupabaseAuthState(tenantId);
-        await removeTenant();
-      }
-      console.log(`[Baileys] Supabase credentials cleared on disconnect.`);
-    } catch (e) {
-      console.error("[Baileys] Failed to clear Supabase credentials on disconnect:", e);
-    }
+    const { handleWhatsAppMessage } = await import("./ai-handler");
+    return this.connectTenant(tenantId, async (msg) => {
+      await handleWhatsAppMessage(msg);
+    });
   }
 
-  static async resolveJid(to: string): Promise<string> {
+  static async softReset() {
+    const activeTenantId = this.getActiveTenantId() || "default";
+    return this.reconnectTenant(activeTenantId);
+  }
+
+  static async disconnect() {
+    const activeTenantId = this.getActiveTenantId() || "default";
+    return this.disconnectTenant(activeTenantId);
+  }
+
+  static async resolveJid(to: string, tenantId?: string): Promise<string> {
     if (to.includes("@")) {
       return to;
     }
     let cleanPhone = to.replace(/[^\d]/g, "");
     
-    // Auto-formatting local numbers (starting with 0) to proper international formatting
     if (cleanPhone.startsWith("0") && !cleanPhone.startsWith("00")) {
-      const ownJid = globalForBaileys.baileysSession.sock?.user?.id;
-      let countryCode = "92"; // Default fallback to Pakistan
+      const tId = tenantId || await this.resolveTenantForPhone(to);
+      const session = this.getOrCreateSession(tId);
+      const ownJid = session.sock?.user?.id;
+      let countryCode = "92";
       if (ownJid) {
         const ownNumber = ownJid.split("@")[0].split(":")[0];
         if (ownNumber.length > 10) {
@@ -1087,23 +1163,27 @@ export class WhatsAppManager {
       cleanPhone = cleanPhone.substring(2);
     }
 
-    const customer = await DB.getCustomer(cleanPhone);
+    const tId = tenantId || await this.resolveTenantForPhone(to);
+    const customer = await DB.getCustomer(cleanPhone, tId);
     if (customer && customer.jid) {
       return customer.jid;
     }
     return `${cleanPhone}@s.whatsapp.net`;
   }
 
-  static async sendTyping(to: string) {
-    if (globalForBaileys.baileysSession.status !== "connected" || !globalForBaileys.baileysSession.sock) return;
-    const jid = await this.resolveJid(to);
-    await globalForBaileys.baileysSession.sock.sendPresenceUpdate('composing', jid);
+  static async sendTyping(to: string, tenantId?: string) {
+    const tId = tenantId || await this.resolveTenantForPhone(to);
+    const session = this.getOrCreateSession(tId);
+    if (session.status !== "CONNECTED" || !session.sock) return;
+    const jid = await this.resolveJid(to, tId);
+    await session.sock.sendPresenceUpdate('composing', jid);
   }
 
-  static async sendMessage(to: string, text: string) {
+  static async sendMessage(to: string, text: string, tenantId?: string) {
     try {
-      const sock = await this.ensureConnected();
-      const jid = await this.resolveJid(to);
+      const tId = tenantId || await this.resolveTenantForPhone(to);
+      const sock = await this.ensureConnected(tId);
+      const jid = await this.resolveJid(to, tId);
       await sock.sendPresenceUpdate('paused', jid);
       const sentMsg = await sock.sendMessage(jid, { text });
       return sentMsg;
@@ -1116,22 +1196,23 @@ export class WhatsAppManager {
     }
   }
 
-  static async sendImageUrl(to: string, imageUrl: string, caption?: string) {
-    const sock = await this.ensureConnected();
-    const jid = await this.resolveJid(to);
+  static async sendImageUrl(to: string, imageUrl: string, caption?: string, tenantId?: string) {
+    const tId = tenantId || await this.resolveTenantForPhone(to);
+    const sock = await this.ensureConnected(tId);
+    const jid = await this.resolveJid(to, tId);
     await sock.sendPresenceUpdate('paused', jid);
     const sentMsg = await sock.sendMessage(jid, { image: { url: imageUrl }, caption: caption || "" });
     return sentMsg;
   }
 
-  static async sendMedia(to: string, buffer: Buffer, mimetype: string, fileName?: string, caption?: string, isVoiceNote = false) {
-    const sock = await this.ensureConnected();
-    const jid = await this.resolveJid(to);
+  static async sendMedia(to: string, buffer: Buffer, mimetype: string, fileName?: string, caption?: string, isVoiceNote = false, tenantId?: string) {
+    const tId = tenantId || await this.resolveTenantForPhone(to);
+    const sock = await this.ensureConnected(tId);
+    const jid = await this.resolveJid(to, tId);
     
     let msgObj: any = {};
     if (isVoiceNote || mimetype.startsWith('audio/')) {
         await sock.sendPresenceUpdate('recording', jid);
-        // Sometimes WhatsApp expects mp4 or ogg. The ptt flag sets it as a voice note.
         msgObj = { audio: buffer, ptt: isVoiceNote, mimetype: mimetype || 'audio/mp4' };
     } else if (mimetype.startsWith('image/')) {
         await sock.sendPresenceUpdate('paused', jid);
@@ -1147,19 +1228,23 @@ export class WhatsAppManager {
     return sentMsg;
   }
 
-  static async markChatRead(phone: string, messageIds: string[]) {
-    if (globalForBaileys.baileysSession.status !== "connected" || !globalForBaileys.baileysSession.sock || !messageIds.length) return;
-    const jid = await this.resolveJid(phone);
+  static async markChatRead(phone: string, messageIds: string[], tenantId?: string) {
+    const tId = tenantId || await this.resolveTenantForPhone(phone);
+    const session = this.getOrCreateSession(tId);
+    if (session.status !== "CONNECTED" || !session.sock || !messageIds.length) return;
+    const jid = await this.resolveJid(phone, tId);
     const keys = messageIds.map(id => ({ remoteJid: jid, id, fromMe: false }));
     try {
-      await globalForBaileys.baileysSession.sock.readMessages(keys);
+      await session.sock.readMessages(keys);
     } catch (e) {
       console.error("[Baileys] Failed to mark messages read:", e);
     }
   }
 
-  static async downloadMedia(msg: any) {
-    if (!globalForBaileys.baileysSession.sock || !msg) return null;
+  static async downloadMedia(msg: any, tenantId?: string) {
+    const tId = tenantId || this.getActiveTenantId() || "default";
+    const session = this.getOrCreateSession(tId);
+    if (!session.sock || !msg) return null;
     try {
       const buffer = await downloadMediaMessage(
         msg,
@@ -1167,7 +1252,7 @@ export class WhatsAppManager {
         {},
         {
           logger: pino({ level: "silent" }) as any,
-          reuploadRequest: globalForBaileys.baileysSession.sock.updateMediaMessage,
+          reuploadRequest: session.sock.updateMediaMessage,
         }
       );
       return buffer as Buffer;
@@ -1177,15 +1262,15 @@ export class WhatsAppManager {
     }
   }
 
-  static async sendProductCarousel(to: string, products: { title: string; price: string; image: string; link: string; id?: string }[]) {
-    if (globalForBaileys.baileysSession.status !== "connected" || !globalForBaileys.baileysSession.sock) {
+  static async sendProductCarousel(to: string, products: { title: string; price: string; image: string; link: string; id?: string }[], tenantId?: string) {
+    const tId = tenantId || await this.resolveTenantForPhone(to);
+    const session = this.getOrCreateSession(tId);
+    if (session.status !== "CONNECTED" || !session.sock) {
       throw new Error("WhatsApp not connected");
     }
-    const jid = to.includes("@") ? to : `${to.replace(/[^\d+]/g, "")}@s.whatsapp.net`;
+    const jid = await this.resolveJid(to, tId);
     
-    // Construct the Carousel cards
     const cards = await Promise.all(products.map(async (p, index) => {
-      // Buttons for each card
       const buttons = [
         {
           name: "cta_url",
@@ -1206,7 +1291,7 @@ export class WhatsAppManager {
       let imageMessage;
       if (p.image && p.image !== "N/A") {
         try {
-          const media = await prepareWAMessageMedia({ image: { url: p.image } }, { upload: globalForBaileys.baileysSession.sock.waUploadToServer });
+          const media = await prepareWAMessageMedia({ image: { url: p.image } }, { upload: session.sock.waUploadToServer });
           imageMessage = media.imageMessage;
         } catch (err) {
           console.error("[Baileys] Failed to prepare image for carousel card:", err);
@@ -1249,11 +1334,11 @@ export class WhatsAppManager {
           }
         }
       },
-      { userJid: globalForBaileys.baileysSession.sock.user.id }
+      { userJid: session.sock.user.id }
     );
 
     try {
-      await globalForBaileys.baileysSession.sock.relayMessage(jid, msg.message, { messageId: msg.key.id });
+      await session.sock.relayMessage(jid, msg.message, { messageId: msg.key.id });
       return msg;
     } catch (e: any) {
       fs.writeFileSync('carousel_error.log', e.toString() + "\n" + e.stack);
@@ -1262,10 +1347,12 @@ export class WhatsAppManager {
   }
 
   static async sendProductCard(to: string, product: { title: string; price: string; image: string; link: string; id?: string; description?: string }, tenantId?: string) {
-    if (globalForBaileys.baileysSession.status !== "connected" || !globalForBaileys.baileysSession.sock) {
+    const tId = tenantId || await this.resolveTenantForPhone(to);
+    const session = this.getOrCreateSession(tId);
+    if (session.status !== "CONNECTED" || !session.sock) {
       throw new Error("WhatsApp not connected");
     }
-    const jid = to.includes("@") ? to : `${to.replace(/[^\d+]/g, "")}@s.whatsapp.net`;
+    const jid = await this.resolveJid(to, tId);
     
     let caption = `*${product.title}*`;
     if (product.price && product.price !== "N/A" && product.price !== "Hidden" && product.price !== "None") {
@@ -1290,32 +1377,27 @@ export class WhatsAppManager {
 
     if (isValidUrl(product.image)) {
       try {
-        await globalForBaileys.baileysSession.sock.sendMessage(jid, { 
+        await session.sock.sendMessage(jid, { 
           image: { url: product.image.trim() }, 
           caption 
         });
       } catch (e) {
         console.warn("[sendProductCard] Failed to send image, falling back to clean text card:", e);
-        await globalForBaileys.baileysSession.sock.sendMessage(jid, { text: caption });
+        await session.sock.sendMessage(jid, { text: caption });
       }
     } else {
-      await globalForBaileys.baileysSession.sock.sendMessage(jid, { text: caption });
+      await session.sock.sendMessage(jid, { text: caption });
     }
     
-    // Explicitly save the product card to the database so it appears on the dashboard
     const fromStr = jid.replace("@s.whatsapp.net", "");
     await DB.addChatMessage(fromStr, {
       role: "assistant",
       content: `[Product Card: ${product.title}]\nPrice: ${product.price}${product.link ? '\nLink: ' + product.link : ''}`
-    }, tenantId);
+    }, tId);
   }
-
 }
 
-// Ensure intervals are hot-reloaded with the new logic in Next.js dev mode
-if (globalForBaileys.baileysSession) {
-  WhatsAppManager.startFollowUpsSync();
-  WhatsAppManager.startRevivalSync();
-  WhatsAppManager.startSessionWatchdog();
-}
-
+// Automatically start followups, revival and watchdog
+WhatsAppManager.startFollowUpsSync();
+WhatsAppManager.startRevivalSync();
+WhatsAppManager.startSessionWatchdog();

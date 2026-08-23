@@ -186,12 +186,12 @@ export async function upsertTenantToSupabase(tenant: Tenant): Promise<boolean> {
     const { error } = await supabase.from('tenants').upsert(payload);
     if (error) {
       console.warn('[Supabase] Error upserting tenant:', error.message);
-      return false;
+      throw new Error(`Failed to upsert tenant to Supabase: ${error.message}`);
     }
     return true;
-  } catch (err) {
+  } catch (err: any) {
     console.error('[Supabase] Upsert error:', err);
-    return false;
+    throw err;
   }
 }
 

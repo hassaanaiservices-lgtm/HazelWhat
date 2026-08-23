@@ -2,7 +2,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import { WhatsAppManager } from "./whatsapp";
 import { DB, DB_DIR, formatProductsToCatalog, ChatMessage } from "./db";
 import { ProductItem } from "./scraper";
-import { enqueueWhatsAppMessageJob, registerQueueWorker, CONCURRENCY_LIMIT } from "./queue-manager";
+import { enqueueWhatsAppMessageJob, registerQueueWorker, CONCURRENCY_LIMIT, getQueueLength, WhatsAppJobPayload } from "./queue-manager";
+import Redis from "ioredis";
+import crypto from "crypto";
+import { logLLMUsage, logAppError } from "./observability-store";
+import { getCurrentTraceContext } from "./trace-context";
+import { acquireLLMConcurrencySlot, truncateContextWindow, recordTenantLLMCost } from "./llm-cost-concurrency";
 import dns from "dns";
 import fs from "fs";
 import path from "path";
@@ -821,104 +826,138 @@ export async function callLLMWithFallback(
   messages: any[],
   tools: any[] = [],
   temperature: number = 0.7
-): Promise<{ res: any; provider: string }> {
-  const primaryKey = process.env.DEEPSEEK_API_KEY || getEnvKey("DEEPSEEK_API_KEY") || process.env.OPENROUTER_API_KEY || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENAI_API_KEY || getEnvKey("OPENAI_API_KEY") || config?.apiKey || config?.openRouterApiKey || config?.openaiApiKey || "";
-  const anthropicKey = process.env.ANTHROPIC_API_KEY || getEnvKey("ANTHROPIC_API_KEY") || config?.anthropicApiKey || "";
+): Promise<{ res: LLMCallResult; provider: string }> {
+  // 1. Context Window Protection (prevent ballooning input context costs)
+  const safeMessages = truncateContextWindow(messages);
+  const tenantId = config?.tenantId || config?.id || "default_tenant";
 
-  // Auto-recovery: If primary key is present, reset circuit if at least 10 seconds have elapsed since last failure
-  const dsStatus = getCircuitStatus("deepseek");
-  if (primaryKey && dsStatus.state === "open" && Date.now() - dsStatus.lastFailureTime > 10000) {
-    providerCircuits.deepseek.state = "closed";
+  // 2. Concurrency Control & Pre-flight Budget Guard
+  const slot = await acquireLLMConcurrencySlot(tenantId, "llm_fallback", config?.dailyBudgetUsd);
+  if (!slot.acquired) {
+    if (slot.reason === "budget_exceeded") {
+      const err: any = new Error(`LLM daily budget limit exceeded for tenant: ${tenantId}`);
+      err.isNonRetryable = true;
+      throw err;
+    }
+    throw new Error(`LLM concurrency limit reached (${slot.reason}), retrying job...`);
   }
 
-  const deepseekAvailable = primaryKey && isProviderAvailable("deepseek");
-  const anthropicAvailable = anthropicKey && isProviderAvailable("anthropic");
+  try {
+    const primaryKey = process.env.DEEPSEEK_API_KEY || getEnvKey("DEEPSEEK_API_KEY") || process.env.OPENROUTER_API_KEY || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENAI_API_KEY || getEnvKey("OPENAI_API_KEY") || config?.apiKey || config?.openRouterApiKey || config?.openaiApiKey || "";
+    const anthropicKey = process.env.ANTHROPIC_API_KEY || getEnvKey("ANTHROPIC_API_KEY") || config?.anthropicApiKey || "";
 
-  if (!deepseekAvailable && !anthropicAvailable) {
-    const dsStatusNow = getCircuitStatus("deepseek");
-    const antStatus = getCircuitStatus("anthropic");
-    const errMsg = `All configured LLM providers are currently unavailable or circuit-open. ` +
-      `(DeepSeek: ${dsStatusNow.state} - "${dsStatusNow.lastErrorReason || "No key"}", ` +
-      `Anthropic: ${antStatus.state} - "${antStatus.lastErrorReason || "No key"})`;
-    console.error(`[callLLMWithFallback] ${errMsg}`);
-    throw new Error(errMsg);
-  }
+    const dsStatus = getCircuitStatus("deepseek");
+    if (primaryKey && dsStatus.state === "open" && Date.now() - dsStatus.lastFailureTime > 10000) {
+      providerCircuits.deepseek.state = "closed";
+    }
 
-  // Detect if any message has an image block (Anthropic image block format)
-  const hasImage = messages.some(msg => 
-    Array.isArray(msg.content) && msg.content.some((block: any) => block.type === "image")
-  );
+    const deepseekAvailable = primaryKey && isProviderAvailable("deepseek");
+    const anthropicAvailable = anthropicKey && isProviderAvailable("anthropic");
 
-  // If there's an image and Anthropic (vision-capable) is available, prioritize Anthropic
-  const prioritizeAnthropic = hasImage && anthropicAvailable;
+    if (!deepseekAvailable && !anthropicAvailable) {
+      const dsStatusNow = getCircuitStatus("deepseek");
+      const antStatus = getCircuitStatus("anthropic");
+      const errMsg = `All configured LLM providers are currently unavailable or circuit-open. ` +
+        `(DeepSeek: ${dsStatusNow.state} - "${dsStatusNow.lastErrorReason || "No key"}", ` +
+        `Anthropic: ${antStatus.state} - "${antStatus.lastErrorReason || "No key"})`;
+      console.error(`[callLLMWithFallback] ${errMsg}`);
+      throw new Error(errMsg);
+    }
 
-  if (prioritizeAnthropic) {
-    try {
-      console.log("[callLLMWithFallback] Vision Request: prioritizing vision-capable Anthropic (Claude)...");
-      const res = await callLLM(anthropicKey, systemPrompt, messages, tools, temperature);
-      recordProviderSuccess("anthropic");
-      console.log("[callLLMWithFallback] Provider used: anthropic (vision)");
-      return { res, provider: "anthropic" };
-    } catch (err: any) {
-      console.error("[callLLMWithFallback] Prioritized vision Anthropic failed:", err.message || err);
-      recordProviderFailure("anthropic", err);
-      
-      // Fallback to DeepSeek if Anthropic failed, even for image (DeepSeek will handle text description parts)
-      if (deepseekAvailable) {
-        console.warn("[callLLMWithFallback] Falling back to DeepSeek after vision Anthropic failure...");
-        try {
-          const res = await callLLM(primaryKey, systemPrompt, messages, tools, temperature);
+    const hasImage = safeMessages.some(msg => 
+      Array.isArray(msg.content) && msg.content.some((block: any) => block.type === "image")
+    );
+
+    const prioritizeAnthropic = hasImage && anthropicAvailable;
+
+    let result: { res: LLMCallResult; provider: string };
+
+    if (prioritizeAnthropic) {
+      try {
+        console.log("[callLLMWithFallback] Vision Request: prioritizing vision-capable Anthropic (Claude)...");
+        const res = await callLLM(anthropicKey, systemPrompt, safeMessages, tools, temperature);
+        recordProviderSuccess("anthropic");
+        console.log("[callLLMWithFallback] Provider used: anthropic (vision)");
+        result = { res, provider: "anthropic" };
+      } catch (err: any) {
+        console.error("[callLLMWithFallback] Prioritized vision Anthropic failed:", err.message || err);
+        recordProviderFailure("anthropic", err);
+        if (deepseekAvailable) {
+          console.warn("[callLLMWithFallback] Falling back to DeepSeek after vision Anthropic failure...");
+          const res = await callLLM(primaryKey, systemPrompt, safeMessages, tools, temperature);
           recordProviderSuccess("deepseek");
-          return { res, provider: "deepseek" };
-        } catch (dsErr) {
-          throw dsErr;
+          result = { res, provider: "deepseek" };
+        } else {
+          throw err;
         }
       }
-      throw err;
-    }
-  }
+    } else if (deepseekAvailable) {
+      try {
+        console.log("[callLLMWithFallback] Attempting primary LLM (DeepSeek)...");
+        const res = await callLLM(primaryKey, systemPrompt, safeMessages, tools, temperature);
+        recordProviderSuccess("deepseek");
+        console.log("[callLLMWithFallback] Provider used: deepseek");
+        result = { res, provider: "deepseek" };
+      } catch (err: any) {
+        console.error("[callLLMWithFallback] Primary LLM (DeepSeek) failed:", err.message || err);
+        recordProviderFailure("deepseek", err);
 
-  if (deepseekAvailable) {
-    try {
-      console.log("[callLLMWithFallback] Attempting primary LLM (DeepSeek)...");
-      const res = await callLLM(primaryKey, systemPrompt, messages, tools, temperature);
-      recordProviderSuccess("deepseek");
-      console.log("[callLLMWithFallback] Provider used: deepseek");
-      return { res, provider: "deepseek" };
-    } catch (err: any) {
-      console.error("[callLLMWithFallback] Primary LLM (DeepSeek) failed:", err.message || err);
-      recordProviderFailure("deepseek", err);
-
-      if (anthropicAvailable) {
-        console.warn("[callLLMWithFallback] Falling back to backup LLM (Anthropic)...");
-        try {
-          const res = await callLLM(anthropicKey, systemPrompt, messages, tools, temperature);
-          recordProviderSuccess("anthropic");
-          console.log("[callLLMWithFallback] Provider used: anthropic-fallback");
-          return { res, provider: "anthropic-fallback" };
-        } catch (anthropicErr: any) {
-          console.error("[callLLMWithFallback] Backup LLM (Anthropic) failed:", anthropicErr.message || anthropicErr);
-          recordProviderFailure("anthropic", anthropicErr);
-          throw anthropicErr;
+        if (anthropicAvailable) {
+          console.warn("[callLLMWithFallback] Falling back to backup LLM (Anthropic)...");
+          try {
+            const res = await callLLM(anthropicKey, systemPrompt, safeMessages, tools, temperature);
+            recordProviderSuccess("anthropic");
+            console.log("[callLLMWithFallback] Provider used: anthropic-fallback");
+            result = { res, provider: "anthropic-fallback" };
+          } catch (anthropicErr: any) {
+            console.error("[callLLMWithFallback] Backup LLM (Anthropic) failed:", anthropicErr.message || anthropicErr);
+            recordProviderFailure("anthropic", anthropicErr);
+            throw anthropicErr;
+          }
+        } else {
+          throw err;
         }
       }
-      throw err;
+    } else if (anthropicAvailable) {
+      console.log("[callLLMWithFallback] DeepSeek unavailable/circuit-open. Attempting Anthropic...");
+      try {
+        const res = await callLLM(anthropicKey, systemPrompt, safeMessages, tools, temperature);
+        recordProviderSuccess("anthropic");
+        console.log("[callLLMWithFallback] Provider used: anthropic");
+        result = { res, provider: "anthropic" };
+      } catch (err: any) {
+        console.error("[callLLMWithFallback] Anthropic LLM failed:", err.message || err);
+        recordProviderFailure("anthropic", err);
+        throw err;
+      }
+    } else {
+      throw new Error("No API keys configured or all providers circuit-open.");
     }
-  } else if (anthropicAvailable) {
-    console.log("[callLLMWithFallback] DeepSeek unavailable/circuit-open. Attempting Anthropic...");
-    try {
-      const res = await callLLM(anthropicKey, systemPrompt, messages, tools, temperature);
-      recordProviderSuccess("anthropic");
-      console.log("[callLLMWithFallback] Provider used: anthropic");
-      return { res, provider: "anthropic" };
-    } catch (err: any) {
-      console.error("[callLLMWithFallback] Anthropic LLM failed:", err.message || err);
-      recordProviderFailure("anthropic", err);
-      throw err;
+
+    // 3. Post-call Cost Accounting
+    if (result.res?.inputTokens || result.res?.outputTokens) {
+      // Approximate cost calculation per provider
+      const inPrice = result.provider.includes("anthropic") ? 3.0 : 0.14;
+      const outPrice = result.provider.includes("anthropic") ? 15.0 : 0.28;
+      const estCost = ((result.res.inputTokens * inPrice) + (result.res.outputTokens * outPrice)) / 1000000;
+      await recordTenantLLMCost(tenantId, estCost);
     }
-  } else {
-    throw new Error("No API keys configured or all providers circuit-open.");
+
+    return result;
+  } finally {
+    await slot.release();
   }
+}
+
+export interface LLMCallResult {
+  content: any[];
+  // Usage data for financial ledger
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  resolvedModel: string;   // exact model string that billed
+  resolvedProvider: string; // 'anthropic' | 'deepseek' | 'openrouter'
+  latencyMs: number;
 }
 
 async function callLLM(
@@ -927,9 +966,10 @@ async function callLLM(
   messages: any[],
   tools: any[],
   temperature = 0.7
-): Promise<{ content: any[] }> {
+): Promise<LLMCallResult> {
   const trimmed = apiKey.trim();
   const keyType = detectKeyType(trimmed);
+  const callStart = Date.now();
 
   if (keyType === "anthropic") {
     const anthropic = new Anthropic({ apiKey: trimmed });
@@ -953,7 +993,16 @@ async function callLLM(
           timeout: 15000
         });
         console.log(`[callLLM] Anthropic model ${model} SUCCESS!`);
-        return res;
+        const latencyMs = Date.now() - callStart;
+        return {
+          content: (res as any).content,
+          inputTokens: res.usage?.input_tokens || 0,
+          outputTokens: res.usage?.output_tokens || 0,
+          cachedTokens: (res.usage as any)?.cache_read_input_tokens || 0,
+          resolvedModel: model,
+          resolvedProvider: 'anthropic',
+          latencyMs,
+        };
       } catch (err: any) {
         console.error(`[callLLM] Anthropic model ${model} error:`, err.message || err);
         lastErr = err;
@@ -1070,15 +1119,16 @@ async function callLLM(
           }
         }
 
+        const latencyMs = Date.now() - callStart;
         return {
-          id: data.id || `msg_${Math.random().toString(36).substr(2, 9)}`,
-          type: "message",
-          role: "assistant",
           content: anthropicContent,
-          model: model,
-          stop_reason: assistantMsg.tool_calls ? "tool_use" : "end_turn",
-          usage: { input_tokens: data.usage?.prompt_tokens || 0, output_tokens: data.usage?.completion_tokens || 0 }
-        } as any;
+          inputTokens: data.usage?.prompt_tokens || 0,
+          outputTokens: data.usage?.completion_tokens || 0,
+          cachedTokens: 0,
+          resolvedModel: model,
+          resolvedProvider: 'openrouter',
+          latencyMs,
+        };
       } catch (err: any) {
         console.error(`[callLLM] OpenRouter model ${model} failed:`, err.message || err);
         lastError = err;
@@ -1173,7 +1223,16 @@ async function callLLM(
 
     const choice = data.choices[0].message;
     const anthropicContent = convertOpenAiResponseToAnthropic(choice);
-    return { content: anthropicContent };
+    const latencyMs = Date.now() - callStart;
+    return {
+      content: anthropicContent,
+      inputTokens: data.usage?.prompt_tokens || 0,
+      outputTokens: data.usage?.completion_tokens || 0,
+      cachedTokens: data.usage?.prompt_cache_hit_tokens || 0,
+      resolvedModel: 'deepseek-chat',
+      resolvedProvider: 'deepseek',
+      latencyMs,
+    };
   } else {
     throw new Error(`Unsupported API key type. Please provide a valid Anthropic, OpenRouter, or DeepSeek API key.`);
   }
@@ -1212,12 +1271,197 @@ function isDuplicateMessage(msgId: string): boolean {
   return false;
 }
 
-interface LockQueue {
-  promise: Promise<void>;
-  pendingCount: number;
+const RELEASE_SCRIPT = `
+if redis.call("get", KEYS[1]) == ARGV[1] then
+  return redis.call("del", KEYS[1])
+else
+  return 0
+end
+`;
+
+export class RedisLockManager {
+  static getClient(): Redis | null {
+    if (redisConnection && redisConnection.status === "ready") {
+      return redisConnection;
+    }
+    return null;
+  }
+
+  static async acquire(key: string, token: string, ttlMs: number): Promise<{ success: boolean; redisFailed: boolean }> {
+    const client = this.getClient();
+    if (!client) return { success: false, redisFailed: true };
+
+    try {
+      const result = await client.set(key, token, "PX", ttlMs, "NX");
+      return { success: result === "OK", redisFailed: false };
+    } catch (err) {
+      console.warn(`[RedisLockManager] Failed to acquire lock in Redis for key ${key}:`, err);
+      return { success: false, redisFailed: true };
+    }
+  }
+
+  static async release(key: string, token: string): Promise<boolean> {
+    const client = this.getClient();
+    if (!client) return false;
+
+    try {
+      const result = await client.eval(RELEASE_SCRIPT, 1, key, token);
+      return result === 1;
+    } catch (err) {
+      console.warn(`[RedisLockManager] Failed to release lock in Redis for key ${key}:`, err);
+      return false;
+    }
+  }
 }
 
-const customerLocks = new Map<string, LockQueue>();
+export class DistributedLock {
+  private static inMemoryLocks = new Map<string, { promise: Promise<void>; pendingCount: number }>();
+
+  static async acquire(tenantId: string, customerId: string, ttlMs = 30000): Promise<{ release: () => Promise<void> }> {
+    const lockKey = `lock:${tenantId}:${customerId}`;
+    const token = crypto.randomUUID();
+    const redisClient = RedisLockManager.getClient();
+
+    if (redisClient) {
+      const startTime = Date.now();
+      let attempt = 0;
+      let redisFailed = false;
+      while (Date.now() - startTime < ttlMs) {
+        const result = await RedisLockManager.acquire(lockKey, token, ttlMs);
+        if (result.success) {
+          let released = false;
+          return {
+            release: async () => {
+              if (released) return;
+              released = true;
+              await RedisLockManager.release(lockKey, token);
+            }
+          };
+        }
+        if (result.redisFailed) {
+          redisFailed = true;
+          break;
+        }
+        attempt++;
+        const baseDelay = Math.min(1000, Math.pow(2, attempt) * 25);
+        const jitter = baseDelay * 0.2 * (Math.random() * 2 - 1);
+        const delay = Math.max(10, Math.round(baseDelay + jitter));
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+      if (redisFailed) {
+        console.warn(`[DistributedLock] Redis lock acquisition failed due to Redis outage. Falling back to in-memory lock for ${lockKey}.`);
+      } else {
+        throw new Error(`Lock acquisition timed out for key ${lockKey}`);
+      }
+    }
+
+    const memKey = `${tenantId}:${customerId}`;
+    let queue = this.inMemoryLocks.get(memKey);
+    if (!queue) {
+      queue = { promise: Promise.resolve(), pendingCount: 0 };
+      this.inMemoryLocks.set(memKey, queue);
+    }
+    queue.pendingCount++;
+    const previousPromise = queue.promise;
+    
+    let resolveLock: () => void;
+    const currentPromise = new Promise<void>((resolve) => {
+      resolveLock = resolve;
+    });
+    queue.promise = currentPromise;
+
+    await previousPromise;
+
+    let released = false;
+    return {
+      release: async () => {
+        if (released) return;
+        released = true;
+        resolveLock();
+        const currentQueue = this.inMemoryLocks.get(memKey);
+        if (currentQueue) {
+          currentQueue.pendingCount--;
+          if (currentQueue.pendingCount <= 0) {
+            this.inMemoryLocks.delete(memKey);
+          }
+        }
+      }
+    };
+  }
+}
+
+export class IngressRateLimiter {
+  private static inMemoryBuckets = new Map<string, { tokens: number; lastRefill: number }>();
+
+  static async isAllowed(tenantId: string, limitPerMin = 60): Promise<boolean> {
+    const redisClient = RedisLockManager.getClient();
+    const key = `ratelimit:${tenantId}`;
+
+    if (redisClient) {
+      try {
+        const now = Date.now();
+        const refillRate = limitPerMin / 60000;
+        const maxTokens = limitPerMin;
+
+        const luaScript = `
+          local key = KEYS[1]
+          local limit = tonumber(ARGV[1])
+          local now = tonumber(ARGV[2])
+          local refill_rate = tonumber(ARGV[3])
+
+          local data = redis.call("HMGET", key, "tokens", "last_refill")
+          local tokens = tonumber(data[1])
+          local last_refill = tonumber(data[2])
+
+          if not tokens then
+            tokens = limit
+            last_refill = now
+          else
+            local elapsed = now - last_refill
+            tokens = math.min(limit, tokens + elapsed * refill_rate)
+            last_refill = now
+          end
+
+          if tokens >= 1 then
+            tokens = tokens - 1
+            redis.call("HMSET", key, "tokens", tokens, "last_refill", last_refill)
+            redis.call("PEXPIRE", key, 60000)
+            return 1
+          else
+            redis.call("HMSET", key, "tokens", tokens, "last_refill", last_refill)
+            redis.call("PEXPIRE", key, 60000)
+            return 0
+          end
+        `;
+
+        const allowed = await redisClient.eval(luaScript, 1, key, maxTokens, now, refillRate);
+        return allowed === 1;
+      } catch (err) {
+        console.warn(`[IngressRateLimiter] Redis rate limiter failed, falling back to in-memory:`, err);
+      }
+    }
+
+    const now = Date.now();
+    const refillRate = limitPerMin / 60000;
+    const maxTokens = limitPerMin;
+
+    let bucket = this.inMemoryBuckets.get(tenantId);
+    if (!bucket) {
+      bucket = { tokens: maxTokens, lastRefill: now };
+      this.inMemoryBuckets.set(tenantId, bucket);
+    } else {
+      const elapsed = now - bucket.lastRefill;
+      bucket.tokens = Math.min(maxTokens, bucket.tokens + elapsed * refillRate);
+      bucket.lastRefill = now;
+    }
+
+    if (bucket.tokens >= 1) {
+      bucket.tokens -= 1;
+      return true;
+    }
+    return false;
+  }
+}
 
 interface HybridMatchResult {
   matched: boolean;
@@ -1334,67 +1578,84 @@ export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
       if (msg.key.remoteJidAlt) {
         from = msg.key.remoteJidAlt;
       } else {
-        return; // Ignore ghost messages without real phone number
+        return;
       }
     }
     from = from?.replace("@s.whatsapp.net", "");
     if (!from) return;
 
+    const tenantId = inputTenantId || await WhatsAppManager.resolveTenantForPhone(from);
+
+    // 1. System Backpressure Check
+    const queueLength = await getQueueLength();
+    if (queueLength >= 1000) {
+      console.warn(`[AI Handler] System Backpressure Exceeded (Queue Length: ${queueLength}). Dropping message from ${from}.`);
+      
+      await logAppError({
+        service: 'queue-manager',
+        operation: 'enqueue',
+        error: new Error('QueueBackpressureExceeded: Worker queue is full (>1000 jobs)'),
+        tenantId,
+        severity: 'critical'
+      });
+
+      await DB.recordApiAlert('System Backpressure', 'circuit_open', `Backpressure limit exceeded (Queue length: ${queueLength}). Message dropped.`);
+
+      try {
+        await WhatsAppManager.sendMessage(from, "AOA! HazelWhat AI is currently experiencing very high demand. 🤖 Please wait a moment and send your message again. Thank you!", tenantId);
+      } catch (e) {
+        console.error("[AI Handler] Failed to send backpressure warning message:", e);
+      }
+      return;
+    }
+
+    // 2. Tenant Ingress Rate Limiting Check
+    const config = await DB.getConfig(tenantId);
+    const limit = (config as any)?.rateLimitPerMinute || 60;
+    const allowed = await IngressRateLimiter.isAllowed(tenantId, limit);
+    if (!allowed) {
+      console.warn(`[AI Handler] Ingress Rate Limit Exceeded for tenant ${tenantId} (Limit: ${limit}/min). Dropping message from ${from}.`);
+      
+      await logAppError({
+        service: 'ingest-api',
+        operation: 'receive',
+        error: new Error(`RateLimitExceeded: Ingress rate limit of ${limit}/min exceeded for tenant ${tenantId}`),
+        tenantId,
+        severity: 'medium'
+      });
+
+      await DB.recordApiAlert('Ingress Rate Limit', 'quota_exceeded', `Rate limit of ${limit}/min exceeded for tenant ${tenantId}. Message dropped.`);
+      return;
+    }
+
     // Enqueue message into high-throughput BullMQ / Worker Queue Pool (Concurrency: 20)
-    await enqueueWhatsAppMessageJob(msg, inputTenantId);
+    await enqueueWhatsAppMessageJob(msg, tenantId, from);
   } catch (error) {
     console.error("[AI Handler] handleWhatsAppMessage outer error:", error);
   }
 }
 
-async function processWhatsAppWorkerJob(msg: any, inputTenantId?: string) {
-  let from = msg.key?.remoteJid;
-  if (from?.includes("@lid")) {
-    if (msg.key.remoteJidAlt) {
-      from = msg.key.remoteJidAlt;
-    } else {
-      return;
-    }
-  }
-  from = from?.replace("@s.whatsapp.net", "");
-  if (!from) return;
+async function processWhatsAppWorkerJob(payload: WhatsAppJobPayload) {
+  const { msg, tenantId, customerId } = payload;
 
-  // Acquire lock/queue for this customer phone number to ensure per-customer sequential ordering
-  let queue = customerLocks.get(from);
-  if (!queue) {
-    queue = {
-      promise: Promise.resolve(),
-      pendingCount: 0
-    };
-    customerLocks.set(from, queue);
+  let lock;
+  try {
+    lock = await DistributedLock.acquire(tenantId, customerId, 30000);
+  } catch (err: any) {
+    console.error(`[AI Handler] Failed to acquire lock for customer ${customerId} (tenant: ${tenantId}):`, err.message || err);
+    return;
   }
-
-  queue.pendingCount++;
-  const previousPromise = queue.promise;
-  let resolveLock: () => void;
-  const currentPromise = new Promise<void>((resolve) => {
-    resolveLock = resolve;
-  });
-  queue.promise = currentPromise;
 
   try {
-    await previousPromise;
-    const processPromise = processWhatsAppMessage(msg, from, inputTenantId);
+    const processPromise = processWhatsAppMessage(msg, customerId, tenantId);
     const timeoutPromise = new Promise<void>((_, reject) => 
       setTimeout(() => reject(new Error("Message processing timed out (35s)")), 35000)
     );
     await Promise.race([processPromise, timeoutPromise]);
   } catch (error: any) {
-    console.error(`[AI Handler] Error for customer ${from}:`, error.message || error);
+    console.error(`[AI Handler] Error for customer ${customerId}:`, error.message || error);
   } finally {
-    resolveLock!();
-    const currentQueue = customerLocks.get(from);
-    if (currentQueue) {
-      currentQueue.pendingCount--;
-      if (currentQueue.pendingCount <= 0) {
-        customerLocks.delete(from);
-      }
-    }
+    await lock.release();
   }
 }
 
@@ -1930,12 +2191,32 @@ This customer is a revived dead lead who recently responded to our re-engagement
     ];
 
     let usedProvider = "unknown";
+    // Per-request LLM call counter for idempotent financial ledger
+    const traceCtx = getCurrentTraceContext();
+    const observabilityRequestId = traceCtx?.requestId || `req_wa_${Date.now()}`;
+    let llmCallIndex = 0;
     try {
       await WhatsAppManager.sendTyping(from);
       console.log(`[AI Handler] Requesting completion using unified callLLMWithFallback...`);
       const fallbackResult = await callLLMWithFallback(config, fullSystemPrompt, recentHistory, tools);
       usedProvider = fallbackResult.provider;
+      const llmMeta0 = fallbackResult.res;
       let res = fallbackResult.res;
+
+      // Financial ledger: LLM call #0 (initial turn)
+      logLLMUsage({
+        tenantId: resolvedTenantId,
+        provider: llmMeta0.resolvedProvider,
+        model: llmMeta0.resolvedModel,
+        inputTokens: llmMeta0.inputTokens,
+        outputTokens: llmMeta0.outputTokens,
+        cachedTokens: llmMeta0.cachedTokens,
+        latencyMs: llmMeta0.latencyMs,
+        status: 'success',
+        purpose: 'whatsapp_chat',
+        llmCallIndex: llmCallIndex,
+        customRequestId: observabilityRequestId,
+      }).catch(e => console.error('[Observability] logLLMUsage call#0 failed:', e));
 
       let textContent = "";
       for (const block of res.content) {
@@ -2123,9 +2404,26 @@ This customer is a revived dead lead who recently responded to our re-engagement
 
         console.log("[AI Handler] Sending tool results back to AI with compact system prompt...");
         const compactToolSystemPrompt = `You are a concise sales assistant for ${activeBusinessName}. Complete the action and provide a brief confirmation message (1-2 sentences max). Do not repeat catalog or rules.`;
+        llmCallIndex++; // Index 1: tool-loop follow-up call
         const fallbackResult2 = await callLLMWithFallback(config, compactToolSystemPrompt, recentHistory, tools);
         usedProvider = fallbackResult2.provider;
+        const llmMeta1 = fallbackResult2.res;
         res = fallbackResult2.res;
+
+        // Financial ledger: LLM call #1 (tool-loop follow-up)
+        logLLMUsage({
+          tenantId: resolvedTenantId,
+          provider: llmMeta1.resolvedProvider,
+          model: llmMeta1.resolvedModel,
+          inputTokens: llmMeta1.inputTokens,
+          outputTokens: llmMeta1.outputTokens,
+          cachedTokens: llmMeta1.cachedTokens,
+          latencyMs: llmMeta1.latencyMs,
+          status: 'success',
+          purpose: 'whatsapp_chat',
+          llmCallIndex: llmCallIndex,
+          customRequestId: observabilityRequestId,
+        }).catch(e => console.error('[Observability] logLLMUsage call#1 failed:', e));
 
         textContent = "";
         for (const block of res.content) {

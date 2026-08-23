@@ -70,7 +70,10 @@ import {
   Calendar,
   RefreshCw,
   Rocket,
-  FileEdit
+  FileEdit,
+  Database,
+  Layers,
+  Percent
 } from 'lucide-react';
 import { 
   initialTenants, 
@@ -132,9 +135,9 @@ const defaultFallbackTenant: Tenant = {
 };
 
 export default function VoiceSaaSApp() {
-  const [activeTab, setActiveTabRaw] = useState<'dashboard' | 'clients' | 'admins' | 'settings' | 'logs'>('dashboard');
+  const [activeTab, setActiveTabRaw] = useState<'dashboard' | 'clients' | 'admins' | 'settings' | 'logs' | 'observability'>('dashboard');
 
-  const setActiveTab = (tab: 'dashboard' | 'clients' | 'admins' | 'settings' | 'logs') => {
+  const setActiveTab = (tab: 'dashboard' | 'clients' | 'admins' | 'settings' | 'logs' | 'observability') => {
     setActiveTabRaw(tab);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -154,6 +157,156 @@ export default function VoiceSaaSApp() {
   const [logLevelFilter, setLogLevelFilter] = useState('all');
   const [logSearchQuery, setLogSearchQuery] = useState('');
   const [logAutoRefresh, setLogAutoRefresh] = useState(true);
+
+  // Observability & Error Center States
+  const [obsMetrics, setObsMetrics] = useState<any>(null);
+  const [obsGroups, setObsGroups] = useState<any[]>([]);
+  const [obsTotalGroups, setObsTotalGroups] = useState(0);
+  const [isFetchingObsMetrics, setIsFetchingObsMetrics] = useState(false);
+  const [isFetchingObsGroups, setIsFetchingObsGroups] = useState(false);
+
+  // Filtering & Pagination
+  const [obsPage, setObsPage] = useState(1);
+  const [obsLimit] = useState(25);
+  const [obsStatusFilter, setObsStatusFilter] = useState('');
+  const [obsSeverityFilter, setObsSeverityFilter] = useState('');
+  const [obsServiceFilter, setObsServiceFilter] = useState('');
+  const [obsSearchQuery, setObsSearchQuery] = useState('');
+  const [obsTimeframe, setObsTimeframe] = useState<'24h' | '7d' | '30d'>('7d');
+  const [obsAutoRefresh, setObsAutoRefresh] = useState(true);
+
+  // Error Investigation Drawer/Modal
+  const [selectedErrorGroup, setSelectedErrorGroup] = useState<any | null>(null);
+  const [errorGroupDetail, setErrorGroupDetail] = useState<any | null>(null);
+  const [isFetchingGroupDetail, setIsFetchingGroupDetail] = useState(false);
+  const [drawerTenantFilter, setDrawerTenantFilter] = useState('');
+  const [obsUpdatingStatusId, setObsUpdatingStatusId] = useState<string | null>(null);
+
+  // Health Check & Circuit Breakers State
+  const [isFetchingApiHealth, setIsFetchingApiHealth] = useState(false);
+  const [isResettingCircuits, setIsResettingCircuits] = useState(false);
+
+  const getObsDateRange = () => {
+    const toDate = new Date();
+    const fromDate = new Date();
+    if (obsTimeframe === '24h') {
+      fromDate.setHours(fromDate.getHours() - 24);
+    } else if (obsTimeframe === '7d') {
+      fromDate.setDate(fromDate.getDate() - 7);
+    } else {
+      fromDate.setDate(fromDate.getDate() - 30);
+    }
+    return {
+      from: fromDate.toISOString(),
+      to: toDate.toISOString()
+    };
+  };
+
+  const fetchObsMetrics = async () => {
+    setIsFetchingObsMetrics(true);
+    try {
+      const { from, to } = getObsDateRange();
+      const res = await fetch(`/api/admin/observability/metrics?from=${from}&to=${to}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setObsMetrics(data);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch observability metrics:", e);
+    } finally {
+      setIsFetchingObsMetrics(false);
+    }
+  };
+
+  const fetchObsGroups = async () => {
+    setIsFetchingObsGroups(true);
+    try {
+      const { from, to } = getObsDateRange();
+      let url = `/api/admin/observability/errors?page=${obsPage}&limit=${obsLimit}&from=${from}&to=${to}`;
+      if (obsStatusFilter) url += `&status=${obsStatusFilter}`;
+      if (obsSeverityFilter) url += `&severity=${obsSeverityFilter}`;
+      if (obsServiceFilter) url += `&service=${obsServiceFilter}`;
+      if (obsSearchQuery) url += `&search=${encodeURIComponent(obsSearchQuery)}`;
+
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setObsGroups(data.groups || []);
+          setObsTotalGroups(data.total || 0);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch error groups:", e);
+    } finally {
+      setIsFetchingObsGroups(false);
+    }
+  };
+
+
+
+  const resetCircuitBreakers = async () => {
+    setIsResettingCircuits(true);
+    try {
+      const res = await fetch('/api/admin/api-health', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          fetchApiHealth();
+        }
+      }
+    } catch (e) {
+      console.error("Failed to reset circuit breakers:", e);
+    } finally {
+      setIsResettingCircuits(false);
+    }
+  };
+
+  const fetchErrorGroupDetail = async (groupId: string, tenantId = '') => {
+    setIsFetchingGroupDetail(true);
+    try {
+      let url = `/api/admin/observability/errors/${groupId}?occLimit=50`;
+      if (tenantId) url += `&tenantId=${tenantId}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setErrorGroupDetail(data);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch error group detail:", e);
+    } finally {
+      setIsFetchingGroupDetail(false);
+    }
+  };
+
+  const updateErrorGroupStatus = async (groupId: string, newStatus: string) => {
+    setObsUpdatingStatusId(groupId);
+    try {
+      const res = await fetch('/api/admin/observability/errors', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId, status: newStatus, resolvedBy: 'admin' })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setObsGroups((prev: any[]) => prev.map(g => g.id === groupId ? { ...g, status: newStatus } : g));
+          if (selectedErrorGroup && selectedErrorGroup.id === groupId) {
+            setSelectedErrorGroup((prev: any) => prev ? { ...prev, status: newStatus } : null);
+          }
+          fetchObsMetrics();
+        }
+      }
+    } catch (e) {
+      console.error("Failed to update error group status:", e);
+    } finally {
+      setObsUpdatingStatusId(null);
+    }
+  };
 
   const fetchSystemLogs = async () => {
     setIsFetchingLogs(true);
@@ -182,6 +335,35 @@ export default function VoiceSaaSApp() {
     }
   }, [activeTab, clientSubTab, logTypeFilter, logLevelFilter, logAutoRefresh]);
 
+  useEffect(() => {
+    if (activeTab === 'observability') {
+      fetchObsMetrics();
+      fetchObsGroups();
+      fetchApiHealth();
+    }
+  }, [activeTab, obsPage, obsStatusFilter, obsSeverityFilter, obsServiceFilter, obsTimeframe]);
+
+  useEffect(() => {
+    if (activeTab === 'observability' && obsAutoRefresh) {
+      const timer = setInterval(() => {
+        fetchObsMetrics();
+        fetchObsGroups();
+        fetchApiHealth();
+      }, 5000);
+      return () => clearInterval(timer);
+    }
+  }, [activeTab, obsAutoRefresh, obsPage, obsStatusFilter, obsSeverityFilter, obsServiceFilter, obsTimeframe]);
+
+  useEffect(() => {
+    if (activeTab === 'observability') {
+      const delayDebounce = setTimeout(() => {
+        setObsPage(1);
+        fetchObsGroups();
+      }, 400);
+      return () => clearTimeout(delayDebounce);
+    }
+  }, [obsSearchQuery]);
+
   const handleAdminLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ portal: 'admin' }) });
@@ -195,7 +377,7 @@ export default function VoiceSaaSApp() {
       const syncTabFromUrl = () => {
         const params = new URLSearchParams(window.location.search);
         const urlTab = params.get('tab');
-        const validTabs = ['dashboard', 'clients', 'admins', 'settings'];
+        const validTabs = ['dashboard', 'clients', 'admins', 'settings', 'logs', 'observability'];
         if (urlTab && validTabs.includes(urlTab)) {
           setActiveTabRaw(urlTab as any);
         }
@@ -332,6 +514,7 @@ export default function VoiceSaaSApp() {
   const [apiHealth, setApiHealth] = useState<any>(null);
 
   const fetchApiHealth = async () => {
+    setIsFetchingApiHealth(true);
     try {
       const res = await fetch('/api/admin/api-health');
       if (res.ok) {
@@ -342,6 +525,8 @@ export default function VoiceSaaSApp() {
       }
     } catch (e) {
       console.error('Failed to fetch API health:', e);
+    } finally {
+      setIsFetchingApiHealth(false);
     }
   };
 
@@ -405,6 +590,10 @@ export default function VoiceSaaSApp() {
   const fetchTenants = async () => {
     try {
       const res = await fetch('/api/admin/tenants');
+      if (res.status === 401) {
+        window.location.href = '/login?portal=admin';
+        return;
+      }
       const data = await res.json();
       if (data.success && Array.isArray(data.tenants) && data.tenants.length > 0) {
         setTenants(data.tenants);
@@ -420,30 +609,12 @@ export default function VoiceSaaSApp() {
           if (data.partners) localStorage.setItem('hazel_admin_partners', JSON.stringify(data.partners));
         } catch (err) {}
       } else {
-        const stored = localStorage.getItem('hazel_admin_tenants');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setTenants(parsed);
-            if (!selectedTenantId) setSelectedTenantId(parsed[0].id);
-          }
-        }
-        const storedPartners = localStorage.getItem('hazel_admin_partners');
-        if (storedPartners) {
-          const parsedP = JSON.parse(storedPartners);
-          if (Array.isArray(parsedP) && parsedP.length > 0) setPartners(parsedP);
-        }
+        // Unauthorized or invalid data format -> redirect to login
+        window.location.href = '/login?portal=admin';
       }
     } catch (e) {
       console.error('Failed to fetch tenants:', e);
-      const stored = localStorage.getItem('hazel_admin_tenants');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setTenants(parsed);
-          if (!selectedTenantId) setSelectedTenantId(parsed[0].id);
-        }
-      }
+      window.location.href = '/login?portal=admin';
     }
   };
 
@@ -938,6 +1109,24 @@ export default function VoiceSaaSApp() {
               </div>
               <span className="px-2 py-0.5 text-[9px] font-black rounded-full bg-emerald-400/20 text-emerald-600 dark:text-emerald-300 border border-emerald-400/30 uppercase tracking-wider animate-pulse">
                 LIVE
+              </span>
+            </button>
+
+            {/* TAB 5: OBSERVABILITY & ERROR CENTER */}
+            <button
+              onClick={() => setActiveTab('observability')}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-semibold transition-all cursor-pointer ${
+                activeTab === 'observability'
+                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <div className="flex items-center space-x-3">
+                <ShieldAlert className="w-5 h-5" />
+                <span>Observability Center</span>
+              </div>
+              <span className="px-2 py-0.5 text-[9px] font-black rounded-full bg-purple-100 text-purple-700 border border-purple-200 uppercase tracking-wider">
+                NEW
               </span>
             </button>
 
@@ -2832,6 +3021,793 @@ export default function VoiceSaaSApp() {
                         className="px-5 py-2.5 bg-purple-600 text-white font-bold rounded-xl text-xs shadow-md shadow-purple-600/20 cursor-pointer"
                       >
                         Close Inspector
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ================= TAB 6: CENTRAL OBSERVABILITY & ERROR CENTER ================= */}
+          {activeTab === 'observability' && (
+            <div className="space-y-8 animate-in fade-in">
+              {/* Header Banner */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2 tracking-tight">
+                    <ShieldAlert className="w-6 h-6 text-purple-600" />
+                    <span>Observability Operations Dashboard</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 font-medium mt-1">
+                    Centralized console for system errors, trace investigation, multi-tenant billing auditing, and circuit breaker status.
+                  </p>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  {/* Time Range Selector */}
+                  <div className="bg-slate-100 p-1 rounded-xl flex items-center space-x-1 border border-slate-200/80">
+                    {(['24h', '7d', '30d'] as const).map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => { setObsTimeframe(t); setObsPage(1); }}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                          obsTimeframe === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:bg-slate-50'
+                        }`}
+                      >
+                        {t === '24h' ? '24 Hours' : t === '7d' ? '7 Days' : '30 Days'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Auto-Refresh Toggle */}
+                  <button
+                    onClick={() => setObsAutoRefresh(!obsAutoRefresh)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 border cursor-pointer ${
+                      obsAutoRefresh
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-slate-100 text-slate-600 border-slate-200'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${obsAutoRefresh ? 'bg-emerald-500 animate-ping' : 'bg-slate-400'}`} />
+                    <span>{obsAutoRefresh ? 'Auto-Polling (5s)' : 'Polling Paused'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => { fetchObsMetrics(); fetchObsGroups(); }}
+                    disabled={isFetchingObsMetrics || isFetchingObsGroups}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center space-x-2 shadow-sm transition cursor-pointer"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${isFetchingObsMetrics || isFetchingObsGroups ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 4 Metric Cards Grid (Real database counters) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* Card 1: Total Recorded Errors */}
+                <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 px-2 py-0.5 bg-rose-50 rounded-full">
+                      Errors (Real Data)
+                    </span>
+                    <ShieldAlert className="w-5 h-5 text-rose-600" />
+                  </div>
+                  <div className="mt-6">
+                    <p className="text-xs font-semibold text-slate-400">Total Recorded Errors</p>
+                    <h2 className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
+                      {obsMetrics?.metrics?.totalErrors ?? 0}
+                    </h2>
+                  </div>
+                </div>
+
+                {/* Card 2: Unresolved Error Groups */}
+                <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 px-2 py-0.5 bg-amber-50 rounded-full">
+                      Unresolved Groups
+                    </span>
+                    <AlertTriangle className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div className="mt-6">
+                    <p className="text-xs font-semibold text-slate-400">Active Unresolved Issues</p>
+                    <h2 className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
+                      {obsMetrics?.metrics?.unresolvedErrors ?? 0}
+                    </h2>
+                  </div>
+                </div>
+
+                {/* Card 3: Total LLM Calls */}
+                <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 px-2 py-0.5 bg-purple-50 rounded-full">
+                      LLM Calls
+                    </span>
+                    <Bot className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div className="mt-6">
+                    <p className="text-xs font-semibold text-slate-400">Total LLM Invocations</p>
+                    <h2 className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
+                      {obsMetrics?.metrics?.totalLlmCalls ?? 0}
+                    </h2>
+                  </div>
+                </div>
+
+                {/* Card 4: Total LLM Cost */}
+                <div className="bg-purple-600 text-white rounded-3xl p-6 shadow-xl shadow-purple-600/20 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-white/20 text-purple-100 px-2 py-0.5 rounded-full">
+                      LLM Ledger
+                    </span>
+                    <DollarSign className="w-5 h-5 text-purple-200" />
+                  </div>
+                  <div className="mt-6">
+                    <p className="text-xs font-medium text-purple-100">Estimated LLM Cost</p>
+                    <h2 className="text-2xl font-bold tracking-tight mt-1">
+                      ${(obsMetrics?.metrics?.totalLlmCost ?? 0).toFixed(4)}
+                    </h2>
+                  </div>
+                </div>
+              </div>
+
+              {/* Scale & Reliability Metrics Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* Active Sessions */}
+                <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-teal-600 px-2 py-0.5 bg-teal-50 rounded-full">
+                      WhatsApp Sessions
+                    </span>
+                    <Smartphone className="w-5 h-5 text-teal-600" />
+                  </div>
+                  <div className="mt-6">
+                    <p className="text-xs font-semibold text-slate-400">Active Tenant Sessions</p>
+                    <h2 className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
+                      {obsMetrics?.metrics?.activeSessionsCount ?? 0} <span className="text-xs text-slate-400 font-semibold">/ {obsMetrics?.metrics?.whatsappSessions?.length ?? 0}</span>
+                    </h2>
+                  </div>
+                </div>
+
+                {/* Queue Length */}
+                <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 px-2 py-0.5 bg-indigo-50 rounded-full">
+                      Worker Queue Length
+                    </span>
+                    <Layers className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <div className="mt-6">
+                    <p className="text-xs font-semibold text-slate-400">Queue Jobs (BullMQ + Mem)</p>
+                    <h2 className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
+                      {obsMetrics?.metrics?.queueLength ?? 0} <span className="text-xs text-slate-400 font-semibold">{obsMetrics?.metrics?.queueMetrics?.isRedisConnected ? '(Redis)' : '(In-Memory)'}</span>
+                    </h2>
+                  </div>
+                </div>
+
+                {/* Rate Limiting */}
+                <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 px-2 py-0.5 bg-amber-50 rounded-full">
+                      Rate Limits
+                    </span>
+                    <Percent className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div className="mt-6">
+                    <p className="text-xs font-semibold text-slate-400">Quota Alerts (last min)</p>
+                    <h2 className="text-2xl font-bold text-slate-900 tracking-tight mt-1">
+                      {obsMetrics?.metrics?.rateLimitWarningsPerMin ?? 0} <span className="text-xs text-slate-400 font-semibold">dropped</span>
+                    </h2>
+                  </div>
+                </div>
+
+                {/* DB Connection Health */}
+                <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-sky-600 px-2 py-0.5 bg-sky-50 rounded-full">
+                      DB Pool Health
+                    </span>
+                    <Database className="w-5 h-5 text-sky-600" />
+                  </div>
+                  <div className="mt-6">
+                    <p className="text-xs font-semibold text-slate-400">Connection Pool Status</p>
+                    <h2 className="text-2xl font-bold text-slate-900 tracking-tight mt-1 capitalize">
+                      {obsMetrics?.metrics?.dbConnectionPoolHealth ?? 'healthy'}
+                    </h2>
+                  </div>
+                </div>
+              </div>
+
+              {/* API Health & Circuits Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Circuit Breakers */}
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4 lg:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-purple-600" />
+                      <span>AI Engine Circuit Breaker Status</span>
+                    </h3>
+                    <button
+                      onClick={resetCircuitBreakers}
+                      disabled={isResettingCircuits}
+                      className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 disabled:opacity-50 text-rose-600 hover:text-rose-700 border border-rose-200 rounded-xl text-[10px] font-black uppercase transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      {isResettingCircuits ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Resetting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-3 h-3" />
+                          <span>Reset All Circuits</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {apiHealth?.circuits && Object.keys(apiHealth.circuits).length > 0 ? (
+                      Object.entries(apiHealth.circuits).map(([provider, circ]: [string, any]) => {
+                        const status = circ.status || 'CLOSED';
+                        const failures = circ.failures || 0;
+                        const lastFailure = circ.lastFailure;
+                        return (
+                          <div key={provider} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+                            <div>
+                              <div className="font-bold text-xs text-slate-900 capitalize">{provider} API Circuit</div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">Failures: {failures} / 5</div>
+                              {lastFailure && (
+                                <div className="text-[9px] text-rose-500 font-mono mt-1">
+                                  Last: {new Date(lastFailure).toLocaleTimeString()}
+                                </div>
+                              )}
+                            </div>
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                              status === 'OPEN' ? 'bg-rose-100 text-rose-800 border border-rose-300 animate-pulse' :
+                              status === 'HALF-OPEN' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
+                              'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            }`}>
+                              {status}
+                            </span>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="col-span-2 text-xs text-slate-400 p-4 text-center">
+                        No circuit breakers active. Normal operations.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* API Endpoint Health Status (Deepgram & LLM keys) */}
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-purple-600" />
+                    <span>External Provider Pings</span>
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-slate-600">Deepgram Voice:</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                        apiHealth?.deepgram?.ok ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                      }`}>
+                        {apiHealth?.deepgram?.ok ? 'ONLINE' : 'OFFLINE'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-slate-600">LLM Provider API:</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                        apiHealth?.llm?.ok ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                      }`}>
+                        {apiHealth?.llm?.ok ? 'ONLINE' : 'OFFLINE'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Unavailable / Not-Implemented Metrics (Truthfulness Requirement) */}
+              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200/80 space-y-4">
+                <div className="flex items-center space-x-2 text-slate-500">
+                  <Clock className="w-5 h-5 text-slate-400" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider">Unavailable Metrics & Future Instrumentation</h3>
+                </div>
+                <p className="text-[11px] text-slate-400 max-w-2xl leading-relaxed">
+                  The following system-wide telemetry parameters are NOT recorded in the Supabase operational database schema to prevent database load and concurrency bottlenecks. These are marked as <span className="font-bold text-rose-600">Unavailable (Not Implemented)</span>:
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {obsMetrics?.notImplemented ? (
+                    Object.entries(obsMetrics.notImplemented).map(([metric, explanation]: [string, any]) => (
+                      <div key={metric} className="p-3 bg-white rounded-xl border border-slate-200 text-left">
+                        <div className="font-mono text-[10px] font-black text-rose-600 uppercase">{metric.replace(/([A-Z])/g, ' $1')}</div>
+                        <div className="text-[10px] text-slate-400 font-semibold mt-0.5">UNAVAILABLE (LOG DRAIN ONLY)</div>
+                        <div className="text-[10px] text-slate-400 mt-1">{explanation}</div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-[11px] text-slate-400">Loading instrumentation mappings...</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Main Workspace split: LLM Cost Ledger (Left) + Tenant Error Counts (Right) */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* LLM Pricing / usage Ledger breakdown */}
+                <div className="lg:col-span-7 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-purple-600" />
+                    <span>LLM Model Billing Ledger</span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Aggregated token count and estimated cost per model, loaded from transactional logs.
+                  </p>
+                  
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs font-semibold">
+                      <thead className="bg-slate-50 text-slate-400 uppercase tracking-wider border-b border-slate-200">
+                        <tr>
+                          <th className="p-3">Model</th>
+                          <th className="p-3 text-right">Calls</th>
+                          <th className="p-3 text-right">Input Tokens</th>
+                          <th className="p-3 text-right">Output Tokens</th>
+                          <th className="p-3 text-right">Est. Cost</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {obsMetrics?.metrics?.callsByModel && Object.keys(obsMetrics.metrics.callsByModel).length > 0 ? (
+                          Object.entries(obsMetrics.metrics.callsByModel).map(([model, count]: [string, any]) => {
+                            return (
+                              <tr key={model}>
+                                <td className="p-3 font-mono text-[11px] text-slate-900">
+                                  {model}
+                                </td>
+                                <td className="p-3 text-right font-mono">{count}</td>
+                                <td className="p-3 text-right text-slate-400 font-mono">-</td>
+                                <td className="p-3 text-right text-slate-400 font-mono">-</td>
+                                <td className="p-3 text-right font-mono text-purple-600 font-bold">
+                                  -
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td colSpan={5} className="p-6 text-center text-slate-400">
+                              No LLM usage records for selected timeframe.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Tenant Error Distributions */}
+                <div className="lg:col-span-5 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <Users className="w-5 h-5 text-purple-600" />
+                    <span>Tenant Health Distribution</span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Overview of error and LLM calling distributions across active platform tenants.
+                  </p>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs font-semibold">
+                      <thead className="bg-slate-50 text-slate-400 uppercase tracking-wider border-b border-slate-200">
+                        <tr>
+                          <th className="p-3">Tenant ID / Name</th>
+                          <th className="p-3 text-right">Errors</th>
+                          <th className="p-3 text-right">LLM Calls</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {tenants.map((t) => {
+                          const errorsCount = obsMetrics?.metrics?.errorsByTenant?.[t.id] ?? 0;
+                          const llmCount = obsMetrics?.metrics?.llmUsageByTenant?.[t.id]?.calls ?? 0;
+                          return (
+                            <tr key={t.id} className="hover:bg-slate-50/50">
+                              <td className="p-3">
+                                <div className="font-bold text-slate-900">{t.businessName || t.name}</div>
+                                <div className="text-[10px] text-slate-400 font-mono font-medium">{t.id}</div>
+                              </td>
+                              <td className="p-3 text-right">
+                                <span className={`font-mono px-2 py-0.5 rounded-lg ${errorsCount > 0 ? 'bg-rose-50 text-rose-600 font-bold' : 'text-slate-400'}`}>
+                                  {errorsCount}
+                                </span>
+                              </td>
+                              <td className="p-3 text-right font-mono text-slate-900">{llmCount}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* ================= ERROR CENTER & LIFE CYCLE MANAGEMENT ================= */}
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">Application Error Center</h3>
+                    <p className="text-xs text-slate-400 font-semibold mt-0.5">Investigate, track, and resolve unique error fingerprints in production.</p>
+                  </div>
+                  <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-black rounded-lg">
+                    {obsTotalGroups} Error Groups Detected
+                  </span>
+                </div>
+
+                {/* Filters Row */}
+                <div className="p-4 border-b border-slate-100 bg-slate-50/20 flex flex-wrap items-center gap-3">
+                  {/* Search input */}
+                  <div className="relative flex-1 min-w-[200px]">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Search fingerprint, error code, operation..."
+                      value={obsSearchQuery}
+                      onChange={(e) => setObsSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                    />
+                  </div>
+
+                  {/* Severity Filter */}
+                  <select
+                    value={obsSeverityFilter}
+                    onChange={(e) => { setObsSeverityFilter(e.target.value); setObsPage(1); }}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
+                  >
+                    <option value="">🎯 All Severities</option>
+                    <option value="critical">🔴 Critical</option>
+                    <option value="high">🟠 High</option>
+                    <option value="medium">🟡 Medium</option>
+                    <option value="low">🔵 Low</option>
+                  </select>
+
+                  {/* Status Filter */}
+                  <select
+                    value={obsStatusFilter}
+                    onChange={(e) => { setObsStatusFilter(e.target.value); setObsPage(1); }}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
+                  >
+                    <option value="">Status: All Lifecycle</option>
+                    <option value="NEW">🆕 NEW</option>
+                    <option value="ACKNOWLEDGED">👀 ACKNOWLEDGED</option>
+                    <option value="INVESTIGATING">🔍 INVESTIGATING</option>
+                    <option value="RESOLVED">✅ RESOLVED</option>
+                    <option value="IGNORED">🔕 IGNORED</option>
+                  </select>
+
+                  {/* Service Filter */}
+                  <select
+                    value={obsServiceFilter}
+                    onChange={(e) => { setObsServiceFilter(e.target.value); setObsPage(1); }}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
+                  >
+                    <option value="">Service: All Services</option>
+                    <option value="whatsapp-worker">whatsapp-worker</option>
+                    <option value="ai-service">ai-service</option>
+                    <option value="billing-service">billing-service</option>
+                    <option value="admin-portal">admin-portal</option>
+                  </select>
+                </div>
+
+                {/* Error Groups List Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-200">
+                      <tr>
+                        <th className="p-4">Error Details</th>
+                        <th className="p-4">Service / Operation</th>
+                        <th className="p-4">Severity</th>
+                        <th className="p-4 text-right">Occurrences</th>
+                        <th className="p-4 text-right">Clients Affected</th>
+                        <th className="p-4">Lifecycle Status</th>
+                        <th className="p-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {isFetchingObsGroups ? (
+                        <tr>
+                          <td colSpan={7} className="p-8 text-center text-slate-400">
+                            <Loader2 className="w-6 h-6 animate-spin text-purple-600 mx-auto" />
+                            <span className="text-xs font-bold block mt-2">Fetching error groups...</span>
+                          </td>
+                        </tr>
+                      ) : obsGroups.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-12 text-center text-slate-400">
+                            <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto animate-pulse" />
+                            <h4 className="text-sm font-bold text-slate-900 mt-2">Zero matching errors found</h4>
+                            <p className="text-xs text-slate-400 mt-1">Platform is running with 100% operational health for current filters.</p>
+                          </td>
+                        </tr>
+                      ) : (
+                        obsGroups.map((g) => {
+                          const isCritical = g.severity === 'critical';
+                          const isHigh = g.severity === 'high';
+                          const isMedium = g.severity === 'medium';
+                          return (
+                            <tr key={g.id} className="hover:bg-slate-50/50 transition">
+                              <td className="p-4 max-w-sm">
+                                <div className="font-bold text-slate-900 line-clamp-1">{g.title}</div>
+                                <div className="text-[10px] text-slate-400 font-mono mt-1 flex items-center gap-1.5">
+                                  <span>Fingerprint:</span>
+                                  <span className="bg-slate-100 px-1 py-0.5 rounded text-slate-600 font-semibold">{g.fingerprint.substring(0, 16)}...</span>
+                                </div>
+                              </td>
+                              <td className="p-4 font-mono text-[11px]">
+                                <div className="text-slate-900 font-bold">{g.service}</div>
+                                <div className="text-slate-400">{g.operation || 'N/A'}</div>
+                              </td>
+                              <td className="p-4">
+                                <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wide border ${
+                                  isCritical ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                                  isHigh ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                                  isMedium ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                  'bg-blue-50 text-blue-700 border-blue-200'
+                                }`}>
+                                  {g.severity}
+                                </span>
+                              </td>
+                              <td className="p-4 text-right font-mono font-bold text-slate-950">
+                                {g.occurrenceCount}
+                              </td>
+                              <td className="p-4 text-right font-mono font-bold text-purple-600">
+                                {g.affectedTenantCount}
+                              </td>
+                              <td className="p-4">
+                                <select
+                                  value={g.status}
+                                  disabled={obsUpdatingStatusId === g.id}
+                                  onChange={(e) => updateErrorGroupStatus(g.id, e.target.value)}
+                                  className={`px-2 py-1 rounded-lg text-[10px] font-extrabold cursor-pointer border focus:outline-none ${
+                                    g.status === 'RESOLVED' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                                    g.status === 'IGNORED' ? 'bg-slate-100 text-slate-500 border-slate-200' :
+                                    g.status === 'INVESTIGATING' ? 'bg-blue-50 text-blue-800 border-blue-200' :
+                                    g.status === 'ACKNOWLEDGED' ? 'bg-purple-50 text-purple-800 border-purple-200' :
+                                    'bg-rose-50 text-rose-800 border-rose-200 animate-pulse'
+                                  }`}
+                                >
+                                  <option value="NEW">🆕 NEW</option>
+                                  <option value="ACKNOWLEDGED">👀 ACKNOWLEDGED</option>
+                                  <option value="INVESTIGATING">🔍 INVESTIGATING</option>
+                                  <option value="RESOLVED">✅ RESOLVED</option>
+                                  <option value="IGNORED">🔕 IGNORED</option>
+                                </select>
+                              </td>
+                              <td className="p-4 text-right">
+                                <button
+                                  onClick={() => {
+                                    setSelectedErrorGroup(g);
+                                    setErrorGroupDetail(null);
+                                    setDrawerTenantFilter('');
+                                    fetchErrorGroupDetail(g.id);
+                                  }}
+                                  className="px-3.5 py-1.5 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 text-[10px] font-bold rounded-xl transition cursor-pointer"
+                                >
+                                  Investigate
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                {obsTotalGroups > obsLimit && (
+                  <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <span className="text-xs text-slate-400 font-semibold">
+                      Showing {(obsPage - 1) * obsLimit + 1} to {Math.min(obsPage * obsLimit, obsTotalGroups)} of {obsTotalGroups} groups
+                    </span>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => setObsPage(p => Math.max(1, p - 1))}
+                        disabled={obsPage === 1}
+                        className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+                      >
+                        Previous
+                      </button>
+                      <span className="text-xs font-extrabold text-slate-900 font-mono">Page {obsPage}</span>
+                      <button
+                        onClick={() => setObsPage(p => p + 1)}
+                        disabled={obsPage * obsLimit >= obsTotalGroups}
+                        className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ================= ONE-CLICK ERROR GROUP INVESTIGATION DRAWER / MODAL ================= */}
+              {selectedErrorGroup && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex justify-end">
+                  <div className="bg-white w-full max-w-4xl h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+                    {/* Header */}
+                    <div className="p-6 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-mono font-black text-rose-600 uppercase bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                          {selectedErrorGroup.severity} • {selectedErrorGroup.status}
+                        </span>
+                        <h3 className="text-lg font-bold text-slate-900 mt-1">{selectedErrorGroup.title}</h3>
+                        <p className="text-xs text-slate-400 font-mono mt-0.5">Fingerprint: {selectedErrorGroup.fingerprint}</p>
+                      </div>
+                      <button
+                        onClick={() => { setSelectedErrorGroup(null); setErrorGroupDetail(null); }}
+                        className="p-2 hover:bg-slate-200 rounded-xl text-slate-500 transition cursor-pointer"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {/* Content Area */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                      {isFetchingGroupDetail ? (
+                        <div className="py-20 text-center">
+                          <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto" />
+                          <p className="text-xs font-bold text-slate-500 mt-3">Re-constructing error trace details from the DB...</p>
+                        </div>
+                      ) : errorGroupDetail ? (
+                        <>
+                          {/* Overview Stats */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                            <div>
+                              <span className="text-[10px] text-slate-400 font-black block uppercase">First Seen</span>
+                              <span className="text-xs text-slate-900 font-bold font-mono">{new Date(errorGroupDetail.group.firstSeenAt).toLocaleString()}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 font-black block uppercase">Last Seen</span>
+                              <span className="text-xs text-slate-900 font-bold font-mono">{new Date(errorGroupDetail.group.lastSeenAt).toLocaleString()}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 font-black block uppercase">Total Occurrences</span>
+                              <span className="text-xs text-slate-900 font-bold font-mono">{errorGroupDetail.group.occurrenceCount} times</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 font-black block uppercase">Affected Clients</span>
+                              <span className="text-xs text-slate-900 font-bold font-mono">{errorGroupDetail.group.affectedTenantCount} clients</span>
+                            </div>
+                          </div>
+
+                          {/* Quick Lifecycle Action Bar */}
+                          <div className="p-4 rounded-2xl bg-purple-50/50 border border-purple-100 flex flex-wrap items-center justify-between gap-3">
+                            <span className="text-xs text-purple-800 font-bold">Update group status in real-time:</span>
+                            <div className="flex items-center space-x-2">
+                              {['NEW', 'ACKNOWLEDGED', 'INVESTIGATING', 'RESOLVED', 'IGNORED'].map((st) => (
+                                <button
+                                  key={st}
+                                  onClick={() => updateErrorGroupStatus(errorGroupDetail.group.id, st)}
+                                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black tracking-wide border cursor-pointer transition ${
+                                    errorGroupDetail.group.status === st
+                                      ? 'bg-purple-600 text-white shadow-md'
+                                      : 'bg-white text-slate-700 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  {st}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Tenant Specific Filter */}
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <h4 className="text-sm font-extrabold text-slate-900">Occurrences & Request Traces</h4>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-slate-400 font-bold uppercase">Filter by Client:</span>
+                              <select
+                                value={drawerTenantFilter}
+                                onChange={(e) => {
+                                  setDrawerTenantFilter(e.target.value);
+                                  fetchErrorGroupDetail(errorGroupDetail.group.id, e.target.value);
+                                }}
+                                className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 cursor-pointer"
+                              >
+                                <option value="">Show All Clients</option>
+                                {errorGroupDetail.distinctTenants.map((tid: string) => {
+                                  const name = tenants.find(t => t.id === tid)?.businessName || tid;
+                                  return (
+                                    <option key={tid} value={tid}>{name}</option>
+                                  );
+                                })}
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Occurrences list */}
+                          <div className="space-y-4">
+                            {errorGroupDetail.occurrences.length === 0 ? (
+                              <div className="text-center p-6 text-slate-400 text-xs font-semibold">
+                                No occurrences matched your filter criteria.
+                              </div>
+                            ) : (
+                              errorGroupDetail.occurrences.map((occ: any, oIdx: number) => {
+                                // Find any matching LLM call logs for this request ID
+                                const relatedLlm = errorGroupDetail.relatedLLMUsage.filter((u: any) => u.requestId === occ.requestId);
+                                return (
+                                  <div key={occ.id} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                      <div className="flex items-center gap-2">
+                                        <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-mono text-[10px] font-bold">#{oIdx + 1}</span>
+                                        <span className="text-xs font-bold text-slate-900">{tenants.find(t => t.id === occ.tenantId)?.businessName || occ.tenantId}</span>
+                                      </div>
+                                      <span className="text-[10px] text-slate-400 font-mono">{new Date(occ.createdAt).toLocaleString()}</span>
+                                    </div>
+
+                                    {/* Identifiers */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-white p-2.5 rounded-xl border border-slate-200/60 font-mono text-[10px] text-slate-600">
+                                      <div><span className="text-slate-400 font-bold block text-[9px]">REQUEST ID</span>{occ.requestId}</div>
+                                      <div><span className="text-slate-400 font-bold block text-[9px]">TRACE ID</span>{occ.traceId}</div>
+                                      <div><span className="text-slate-400 font-bold block text-[9px]">CORRELATION ID</span>{occ.correlationId}</div>
+                                    </div>
+
+                                    {/* Normalized Message */}
+                                    <div>
+                                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Normalized Error Message</span>
+                                      <div className="bg-white p-3 rounded-xl border border-slate-200/60 text-xs text-slate-800 font-medium">
+                                        {occ.normalizedMessage}
+                                      </div>
+                                    </div>
+
+                                    {/* Stack Trace */}
+                                    {occ.stackTrace && (
+                                      <div>
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Sanitized Stack Trace</span>
+                                        <pre className="bg-slate-950 text-rose-400 p-3.5 rounded-xl text-[10px] font-mono overflow-x-auto max-h-40 border border-slate-900 leading-normal">
+                                          {occ.stackTrace}
+                                        </pre>
+                                      </div>
+                                    )}
+
+                                    {/* Related LLM calls (Trace Timeline) */}
+                                    {relatedLlm.length > 0 && (
+                                      <div className="pt-2">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Request Execution Timeline (LLM calls)</span>
+                                        <div className="space-y-2">
+                                          {relatedLlm.map((llm: any, lIdx: number) => (
+                                            <div key={llm.id} className="bg-white p-3 rounded-xl border border-purple-100 flex items-center justify-between text-[11px]">
+                                              <div className="flex items-center space-x-2">
+                                                <span className="w-5 h-5 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-mono font-bold text-[10px]">
+                                                  {lIdx}
+                                                </span>
+                                                <span className="font-bold text-slate-800 capitalize">{llm.provider}</span>
+                                                <span className="font-mono text-slate-500 font-medium">({llm.model})</span>
+                                              </div>
+                                              <div className="flex items-center space-x-3 font-mono font-medium text-slate-500">
+                                                <span>Tokens: {llm.inputTokens} In / {llm.outputTokens} Out</span>
+                                                <span className="text-purple-600 font-bold">${llm.estimatedCost.toFixed(4)}</span>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="py-20 text-center text-slate-400">
+                          Failed to load details. Click Investigate again.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="p-6 border-t border-slate-200 bg-slate-50 flex justify-end">
+                      <button
+                        onClick={() => { setSelectedErrorGroup(null); setErrorGroupDetail(null); }}
+                        className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow"
+                      >
+                        Done Investigating
                       </button>
                     </div>
                   </div>

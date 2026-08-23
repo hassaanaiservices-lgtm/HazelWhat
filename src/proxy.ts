@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { verifyJWT } from '@/lib/auth-session';
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  console.log(`[Proxy] Firing on route: ${pathname}`);
+
   const adminCookie = request.cookies.get('hazel_admin_session');
   const clientCookie = request.cookies.get('hazel_client_session');
 
