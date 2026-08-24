@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { DB, PromotionLog } from "@/lib/db";
 import { WhatsAppManager } from "@/lib/whatsapp";
 import { getSessionFromCookies } from "@/lib/auth-session";
@@ -27,9 +27,12 @@ export async function GET(req: any) {
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const tenantId = await getTenantIdFromSession();
+    const tenantId = await getTenantIdFromSession(req);
+    if (!tenantId) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
     const body = await req.json();
     const { message, audience, mediaBase64, mimetype, fileName } = body;
 

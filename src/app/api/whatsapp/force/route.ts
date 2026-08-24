@@ -12,6 +12,9 @@ export async function GET(req: NextRequest) {
 
   try {
     const session = await getSessionFromCookies(req);
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
     const tenantId = session?.tenantId;
 
 

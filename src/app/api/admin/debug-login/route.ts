@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import bcrypt from "bcryptjs";
+import { requireAdminSession } from "@/lib/auth-session";
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,11 @@ function getSupabaseAdmin() {
 
 // GET: Show current state in Supabase for all tenants
 export async function GET(req: NextRequest) {
+  const session = await requireAdminSession(req);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const supabase = getSupabaseAdmin();
   if (!supabase) return NextResponse.json({ error: "Supabase not configured" }, { status: 500 });
 
@@ -39,6 +45,11 @@ export async function GET(req: NextRequest) {
 // POST: Directly set credentials for a tenant in Supabase
 // Body: { tenantId: "t-1004", username: "newuser", password: "NewPass@123" }
 export async function POST(req: NextRequest) {
+  const session = await requireAdminSession(req);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const supabase = getSupabaseAdmin();
   if (!supabase) return NextResponse.json({ error: "Supabase not configured" }, { status: 500 });
 

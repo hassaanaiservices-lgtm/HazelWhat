@@ -112,6 +112,9 @@ export const PATCH = withObservability(async (req: NextRequest) => {
 
 export const POST = withObservability(async (req: NextRequest) => {
   const session = await getSessionFromCookies(req);
+  if (!session) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
   const tenantId = session?.tenantId;
   if (tenantId) updateTraceContext({ tenantId });
 

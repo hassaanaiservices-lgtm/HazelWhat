@@ -8,6 +8,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   try {
     const session = await getSessionFromCookies(request);
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
     const tenantId = session?.tenantId;
 
     let config = await DB.getConfig(tenantId);
@@ -147,6 +150,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const session = await getSessionFromCookies(request);
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
     const tenantId = session?.tenantId;
 
     await DB.updateConfig(body, tenantId);

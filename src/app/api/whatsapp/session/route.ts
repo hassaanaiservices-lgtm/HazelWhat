@@ -11,6 +11,9 @@ let lastLoggedServerStatus: string | null = null;
 export async function GET(request: NextRequest) {
   try {
     const session = await getSessionFromCookies(request);
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
     const tenantId = session?.tenantId;
     if (tenantId) {
       WhatsAppManager.setActiveTenantId(tenantId);
@@ -33,6 +36,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getSessionFromCookies(request);
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
     const tenantId = session?.tenantId;
     if (tenantId) {
       WhatsAppManager.setActiveTenantId(tenantId);
@@ -48,8 +54,12 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   try {
+    const session = await getSessionFromCookies(request);
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
     await WhatsAppManager.disconnect();
     return NextResponse.json({ success: true, message: "Disconnected successfully" });
   } catch (err: any) {

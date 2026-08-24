@@ -1,6 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getSessionFromCookies } from "@/lib/auth-session";
 
-export async function GET(req: any) {
+export async function GET(req: NextRequest) {
+  const session = await getSessionFromCookies(req);
+  if (!session) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
   return NextResponse.json({ success: true, campaigns: [], activeCampaign: null });
 }
 

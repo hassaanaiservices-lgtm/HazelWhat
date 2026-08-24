@@ -5,6 +5,9 @@ import { getSessionFromCookies } from "@/lib/auth-session";
 export async function POST(req: NextRequest) {
   try {
     const session = await getSessionFromCookies(req);
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
     const tenantId = session?.tenantId;
 
     const { phone, aiEnabled, name, tags, pipelineStage, isLead, pipelineStageSetByUser } = await req.json();

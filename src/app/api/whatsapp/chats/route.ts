@@ -17,6 +17,9 @@ export async function GET(req: NextRequest) {
     console.log(`${tag} hazel_admin_session present:`, !!rawAdminCookie);
 
     const session = await getSessionFromCookies(req);
+    if (!session) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
     const tenantId = session?.tenantId;
     console.log(`${tag} Resolved session:`, session ? `role=${session.role}, tenantId=${tenantId}` : "NULL (unauthenticated)");
 
