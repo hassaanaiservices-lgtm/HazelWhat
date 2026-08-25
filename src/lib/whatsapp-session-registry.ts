@@ -62,6 +62,44 @@ export class WhatsAppSessionRegistry {
     const registryKey = this.getRegistryKey(tenantId);
     const { ttlMs, renewMs } = getSessionLockConfig();
 
+    // 0. If this instance already has an active heartbeat for this tenant, reuse it.
+    const active = activeHeartbeats.get(tenantId);
+    if (active) {
+      logger.info({
+        event: "session_lock_reused",
+        tenant_id: tenantId,
+        instance_id: instanceId,
+      });
+      if (onOwnershipLost) {
+        active.onOwnershipLost = onOwnershipLost;
+      }
+      
+      const redis = getRedisClient();
+      let record: SessionRegistryRecord | undefined = undefined;
+      if (redis) {
+        try {
+          const recordStr = await redis.get(registryKey);
+          if (recordStr) {
+            record = JSON.parse(recordStr);
+          }
+        } catch (_) {}
+      }
+      if (!record) {
+        record = {
+          tenantId,
+          instanceId,
+          sessionId: `sess_${tenantId}_${active.lockHandle.token}`,
+          status: "CONNECTING",
+          leaseExpiresAt: Date.now() + ttlMs,
+          lastHeartbeatAt: Date.now(),
+          connectionState: "initiating",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return { acquired: true, lockHandle: active.lockHandle, record };
+    }
+
     // Acquire atomic Redis lock
     const lockRes = await DistributedLock.acquire(lockKey, {
       ttlMs,
