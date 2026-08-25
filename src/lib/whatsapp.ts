@@ -770,7 +770,7 @@ export class WhatsAppManager {
         auth: state,
         logger,
         printQRInTerminal: false,
-        browser: Browsers.macOS("Desktop"),
+        browser: Browsers.macOS("Chrome"),
         syncFullHistory: false,
         markOnlineOnConnect: false,
         generateHighQualityLinkPreview: false,
@@ -817,6 +817,14 @@ export class WhatsAppManager {
           
           if (session.status === "LOGGING_OUT" || session.status === "DISCONNECTED") {
             console.log(`[Baileys] Socket closed for ${tenantId} after explicit disconnect.`);
+            if (session.sock) {
+              try {
+                session.sock.ev.removeAllListeners("connection.update");
+                session.sock.ev.removeAllListeners("creds.update");
+                session.sock.ev.removeAllListeners("messages.upsert");
+                session.sock.end(undefined);
+              } catch (e) {}
+            }
             session.sock = null;
             return;
           }
@@ -828,7 +836,35 @@ export class WhatsAppManager {
           session.lastError = errorMsg || null;
           
           console.log(`[Baileys] Connection closed for tenant ${tenantId}. Status code: ${statusCode || 'unknown'}. Error: ${errorMsg}`);
+          
+          const oldSock = session.sock;
           session.sock = null;
+          if (oldSock) {
+            try {
+              oldSock.ev.removeAllListeners("connection.update");
+              oldSock.ev.removeAllListeners("creds.update");
+              oldSock.ev.removeAllListeners("messages.upsert");
+              oldSock.end(undefined);
+            } catch (e) {}
+          }
+
+          // Handle explicit logout immediately to avoid retrying with invalid credentials
+          if (statusCode === DisconnectReason.loggedOut) {
+            console.log(`[WhatsApp] Connection state: FAILED (explicit logout from phone) for ${tenantId}. Clearing credentials.`);
+            session.status = "FAILED";
+            session.qrCode = null;
+            session.reconnectAttempts = 0;
+            if (session.reconnectTimeout) {
+              clearTimeout(session.reconnectTimeout);
+              session.reconnectTimeout = null;
+            }
+            try {
+              const { useSupabaseAuthState } = await import("./whatsapp-auth");
+              const { removeCreds } = await useSupabaseAuthState(tenantId);
+              await removeCreds();
+            } catch (e) {}
+            return;
+          }
 
           // Critical QR pairing fix: Status 515 (Restart Required) happens immediately after scanning QR.
           // Reconnect IMMEDIATELY (0ms) so WhatsApp server pairing handshake does not expire!
@@ -863,19 +899,6 @@ export class WhatsAppManager {
           if (hasCreds || session.qrCode) {
             const currentAttempts = (session.reconnectAttempts || 0) + 1;
             session.reconnectAttempts = currentAttempts;
-
-            if (statusCode === DisconnectReason.loggedOut && currentAttempts > 5) {
-              console.log(`[WhatsApp] Connection state: FAILED (explicit logout from phone) for ${tenantId}.`);
-              session.status = "FAILED";
-              session.qrCode = null;
-              session.reconnectAttempts = 0;
-              try {
-                const { useSupabaseAuthState } = await import("./whatsapp-auth");
-                const { removeCreds } = await useSupabaseAuthState(tenantId);
-                await removeCreds();
-              } catch (e) {}
-              return;
-            }
 
             session.status = "RECONNECTING";
 

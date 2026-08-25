@@ -28,13 +28,23 @@ export const useSupabaseAuthState = async (tenantId: string): Promise<{ state: A
         .eq("tenant_id", tenantId);
 
       if (!error && rows && rows.length > 0) {
-        console.log(`[SupabaseAuth] Found ${rows.length} keys in Supabase. Writing to local disk...`);
-        for (const row of rows) {
-          const fileName = row.key_id === "creds" ? "creds.json" : `${row.key_id}.json`;
-          fs.writeFileSync(
-            path.join(localDir, fileName),
-            JSON.stringify(row.key_data, BufferJSON.replacer)
-          );
+        const hasCreds = rows.some(r => r.key_id === "creds");
+        if (hasCreds) {
+          console.log(`[SupabaseAuth] Found ${rows.length} keys in Supabase (including creds). Wiping local dir and writing keys...`);
+          // Wipe local dir first to avoid any stale file mismatch/poisoning
+          fs.rmSync(localDir, { recursive: true, force: true });
+          fs.mkdirSync(localDir, { recursive: true });
+
+          for (const row of rows) {
+            const fileName = row.key_id === "creds" ? "creds.json" : `${row.key_id}.json`;
+            fs.writeFileSync(
+              path.join(localDir, fileName),
+              JSON.stringify(row.key_data, BufferJSON.replacer)
+            );
+          }
+        } else {
+          console.log(`[SupabaseAuth] Found keys in Supabase but 'creds' is missing. Cleaning up database to start fresh.`);
+          await client.from("whatsapp_auth").delete().eq("tenant_id", tenantId);
         }
       }
     } catch (e) {
@@ -49,14 +59,12 @@ export const useSupabaseAuthState = async (tenantId: string): Promise<{ state: A
   const saveCreds = async () => {
     await localSaveCreds();
     try {
-      if (fs.existsSync(localCredsFile)) {
-        const credsContent = fs.readFileSync(localCredsFile, "utf8");
-        await client.from("whatsapp_auth").upsert({
-          tenant_id: tenantId,
-          key_id: "creds",
-          key_data: JSON.parse(credsContent)
-        }, { onConflict: 'tenant_id,key_id' });
-      }
+      // Optimize by directly using in-memory state.creds to avoid disk read races
+      await client.from("whatsapp_auth").upsert({
+        tenant_id: tenantId,
+        key_id: "creds",
+        key_data: JSON.parse(JSON.stringify(state.creds, BufferJSON.replacer))
+      }, { onConflict: 'tenant_id,key_id' });
     } catch (e) {
       console.error(`[SupabaseAuth] Failed to sync creds to database:`, e);
     }
