@@ -66,8 +66,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await WhatsAppManager.startSession(async (msg) => {
-      await handleWhatsAppMessage(msg, tenantId);
+    await WhatsAppManager.startSession(async (msg, resolvedTId) => {
+      await handleWhatsAppMessage(msg, resolvedTId || tenantId);
     }, tId);
     return NextResponse.json({ success: true });
   } catch (err: any) {

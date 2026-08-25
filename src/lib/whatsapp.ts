@@ -663,8 +663,8 @@ export class WhatsAppManager {
           if (hasSavedCreds && (session.status === "DISCONNECTED" || !session.sock) && !session.initLockPromise) {
             console.log(`[Watchdog] Reconnecting active session for tenant ${tenantId}...`);
             const { handleWhatsAppMessage } = await import("./ai-handler");
-            this.connectTenant(tenantId, async (msg) => {
-              await handleWhatsAppMessage(msg);
+            this.connectTenant(tenantId, async (msg, resolvedTId) => {
+              await handleWhatsAppMessage(msg, resolvedTId || tenantId);
             }).catch((err) => {
               console.error(`[Watchdog] Auto-heal reconnection failed for ${tenantId}:`, err);
             });
@@ -700,8 +700,8 @@ export class WhatsAppManager {
     if (hasSavedCreds) {
       console.log(`[Baileys] Socket not connected for tenant ${tId}. Auto-reconnecting...`);
       const { handleWhatsAppMessage } = await import("./ai-handler");
-      await this.connectTenant(tId, async (msg) => {
-        await handleWhatsAppMessage(msg);
+      await this.connectTenant(tId, async (msg, resolvedTId) => {
+        await handleWhatsAppMessage(msg, resolvedTId || tId);
       });
       if (session.status === "CONNECTED" && session.sock) {
         return session.sock;
@@ -711,7 +711,7 @@ export class WhatsAppManager {
     throw new Error(`WhatsApp not connected for tenant ${tId}. Please connect WhatsApp.`);
   }
 
-  static async startSession(onMessage: (msg: any) => void, tenantId?: string) {
+  static async startSession(onMessage: (msg: any, tenantId: string) => void, tenantId?: string) {
     if (!globalForBaileys.autoSyncInterval) {
       this.startAutoSync();
     }
@@ -729,7 +729,7 @@ export class WhatsAppManager {
     return this.connectTenant(tId, onMessage);
   }
 
-  static async connectTenant(tenantId: string, onMessage?: (msg: any) => void) {
+  static async connectTenant(tenantId: string, onMessage?: (msg: any, tenantId: string) => void) {
     const session = this.getOrCreateSession(tenantId);
 
     if (session.initLockPromise) {
@@ -967,7 +967,7 @@ export class WhatsAppManager {
             }
             if (!msg.key.fromMe && msg.message) {
               if (onMessage) {
-                onMessage(msg);
+                onMessage(msg, tenantId);
               } else {
                 const { handleWhatsAppMessage } = await import("./ai-handler");
                 await handleWhatsAppMessage(msg, tenantId);
@@ -1207,8 +1207,8 @@ export class WhatsAppManager {
     session.sock = null;
     
     const { handleWhatsAppMessage } = await import("./ai-handler");
-    return this.connectTenant(tenantId, async (msg) => {
-      await handleWhatsAppMessage(msg);
+    return this.connectTenant(tenantId, async (msg, resolvedTId) => {
+      await handleWhatsAppMessage(msg, resolvedTId || tenantId);
     });
   }
 

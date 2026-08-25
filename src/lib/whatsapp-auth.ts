@@ -22,28 +22,48 @@ export const useSupabaseAuthState = async (tenantId: string): Promise<{ state: A
   if (!fs.existsSync(localCredsFile)) {
     console.log(`[SupabaseAuth] Local credentials not found for tenant ${tenantId}. Restoring from Supabase...`);
     try {
-      const { data: rows, error } = await client
+      // Fetch 'creds' key specifically first to check if authenticated session exists
+      const { data: credsRows } = await client
         .from("whatsapp_auth")
         .select("key_id, key_data")
-        .eq("tenant_id", tenantId);
+        .eq("tenant_id", tenantId)
+        .eq("key_id", "creds")
+        .limit(1);
 
-      if (!error && rows && rows.length > 0) {
-        const hasCreds = rows.some(r => r.key_id === "creds");
-        if (hasCreds) {
-          console.log(`[SupabaseAuth] Found ${rows.length} keys in Supabase (including creds). Wiping local dir and writing keys...`);
+      const hasCreds = credsRows && credsRows.length > 0;
+
+      if (hasCreds) {
+        // Fetch all keys with a large limit to avoid PostgREST default 1000-row limit truncation
+        const { data: allRows, error } = await client
+          .from("whatsapp_auth")
+          .select("key_id, key_data")
+          .eq("tenant_id", tenantId)
+          .limit(10000);
+
+        if (!error && allRows && allRows.length > 0) {
+          console.log(`[SupabaseAuth] Found ${allRows.length} keys in Supabase. Wiping local dir and writing keys...`);
           // Wipe local dir first to avoid any stale file mismatch/poisoning
           fs.rmSync(localDir, { recursive: true, force: true });
           fs.mkdirSync(localDir, { recursive: true });
 
-          for (const row of rows) {
+          for (const row of allRows) {
             const fileName = row.key_id === "creds" ? "creds.json" : `${row.key_id}.json`;
             fs.writeFileSync(
               path.join(localDir, fileName),
               JSON.stringify(row.key_data, BufferJSON.replacer)
             );
           }
-        } else {
-          console.log(`[SupabaseAuth] Found keys in Supabase but 'creds' is missing. Cleaning up database to start fresh.`);
+        }
+      } else {
+        // Only delete keys if they exist but 'creds' is definitely missing
+        const { data: anyKeys } = await client
+          .from("whatsapp_auth")
+          .select("key_id")
+          .eq("tenant_id", tenantId)
+          .limit(1);
+        
+        if (anyKeys && anyKeys.length > 0) {
+          console.log(`[SupabaseAuth] Keys exist in Supabase but 'creds' is definitely missing. Cleaning up database to start fresh.`);
           await client.from("whatsapp_auth").delete().eq("tenant_id", tenantId);
         }
       }
