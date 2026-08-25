@@ -1178,7 +1178,11 @@ export default function DashboardPage() {
       setQrCode(null);
       setErrorMessage("");
 
-      const res = await fetch("/api/whatsapp/session", { method: "POST" });
+      const res = await fetch("/api/whatsapp/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fresh: true }),
+      });
       const data = await res.json();
       
       if (!res.ok) {

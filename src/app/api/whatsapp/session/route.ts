@@ -44,6 +44,23 @@ export async function POST(request: NextRequest) {
       WhatsAppManager.setActiveTenantId(tenantId);
     }
 
+    // Parse optional body for { fresh: true } flag
+    let fresh = false;
+    try {
+      const body = await request.json();
+      fresh = !!body?.fresh;
+    } catch (_) {}
+
+    const tId = tenantId || WhatsAppManager.getActiveTenantId() || "default";
+
+    if (fresh) {
+      // Wipe stale Supabase + local auth so Baileys starts with a clean slate
+      console.log(`[Session API] Fresh connect requested for tenant ${tId}. Clearing old credentials...`);
+      const { useSupabaseAuthState } = await import("@/lib/whatsapp-auth");
+      const { removeCreds } = await useSupabaseAuthState(tId);
+      await removeCreds();
+    }
+
     await WhatsAppManager.softReset();
     await WhatsAppManager.startSession(async (msg) => {
       await handleWhatsAppMessage(msg, tenantId);
