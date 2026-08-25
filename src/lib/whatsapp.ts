@@ -746,12 +746,14 @@ export class WhatsAppManager {
       let version = DEFAULT_CONNECTION_CONFIG.version;
       try {
         const latestPromise = fetchLatestBaileysVersion();
-        const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3000));
+        const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000));
         const latest = await Promise.race([latestPromise, timeoutPromise]) as { version: [number, number, number], isLatest: boolean };
-        version = latest.version;
+        if (latest?.version) {
+          version = latest.version;
+        }
         console.log(`[Baileys] Successfully fetched latest WA version for ${tenantId}: v${version.join('.')}`);
       } catch (err) {
-        console.warn(`[Baileys] Failed to fetch latest WA version for ${tenantId}, using stable default v` + version.join('.') + ":", err);
+        console.warn(`[Baileys] Failed to fetch latest WA version for ${tenantId}, using default:`, err);
       }
 
       if (session.sock) {
@@ -768,13 +770,14 @@ export class WhatsAppManager {
         auth: state,
         logger,
         printQRInTerminal: false,
-        browser: Browsers.baileys("Desktop"),
+        browser: Browsers.macOS("Desktop"),
         syncFullHistory: false,
+        markOnlineOnConnect: false,
         generateHighQualityLinkPreview: false,
         connectTimeoutMs: 60000,
         keepAliveIntervalMs: 25000,
         retryRequestOptions: {
-          maxRetries: 3
+          maxRetries: 5
         }
       });
 

@@ -89,16 +89,27 @@ export const useSupabaseAuthState = async (tenantId: string): Promise<{ state: A
       }
     }
 
-    // Sync changes to DB asynchronously
+    // Sync changes to DB synchronously to ensure pre-keys/app-state keys aren't lost on restart
+    const tasks: Promise<any>[] = [];
     if (toWrite.length > 0) {
-      client.from("whatsapp_auth").upsert(toWrite, { onConflict: 'tenant_id,key_id' }).then(({ error }) => {
-        if (error) console.error(`[SupabaseAuth] Error syncing keys to database:`, error);
-      });
+      tasks.push(
+        client.from("whatsapp_auth").upsert(toWrite, { onConflict: 'tenant_id,key_id' }).then(({ error }) => {
+          if (error) console.error(`[SupabaseAuth] Error syncing keys to database:`, error);
+        })
+      );
     }
 
     if (toDelete.length > 0) {
-      client.from("whatsapp_auth").delete().eq("tenant_id", tenantId).in("key_id", toDelete).then(({ error }) => {
-        if (error) console.error(`[SupabaseAuth] Error deleting keys from database:`, error);
+      tasks.push(
+        client.from("whatsapp_auth").delete().eq("tenant_id", tenantId).in("key_id", toDelete).then(({ error }) => {
+          if (error) console.error(`[SupabaseAuth] Error deleting keys from database:`, error);
+        })
+      );
+    }
+
+    if (tasks.length > 0) {
+      await Promise.all(tasks).catch(err => {
+        console.error(`[SupabaseAuth] Key sync task error:`, err);
       });
     }
   };
