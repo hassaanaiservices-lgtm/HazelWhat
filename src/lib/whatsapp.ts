@@ -768,7 +768,9 @@ export class WhatsAppManager {
         auth: state,
         printQRInTerminal: false,
         logger,
-        browser: Browsers.ubuntu("Chrome"),
+        browser: Browsers.baileys("Desktop"),
+        syncFullHistory: false,
+        generateHighQualityLinkPreview: false,
       });
 
       session.sock = sock;
