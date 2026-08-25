@@ -61,9 +61,16 @@ export const useSupabaseAuthState = async (tenantId: string): Promise<{ state: A
           if (pageErr || !pageRows || pageRows.length === 0) break;
 
           for (const row of pageRows) {
+            // key_ids like 'app-state-sync-key-AAAAAAs/' contain slashes — Baileys
+            // uses these as subdirectory names. Must create the parent dir first.
             const fileName = `${row.key_id}.json`;
+            const filePath = path.join(localDir, fileName);
+            const fileDir = path.dirname(filePath);
+            if (!fs.existsSync(fileDir)) {
+              fs.mkdirSync(fileDir, { recursive: true });
+            }
             fs.writeFileSync(
-              path.join(localDir, fileName),
+              filePath,
               JSON.stringify(row.key_data, BufferJSON.replacer)
             );
           }
