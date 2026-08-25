@@ -945,7 +945,9 @@ export default function DashboardPage() {
           setStatus("connected");
         } else if (data.session.qrCode) {
           setQrCode(data.session.qrCode);
-          setStatus("scanning");
+          setStatus((prev) => (prev === "connected" ? "connected" : "scanning"));
+        } else if (data.session.status === "disconnected" && status === "connected") {
+          setStatus("idle");
         }
       }
     } catch (e) {
@@ -1104,7 +1106,7 @@ export default function DashboardPage() {
   useEffect(() => {
     let pollInterval: NodeJS.Timeout;
 
-    if (status === "waiting_qr" || status === "scanning") {
+    if (status === "waiting_qr" || status === "scanning" || status === "creating") {
       pollInterval = setInterval(async () => {
         try {
           const res = await fetch("/api/whatsapp/session");
@@ -1116,12 +1118,11 @@ export default function DashboardPage() {
             if (currentStatus === "connected") {
               setStatus("connected");
               clearInterval(pollInterval);
-            } else if (currentStatus === "disconnected") {
+            } else if (currentStatus === "failed") {
               setStatus("error");
               setErrorMessage("Connection failed. Please try again.");
               clearInterval(pollInterval);
             } else if (data.session.qrCode) {
-              // Only update if it's a genuinely new QR (different timestamp)
               if (data.session.qrGeneratedAt && data.session.qrGeneratedAt !== qrGeneratedAt) {
                 setQrCode(data.session.qrCode);
                 setQrGeneratedAt(data.session.qrGeneratedAt);
