@@ -86,6 +86,9 @@ CREATE TABLE tenant_configs (
   bot_mode TEXT DEFAULT 'both',
   max_follow_ups INT DEFAULT 7,
   follow_ups JSONB DEFAULT '[]'::jsonb,
+  api_key TEXT,
+  openrouter_api_key TEXT,
+  anthropic_api_key TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

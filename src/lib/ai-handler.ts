@@ -87,7 +87,14 @@ function getEnvKey(keyName: string): string {
 
 function getApiKey(config: any): string {
   const keys = [
-    // 1. Global environment variables (from Railway) - PRIMARY source for all clients
+    // 1. Tenant-specific keys - PRIMARY source for client-level isolation
+    config?.apiKey,
+    config?.openRouterApiKey,
+    config?.openaiApiKey,
+    config?.anthropicApiKey,
+    config?.deepgramApiKey,
+
+    // 2. Global environment variables (from Railway) - Fallback source
     process.env["DEEPSEEK_API_KEY"],
     getEnvKey("DEEPSEEK_API_KEY"),
     process.env["OPENROUTER_API_KEY"],
@@ -97,14 +104,7 @@ function getApiKey(config: any): string {
     process.env["ANTHROPIC_API_KEY"],
     getEnvKey("ANTHROPIC_API_KEY"),
     process.env["API_KEY"],
-    getEnvKey("API_KEY"),
-
-    // 2. Tenant-specific keys fallback
-    config?.apiKey,
-    config?.openRouterApiKey,
-    config?.openaiApiKey,
-    config?.anthropicApiKey,
-    config?.deepgramApiKey
+    getEnvKey("API_KEY")
   ];
 
   for (const k of keys) {
@@ -844,8 +844,8 @@ export async function callLLMWithFallback(
   }
 
   try {
-    const primaryKey = process.env.DEEPSEEK_API_KEY || getEnvKey("DEEPSEEK_API_KEY") || process.env.OPENROUTER_API_KEY || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENAI_API_KEY || getEnvKey("OPENAI_API_KEY") || config?.apiKey || config?.openRouterApiKey || config?.openaiApiKey || "";
-    const anthropicKey = process.env.ANTHROPIC_API_KEY || getEnvKey("ANTHROPIC_API_KEY") || config?.anthropicApiKey || "";
+    const primaryKey = config?.apiKey || config?.openRouterApiKey || config?.openaiApiKey || process.env.DEEPSEEK_API_KEY || getEnvKey("DEEPSEEK_API_KEY") || process.env.OPENROUTER_API_KEY || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENAI_API_KEY || getEnvKey("OPENAI_API_KEY") || "";
+    const anthropicKey = config?.anthropicApiKey || process.env.ANTHROPIC_API_KEY || getEnvKey("ANTHROPIC_API_KEY") || "";
 
     const dsStatus = getCircuitStatus("deepseek");
     if (primaryKey && dsStatus.state === "open" && Date.now() - dsStatus.lastFailureTime > 10000) {
