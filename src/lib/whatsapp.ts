@@ -817,15 +817,15 @@ export class WhatsAppManager {
           
           if (session.status === "LOGGING_OUT" || session.status === "DISCONNECTED") {
             console.log(`[Baileys] Socket closed for ${tenantId} after explicit disconnect.`);
-            if (session.sock) {
-              try {
-                session.sock.ev.removeAllListeners("connection.update");
-                session.sock.ev.removeAllListeners("creds.update");
-                session.sock.ev.removeAllListeners("messages.upsert");
-                session.sock.end(undefined);
-              } catch (e) {}
+            if (session.sock === sock) {
+              session.sock = null;
             }
-            session.sock = null;
+            try {
+              sock.ev.removeAllListeners("connection.update");
+              sock.ev.removeAllListeners("creds.update");
+              sock.ev.removeAllListeners("messages.upsert");
+              sock.end(undefined);
+            } catch (e) {}
             return;
           }
 
@@ -837,16 +837,15 @@ export class WhatsAppManager {
           
           console.log(`[Baileys] Connection closed for tenant ${tenantId}. Status code: ${statusCode || 'unknown'}. Error: ${errorMsg}`);
           
-          const oldSock = session.sock;
-          session.sock = null;
-          if (oldSock) {
-            try {
-              oldSock.ev.removeAllListeners("connection.update");
-              oldSock.ev.removeAllListeners("creds.update");
-              oldSock.ev.removeAllListeners("messages.upsert");
-              oldSock.end(undefined);
-            } catch (e) {}
+          if (session.sock === sock) {
+            session.sock = null;
           }
+          try {
+            sock.ev.removeAllListeners("connection.update");
+            sock.ev.removeAllListeners("creds.update");
+            sock.ev.removeAllListeners("messages.upsert");
+            sock.end(undefined);
+          } catch (e) {}
 
           // Handle explicit logout immediately to avoid retrying with invalid credentials
           if (statusCode === DisconnectReason.loggedOut) {
