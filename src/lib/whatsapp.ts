@@ -916,7 +916,10 @@ export class WhatsAppManager {
           const hasSupabaseCreds = await DB.hasSavedCredentials(tenantId);
           const hasCreds = hasLocalCreds || hasSupabaseCreds;
 
-          if (hasCreds || session.qrCode) {
+          // Only reconnect if we have actual saved credentials.
+          // Do NOT reconnect just because session.qrCode is set — a 408 means the QR
+          // window expired and no scan happened. The user must explicitly re-initiate.
+          if (hasCreds) {
             const currentAttempts = (session.reconnectAttempts || 0) + 1;
             session.reconnectAttempts = currentAttempts;
 

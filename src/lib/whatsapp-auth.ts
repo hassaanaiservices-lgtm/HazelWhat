@@ -17,12 +17,12 @@ export const useSupabaseAuthState = async (tenantId: string): Promise<{ state: A
     fs.mkdirSync(localDir, { recursive: true });
   }
 
-  // 2. If no local creds exist, sync down from Supabase
+  // 2. If no local creds exist, sync down from Supabase using paginated fetch
   const localCredsFile = path.join(localDir, "creds.json");
   if (!fs.existsSync(localCredsFile)) {
     console.log(`[SupabaseAuth] Local credentials not found for tenant ${tenantId}. Restoring from Supabase...`);
     try {
-      // Fetch 'creds' key specifically first to check if authenticated session exists
+      // STEP 1: Always fetch 'creds' row specifically first (it's the only critical row)
       const { data: credsRows } = await client
         .from("whatsapp_auth")
         .select("key_id, key_data")
@@ -33,27 +33,45 @@ export const useSupabaseAuthState = async (tenantId: string): Promise<{ state: A
       const hasCreds = credsRows && credsRows.length > 0;
 
       if (hasCreds) {
-        // Fetch all keys with a large limit to avoid PostgREST default 1000-row limit truncation
-        const { data: allRows, error } = await client
-          .from("whatsapp_auth")
-          .select("key_id, key_data")
-          .eq("tenant_id", tenantId)
-          .limit(10000);
+        // Wipe local dir first
+        fs.rmSync(localDir, { recursive: true, force: true });
+        fs.mkdirSync(localDir, { recursive: true });
 
-        if (!error && allRows && allRows.length > 0) {
-          console.log(`[SupabaseAuth] Found ${allRows.length} keys in Supabase. Wiping local dir and writing keys...`);
-          // Wipe local dir first to avoid any stale file mismatch/poisoning
-          fs.rmSync(localDir, { recursive: true, force: true });
-          fs.mkdirSync(localDir, { recursive: true });
+        // Write creds.json immediately (this is all Baileys needs to authenticate)
+        fs.writeFileSync(
+          path.join(localDir, "creds.json"),
+          JSON.stringify(credsRows[0].key_data, BufferJSON.replacer)
+        );
+        console.log(`[SupabaseAuth] Wrote creds.json for tenant ${tenantId}.`);
 
-          for (const row of allRows) {
-            const fileName = row.key_id === "creds" ? "creds.json" : `${row.key_id}.json`;
+        // STEP 2: Paginate remaining keys in chunks of 1000 (PostgREST server hard-cap is 1000/request)
+        let page = 0;
+        const pageSize = 1000;
+        let totalWritten = 1; // already wrote creds
+        while (true) {
+          const from = page * pageSize;
+          const to = from + pageSize - 1;
+          const { data: pageRows, error: pageErr } = await client
+            .from("whatsapp_auth")
+            .select("key_id, key_data")
+            .eq("tenant_id", tenantId)
+            .neq("key_id", "creds") // skip creds, already written
+            .range(from, to);
+
+          if (pageErr || !pageRows || pageRows.length === 0) break;
+
+          for (const row of pageRows) {
+            const fileName = `${row.key_id}.json`;
             fs.writeFileSync(
               path.join(localDir, fileName),
               JSON.stringify(row.key_data, BufferJSON.replacer)
             );
           }
+          totalWritten += pageRows.length;
+          if (pageRows.length < pageSize) break; // last page
+          page++;
         }
+        console.log(`[SupabaseAuth] Restored ${totalWritten} total keys for tenant ${tenantId}.`);
       } else {
         // Only delete keys if they exist but 'creds' is definitely missing
         const { data: anyKeys } = await client
@@ -71,6 +89,7 @@ export const useSupabaseAuthState = async (tenantId: string): Promise<{ state: A
       console.error(`[SupabaseAuth] Error restoring credentials from database:`, e);
     }
   }
+
 
   // 3. Delegate to Baileys' native useMultiFileAuthState
   const { state, saveCreds: localSaveCreds } = await useMultiFileAuthState(localDir);
