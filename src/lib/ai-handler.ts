@@ -4,6 +4,7 @@ import { DB, DB_DIR, formatProductsToCatalog, ChatMessage } from "./db";
 import { ProductItem } from "./scraper";
 import { enqueueWhatsAppMessageJob, registerQueueWorker, CONCURRENCY_LIMIT, getQueueLength, WhatsAppJobPayload } from "./queue-manager";
 import Redis from "ioredis";
+import { getRedisClient } from "./redis";
 import crypto from "crypto";
 import { logLLMUsage, logAppError } from "./observability-store";
 import { getCurrentTraceContext } from "./trace-context";
@@ -1281,8 +1282,9 @@ end
 
 export class RedisLockManager {
   static getClient(): Redis | null {
-    if (redisConnection && redisConnection.status === "ready") {
-      return redisConnection;
+    const client = getRedisClient();
+    if (client && (client.status === "ready" || client.status === "connect")) {
+      return client;
     }
     return null;
   }
