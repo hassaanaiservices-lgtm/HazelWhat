@@ -1764,6 +1764,20 @@ export class DB {
     }
   }
 
+  static async getTenantsWithCredentials(): Promise<string[]> {
+    if (!supabase) return [];
+    try {
+      const { data } = await supabase
+        .from("whatsapp_auth")
+        .select("tenant_id")
+        .eq("key_id", "creds");
+      if (!data) return [];
+      return Array.from(new Set(data.map((r: any) => r.tenant_id)));
+    } catch (e) {
+      return [];
+    }
+  }
+
   static async clearAllChatsAndCustomers(tenantId: string): Promise<void> {
     if (!tenantId) return;
 

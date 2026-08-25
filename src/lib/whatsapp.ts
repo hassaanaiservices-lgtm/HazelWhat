@@ -639,9 +639,21 @@ export class WhatsAppManager {
     if (globalForBaileys.watchdogInterval) {
       clearInterval(globalForBaileys.watchdogInterval);
     }
-    globalForBaileys.watchdogInterval = setInterval(async () => {
+
+    const checkAndHeal = async () => {
       try {
         if (!globalForBaileys.baileysSessions) return;
+
+        // Auto-discover all tenants that have saved credentials in Supabase and ensure they have a session object
+        try {
+          const tenantsWithCreds = await DB.getTenantsWithCredentials();
+          for (const tenantId of tenantsWithCreds) {
+            this.getOrCreateSession(tenantId);
+          }
+        } catch (discoveryErr) {
+          console.error("[Watchdog] Error discovering tenants with credentials:", discoveryErr);
+        }
+
         for (const [tenantId, session] of globalForBaileys.baileysSessions.entries()) {
           const hasSupabaseCreds = await DB.hasSavedCredentials(tenantId);
           const localCredsFile = path.join(DB_DIR, `.baileys_auth_${tenantId}`, "creds.json");
@@ -661,7 +673,16 @@ export class WhatsAppManager {
       } catch (e) {
         console.error("[Watchdog] Error during health check:", e);
       }
-    }, 30000);
+    };
+
+    // Run first check after a short delay (2s) to allow server initialization to complete
+    setTimeout(() => {
+      checkAndHeal().catch((err) => {
+        console.error("[Watchdog] Initial check failed:", err);
+      });
+    }, 2000);
+
+    globalForBaileys.watchdogInterval = setInterval(checkAndHeal, 30000);
   }
 
   static async ensureConnected(tenantId?: string) {
