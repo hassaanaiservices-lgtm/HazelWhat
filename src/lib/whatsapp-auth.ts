@@ -105,6 +105,9 @@ export const useSupabaseAuthState = async (tenantId: string): Promise<{ state: A
 
   const removeCreds = async () => {
     try {
+      const { WhatsAppSessionRegistry } = await import("./whatsapp-session-registry");
+      await WhatsAppSessionRegistry.releaseLease(tenantId).catch(() => {});
+
       // Clear Supabase
       await client.from("whatsapp_auth").delete().eq("tenant_id", tenantId);
       // Clear local files

@@ -766,11 +766,16 @@ export class WhatsAppManager {
       const sock = makeWASocket({
         version,
         auth: state,
-        printQRInTerminal: false,
         logger,
+        printQRInTerminal: false,
         browser: Browsers.baileys("Desktop"),
         syncFullHistory: false,
         generateHighQualityLinkPreview: false,
+        connectTimeoutMs: 60000,
+        keepAliveIntervalMs: 25000,
+        retryRequestOptions: {
+          maxRetries: 3
+        }
       });
 
       session.sock = sock;
@@ -792,6 +797,18 @@ export class WhatsAppManager {
           }
         }
 
+        if (connection === "open") {
+          console.log(`[WhatsApp] Connected successfully for tenant ${tenantId}`);
+          session.status = "CONNECTED";
+          session.qrCode = null;
+          session.reconnectAttempts = 0;
+          if (session.reconnectTimeout) {
+            clearTimeout(session.reconnectTimeout);
+            session.reconnectTimeout = null;
+          }
+          await WhatsAppSessionRegistry.updateStatus(tenantId, "CONNECTED", "active");
+        }
+
         if (connection === "close") {
           console.log(`[WhatsApp] Connection closed for tenant ${tenantId}`);
           
@@ -801,7 +818,32 @@ export class WhatsAppManager {
             return;
           }
 
-          // Phase 6B Requirement 12: Verify ownership BEFORE attempting reconnect
+          const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+          const errorMsg = lastDisconnect?.error?.message || "";
+          
+          session.lastStatusCode = statusCode || null;
+          session.lastError = errorMsg || null;
+          
+          console.log(`[Baileys] Connection closed for tenant ${tenantId}. Status code: ${statusCode || 'unknown'}. Error: ${errorMsg}`);
+          session.sock = null;
+
+          // Critical QR pairing fix: Status 515 (Restart Required) happens immediately after scanning QR.
+          // Reconnect IMMEDIATELY (0ms) so WhatsApp server pairing handshake does not expire!
+          const isRestartRequired = statusCode === DisconnectReason.restartRequired || statusCode === 515;
+          if (isRestartRequired) {
+            console.log(`[WhatsApp] Instant socket restart requested (515) for ${tenantId}. Reconnecting immediately...`);
+            session.reconnectAttempts = 0;
+            if (session.reconnectTimeout) {
+              clearTimeout(session.reconnectTimeout);
+              session.reconnectTimeout = null;
+            }
+            this.connectTenant(tenantId, onMessage).catch(err => {
+              console.error(`[WhatsApp] 515 immediate reconnect error for ${tenantId}:`, err);
+            });
+            return;
+          }
+
+          // Phase 6B: Verify ownership BEFORE attempting normal reconnect backoff
           const stillOwner = await WhatsAppSessionRegistry.isOwner(tenantId);
           if (!stillOwner) {
             console.log(`[WhatsApp] Reconnection cancelled for ${tenantId}: instance ${getInstanceId()} no longer holds session lease.`);
@@ -814,15 +856,6 @@ export class WhatsAppManager {
           const hasLocalCreds = fs.existsSync(localCredsFile);
           const hasSupabaseCreds = await DB.hasSavedCredentials(tenantId);
           const hasCreds = hasLocalCreds || hasSupabaseCreds;
-
-          const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-          const errorMsg = lastDisconnect?.error?.message || "";
-          
-          session.lastStatusCode = statusCode || null;
-          session.lastError = errorMsg || null;
-          
-          console.log(`[Baileys] Connection closed for tenant ${tenantId}. Status code: ${statusCode || 'unknown'}. Error: ${errorMsg}`);
-          session.sock = null;
 
           if (hasCreds || session.qrCode) {
             const currentAttempts = (session.reconnectAttempts || 0) + 1;
