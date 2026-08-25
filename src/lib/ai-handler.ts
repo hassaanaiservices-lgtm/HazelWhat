@@ -1563,7 +1563,9 @@ async function processHybridEngine(
 export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
   try {
     const remoteJid = msg?.key?.remoteJid;
+    console.log(`[AI Handler] ▶ Incoming message event. remoteJid=${remoteJid} tenantId=${inputTenantId || 'unset'}`);
     if (!remoteJid || remoteJid === "status@broadcast" || remoteJid.endsWith("@g.us") || remoteJid.endsWith("@newsletter")) {
+      console.log(`[AI Handler] Skipping non-user message (${remoteJid})`);
       return;
     }
     const msgId = msg?.key?.id;
@@ -1576,15 +1578,20 @@ export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
     let from = msg.key.remoteJid;
     if (from?.includes("@lid")) {
       if (msg.key.remoteJidAlt) {
+        // Prefer the alt JID if available (contains the real phone number)
         from = msg.key.remoteJidAlt;
+        console.log(`[AI Handler] @lid JID resolved via remoteJidAlt: ${from}`);
       } else {
-        return;
+        // Extract the numeric ID from the @lid JID itself as a stable identifier
+        from = from.replace("@lid", "");
+        console.log(`[AI Handler] @lid JID has no alt — using numeric lid ID as customer key: ${from}`);
       }
     }
     from = from?.replace("@s.whatsapp.net", "");
     if (!from) return;
 
     const tenantId = inputTenantId || await WhatsAppManager.resolveTenantForPhone(from);
+    console.log(`[AI Handler] Resolved tenantId=${tenantId} from=${from}`);
 
     // 1. System Backpressure Check
     const queueLength = await getQueueLength();
