@@ -397,10 +397,9 @@ export async function transcribeAudio(buffer: Buffer, mimetype = "audio/ogg", co
   
   const generalKey = getEnvKey("API_KEY") || process.env.API_KEY || config?.apiKey || "";
 
-  // 2. Try Gemini Flash STT if Gemini key available
-  const effectiveGeminiKey = geminiKey || (generalKey.startsWith("AIza") ? generalKey : "");
-  if (effectiveGeminiKey) {
-    const transcript = await transcribeAudioWithGemini(buffer, effectiveGeminiKey, mimetype);
+  // 2. Try Deepgram STT if Deepgram key available (Highly accurate for WhatsApp OGG Opus)
+  if (deepgramKey) {
+    const transcript = await transcribeAudioWithDeepgram(buffer, deepgramKey, mimetype);
     if (transcript && transcript.trim()) return transcript.trim();
   }
 
@@ -418,9 +417,10 @@ export async function transcribeAudio(buffer: Buffer, mimetype = "audio/ogg", co
     if (transcript && transcript.trim()) return transcript.trim();
   }
 
-  // 5. Try Deepgram STT if Deepgram key available
-  if (deepgramKey) {
-    const transcript = await transcribeAudioWithDeepgram(buffer, deepgramKey, mimetype);
+  // 5. Try Gemini Flash STT if Gemini key available (Fallback: limited OGG Opus decoding)
+  const effectiveGeminiKey = geminiKey || (generalKey.startsWith("AIza") ? generalKey : "");
+  if (effectiveGeminiKey) {
+    const transcript = await transcribeAudioWithGemini(buffer, effectiveGeminiKey, mimetype);
     if (transcript && transcript.trim()) return transcript.trim();
   }
 
