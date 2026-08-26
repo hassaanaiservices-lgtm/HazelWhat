@@ -145,6 +145,7 @@ export interface Appointment {
   time: string;
   status: "booked" | "cancelled";
   notes?: string;
+  createdAt?: string;
 }
 
 export interface Customer {
@@ -825,7 +826,8 @@ export class DB {
         date: a.date,
         time: a.time,
         status: a.status || 'booked',
-        notes: a.notes
+        notes: a.notes,
+        createdAt: a.created_at
       }));
     } catch (e) {
       return [];

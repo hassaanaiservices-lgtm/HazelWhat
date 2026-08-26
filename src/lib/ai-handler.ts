@@ -1048,11 +1048,11 @@ async function callLLM(
       "openai/gpt-4o-mini",
       "openrouter/auto"
     ] : [
-      "openrouter/auto",
       "deepseek/deepseek-chat",
       "google/gemini-2.0-flash-001",
       "openai/gpt-4o-mini",
-      "meta-llama/llama-3.3-70b-instruct"
+      "meta-llama/llama-3.3-70b-instruct",
+      "openrouter/auto"
     ];
 
     let lastError: any = null;
@@ -2008,13 +2008,22 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     d. Do NOT ask for phone number (we already have it from WhatsApp).
     e. Call place_order tool with all details and paymentMethod set to "Cash on Delivery".
     f. CRITICAL MANDATORY RULE: NEVER confirm an order in text alone without calling place_order tool! You MUST call place_order tool call whenever an order is confirmed so it is saved to the database.
+
+9_2. APPOINTMENT BOOKING FLOW (FOR SERVICES & SALON BOOKINGS):
+    a. Determine the service the customer wants to book. Once they specify a service (e.g. "hair coloring"), DO NOT keep asking them "what service do you want" or "confirm your service" again. Keep it locked!
+    b. Check availability for their requested date/time slot (using checkAvailability tool if they query open times, or check business hours 9 AM to 5 PM).
+    c. If they have already specified a service, date, and time, DO NOT repeat the request for these fields.
+    d. Ask for the customer's full name if they haven't provided it, but do NOT block booking if they refuse or delay — default to their pushName/phone number if needed.
+    e. CRITICAL MANDATORY RULE: NEVER confirm an appointment in text alone without calling the bookAppointment tool! You MUST call the bookAppointment tool whenever the service, date, and time are decided so it is recorded in the dashboard immediately.
+
 10. CATALOG ACCURACY: ONLY quote prices and products from the catalog. NEVER invent items or prices.
 11. PROACTIVE FOLLOW-UPS: If you promise to check back or follow up with the customer later, you MUST call schedule_followup tool with the appropriate time.
 12. CRM PROFILE UPDATES: When a customer tells you their name, shows strong buying interest, or reaches a milestone in the conversation, call update_customer_profile to save their info and update their pipeline stage.
 13. VOICE NOTES: When you receive a voice note (marked with 🎤 [Voice Note] followed by the transcription), respond directly to what they said. Treat the transcription as if the customer typed it.
 14. ROMAN URDU PERSONA & LANGUAGE SUPPORT:
-   - Always respond in natural, polite Roman Urdu for all food orders and inquiries!
+   - Always respond in natural, polite Roman Urdu for all bookings, orders, and inquiries!
    - Example: "Aapka order note kar liya hai! 🍕🍔 Total bill PKR 900 hai. Delivery address (House #, Street, Area) bata dein:"
+   - Example for Salon: "Aapki appointment book kar di hai! 📅 Parso 4 PM par, Old Airport branch. Sahi hai?"
    - Keep vocabulary local, friendly, and natural.
 15. MENU & CATALOG DISPLAY RULE:
    - When a customer asks for the menu, catalog, or available items (e.g. "menu", "menu bhajo", "show menu", "rate list"):
@@ -2577,6 +2586,94 @@ This customer is a revived dead lead who recently responded to our re-engagement
         }
       } catch (safeguardErr) {
         console.error("[AI Handler Safeguard Error]:", safeguardErr);
+      }
+
+      // FAIL-SAFE APPOINTMENT INTERCEPTOR:
+      // If AI reply confirms appointment booking (e.g. "appointment book", "confirm the appointment", "appointment ho gayi")
+      // BUT no appointment was recorded in DB for this phone in the last 15 minutes, AUTO-SAVE IT IMMEDIATELY!
+      try {
+        const lowerAiReply = (aiReply || "").toLowerCase();
+        const isAppointmentConfirmationReply = 
+          lowerAiReply.includes("appointment confirm") ||
+          lowerAiReply.includes("appointment book") ||
+          lowerAiReply.includes("confirm the appointment") ||
+          lowerAiReply.includes("appointment ho gayi") ||
+          lowerAiReply.includes("book kar di") ||
+          lowerAiReply.includes("booking ho gayi") ||
+          lowerAiReply.includes("appointment set kar") ||
+          lowerAiReply.includes("appointment note kar");
+
+        if (isAppointmentConfirmationReply) {
+          const existingAppts = await DB.getAppointmentsByPhone(from, resolvedTenantId);
+          const fifteenMinutesAgo = new Date(Date.now() - 900 * 1000).toISOString();
+          const recentAppt = existingAppts.find(a => (a.createdAt || "") >= fifteenMinutesAgo);
+
+          if (!recentAppt) {
+            console.warn(`[AI Handler Safeguard] Appointment confirmation detected in AI reply for ${from}, but no DB appointment record found! Auto-saving appointment to DB...`);
+
+            // Auto-extract service
+            let extractedService = "Service Booking";
+            const serviceKeywords = ["hair coloring", "haircut", "makeup", "nails", "henna", "massage", "balayage", "highlights", "pedicure", "manicure"];
+            const textToSearch = (aiReply + " " + recentHistory.map((h: any) => h.content || "").join(" ")).toLowerCase();
+            for (const kw of serviceKeywords) {
+              if (textToSearch.includes(kw)) {
+                extractedService = kw.charAt(0).toUpperCase() + kw.slice(1);
+                break;
+              }
+            }
+
+            // Auto-extract time
+            let extractedTime = "12:00 PM";
+            const timeMatch = aiReply.match(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)\b/) ||
+                              recentHistory.map((h: any) => typeof h.content === 'string' ? h.content : '').join(" ").match(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)\b/);
+            if (timeMatch) {
+              extractedTime = timeMatch[0].toUpperCase();
+            }
+
+            // Auto-extract date
+            let extractedDate = new Date(Date.now() + 86400000).toISOString().split('T')[0]; // Default to tomorrow
+            const dateRegex = /\b\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\b/i;
+            const dateMatch = aiReply.match(dateRegex) ||
+                              recentHistory.map((h: any) => typeof h.content === 'string' ? h.content : '').join(" ").match(dateRegex);
+            if (dateMatch) {
+              try {
+                const year = new Date().getFullYear();
+                const parsedDate = new Date(`${dateMatch[0]} ${year}`);
+                if (!isNaN(parsedDate.getTime())) {
+                  extractedDate = parsedDate.toISOString().split('T')[0];
+                }
+              } catch (e) {}
+            } else if (textToSearch.includes("parso")) {
+              const d = new Date();
+              d.setDate(d.getDate() + 2);
+              extractedDate = d.toISOString().split('T')[0];
+            } else if (textToSearch.includes("kal") || textToSearch.includes("tomorrow")) {
+              const d = new Date();
+              d.setDate(d.getDate() + 1);
+              extractedDate = d.toISOString().split('T')[0];
+            } else if (textToSearch.includes("today") || textToSearch.includes("aaj")) {
+              extractedDate = new Date().toISOString().split('T')[0];
+            }
+
+            const userName = customer?.name || from;
+            const success = await DB.bookAppointment(
+              from,
+              userName,
+              extractedService,
+              extractedDate,
+              extractedTime,
+              "Auto-captured by Fail-Safe Appointment Interceptor",
+              resolvedTenantId
+            );
+            
+            if (success) {
+              await DB.updateCustomer(from, { pipelineStage: "completed", name: userName }, resolvedTenantId);
+              console.log(`[AI Handler Safeguard] Successfully auto-saved fallback appointment for ${from}!`);
+            }
+          }
+        }
+      } catch (apptSafeguardErr) {
+        console.error("[AI Handler Safeguard Appointment Error]:", apptSafeguardErr);
       }
 
       sentMsg = await WhatsAppManager.sendMessage(from, aiReply);
