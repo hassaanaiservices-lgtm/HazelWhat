@@ -1964,19 +1964,50 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     const activeProductCatalog = structuredCatalog.replace(/data:image\/[a-zA-Z0-9+\/=;-]+;base64,[A-Za-z0-9+\/=]+/g, "[Image]");
     const catalogNote = activeProducts.length > filteredProducts.length ? `\n(Showing top ${filteredProducts.length} relevant items out of ${activeProducts.length} total catalog products.)` : "";
     const customerAny = customer as any;
-    const savedCustomerAddress = customerAny?.address || customerAny?.deliveryAddress || "";
+    let savedCustomerAddress = customerAny?.address || customerAny?.deliveryAddress || "";
+    let savedContactNumber = "";
+    let savedServicePreference = "";
+    let savedProductPreference = "";
+    let savedAppointmentDate = "";
+    let savedAppointmentTime = "";
+    let savedNotes = "";
+
+    if (customer?.preferences) {
+      try {
+        const parsedPrefs = JSON.parse(customer.preferences);
+        if (parsedPrefs.deliveryAddress) savedCustomerAddress = parsedPrefs.deliveryAddress;
+        if (parsedPrefs.contactNumber) savedContactNumber = parsedPrefs.contactNumber;
+        if (parsedPrefs.servicePreference) savedServicePreference = parsedPrefs.servicePreference;
+        if (parsedPrefs.productPreference) savedProductPreference = parsedPrefs.productPreference;
+        if (parsedPrefs.appointmentDate) savedAppointmentDate = parsedPrefs.appointmentDate;
+        if (parsedPrefs.appointmentTime) savedAppointmentTime = parsedPrefs.appointmentTime;
+        if (parsedPrefs.notes) savedNotes = parsedPrefs.notes;
+      } catch (e) {
+        if (!savedCustomerAddress && customer.preferences.length > 5 && !customer.preferences.includes("{")) {
+          savedCustomerAddress = customer.preferences;
+        }
+      }
+    }
 
     // 3. DeepSeek Prompt Cache Prefix Assembly (Static Top, Dynamic Bottom)
     const botPurposeMode = config.botMode || "both";
     let fullSystemPrompt = `${activeSystemPrompt}\n\n=== BOT MODE: ${botPurposeMode.toUpperCase()} (ORDERS & APPOINTMENTS SUPPORTED) ===\n`;
 
-    if (savedCustomerAddress) {
-      fullSystemPrompt += `\n=== CUSTOMER SAVED DELIVERY ADDRESS: ${savedCustomerAddress} ===\n`;
-    }
+    fullSystemPrompt += `\n=== CUSTOMER SAVED PROFILE DATA (Variables extracted from conversation) ===\n`;
+    fullSystemPrompt += `- Name: ${customer?.name || "None"}\n`;
+    fullSystemPrompt += `- Phone / JID: ${from}\n`;
+    fullSystemPrompt += `- Delivery Address: ${savedCustomerAddress || "None"}\n`;
+    fullSystemPrompt += `- Secondary Contact Number: ${savedContactNumber || "None"}\n`;
+    fullSystemPrompt += `- Service Preference: ${savedServicePreference || "None"}\n`;
+    fullSystemPrompt += `- Product Preference: ${savedProductPreference || "None"}\n`;
+    fullSystemPrompt += `- Preferred Appointment Date: ${savedAppointmentDate || "None"}\n`;
+    fullSystemPrompt += `- Preferred Appointment Time: ${savedAppointmentTime || "None"}\n`;
+    if (savedNotes) fullSystemPrompt += `- Saved Notes/Preferences: ${savedNotes}\n`;
+    fullSystemPrompt += `===================================\n`;
 
     fullSystemPrompt += `\n=== CRITICAL RULES FOR ORDERS & APPOINTMENT BOOKINGS ===
 1. ADDRESS PERSISTENCE & SAVED ADDRESS RULE:
-   - Check if "CUSTOMER SAVED DELIVERY ADDRESS" is provided above (${savedCustomerAddress ? `"${savedCustomerAddress}"` : "None"}).
+   - Check if "Delivery Address" in CUSTOMER SAVED PROFILE DATA is provided (${savedCustomerAddress ? `"${savedCustomerAddress}"` : "None"}).
    - IF A SAVED ADDRESS IS PRESENT: DO NOT ASK FOR THE DELIVERY ADDRESS AGAIN!
    - Instead, confirm: "Hum aapka order is pehle se saved address par deliver kar rahe hain: ${savedCustomerAddress}. (Agar address change karna ho to humein bata dein!)"
    - ONLY ask for a delivery address if NO saved address exists or if the customer explicitly says they want to deliver to a new/different address.
@@ -2018,7 +2049,9 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
 
 10. CATALOG ACCURACY: ONLY quote prices and products from the catalog. NEVER invent items or prices.
 11. PROACTIVE FOLLOW-UPS: If you promise to check back or follow up with the customer later, you MUST call schedule_followup tool with the appropriate time.
-12. CRM PROFILE UPDATES: When a customer tells you their name, shows strong buying interest, or reaches a milestone in the conversation, call update_customer_profile to save their info and update their pipeline stage.
+12. CRM PROFILE UPDATES (INCREMENTAL VARIABLE-SAVING FLOW):
+    - As soon as the customer mentions any of their details (name, contact number, delivery address, preferred service/product, or requested appointment date/time), you MUST call the update_customer_profile tool immediately to persist these variables in the database.
+    - Do NOT wait until the end of the conversation or booking to call this tool. Use it to record details step-by-step as they are disclosed in chat.
 13. VOICE NOTES: When you receive a voice note (marked with 🎤 [Voice Note] followed by the transcription), respond directly to what they said. Treat the transcription as if the customer typed it.
 14. ROMAN URDU PERSONA & LANGUAGE SUPPORT:
    - Always respond in natural, polite Roman Urdu for all bookings, orders, and inquiries!
@@ -2195,14 +2228,21 @@ This customer is a revived dead lead who recently responded to our re-engagement
       },
       {
         name: "update_customer_profile",
-        description: "Updates the customer's CRM profile, including their tags, custom name, and pipeline stage based on the conversation context.",
+        description: "Updates the customer's CRM profile, including their tags, custom name, pipeline stage, and custom preferences/variables based on the conversation context.",
         input_schema: {
           type: "object",
           properties: {
             name: { type: "string", description: "The customer's verified name (if they provided it in chat)" },
-            tagsToAdd: { type: "array", items: { type: "string" }, description: "List of new tags/preferences to add to this customer (e.g. ['interested-in-mehrunisa', 'needs-urgently'])" },
+            tagsToAdd: { type: "array", items: { type: "string" }, description: "List of new tags/preferences to add to this customer" },
             tagsToRemove: { type: "array", items: { type: "string" }, description: "List of tags to remove from this customer" },
-            stage: { type: "string", enum: ["new", "qualified", "warm", "cold", "completed"], description: "The funnel pipeline stage to move the customer to. Use 'qualified' when they give basic details, and 'warm' when they show strong interest or request pricing/availability." }
+            stage: { type: "string", enum: ["new", "qualified", "warm", "cold", "completed"], description: "The funnel pipeline stage to move the customer to. Use 'qualified' when they give basic details, and 'warm' when they show strong interest or request pricing/availability." },
+            contact_number: { type: "string", description: "The customer's secondary contact/phone number (if provided in chat)" },
+            delivery_address: { type: "string", description: "The customer's delivery/shipping address (if provided in chat)" },
+            service_preference: { type: "string", description: "The customer's preferred service for appointment/salon (if provided in chat)" },
+            product_preference: { type: "string", description: "The customer's preferred product/item name (if provided in chat)" },
+            appointment_date: { type: "string", description: "The customer's requested appointment date (YYYY-MM-DD) (if provided in chat)" },
+            appointment_time: { type: "string", description: "The customer's requested appointment time (e.g. '4 PM') (if provided in chat)" },
+            notes: { type: "string", description: "Any general notes, custom sizes, requirements or user preferences" }
           }
         }
       }
@@ -2379,12 +2419,37 @@ This customer is a revived dead lead who recently responded to our re-engagement
                 newTags = newTags.filter(t => !args.tagsToRemove.includes(t));
               }
 
-              const updates: any = { tags: newTags };
+              // Read current preferences JSON
+              let currentPrefs: any = {};
+              try {
+                if (customerRec?.preferences) {
+                  currentPrefs = JSON.parse(customerRec.preferences);
+                }
+              } catch (e) {
+                // Fallback if preferences was plain text
+                if (customerRec?.preferences) {
+                  currentPrefs = { notes: customerRec.preferences };
+                }
+              }
+
+              // Update preferences fields
+              if (args.contact_number !== undefined) currentPrefs.contactNumber = args.contact_number;
+              if (args.delivery_address !== undefined) currentPrefs.deliveryAddress = args.delivery_address;
+              if (args.service_preference !== undefined) currentPrefs.servicePreference = args.service_preference;
+              if (args.product_preference !== undefined) currentPrefs.productPreference = args.product_preference;
+              if (args.appointment_date !== undefined) currentPrefs.appointmentDate = args.appointment_date;
+              if (args.appointment_time !== undefined) currentPrefs.appointmentTime = args.appointment_time;
+              if (args.notes !== undefined) currentPrefs.notes = args.notes;
+
+              const updates: any = { 
+                tags: newTags,
+                preferences: JSON.stringify(currentPrefs)
+              };
               if (args.name) updates.name = args.name;
               if (args.stage) updates.pipelineStage = args.stage;
 
               await DB.updateCustomer(from, updates, resolvedTenantId);
-              toolResult = JSON.stringify({ success: true, message: "Customer profile updated successfully." });
+              toolResult = JSON.stringify({ success: true, message: "Customer profile and variables updated successfully." });
             } catch (err: any) {
               console.error("[AI Handler] update_customer_profile error:", err);
               toolResult = JSON.stringify({ success: false, message: "Failed to update profile: " + err.message });
