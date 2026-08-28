@@ -261,9 +261,9 @@ export default function DashboardPage() {
     }
   };
 
-  const [activeTab, setActiveTabRaw] = useState<"dashboard" | "inbox" | "agents" | "channels" | "promotions" | "orders" | "knowledge" | "contacts" | "analytics" | "settings" | "leads-revival" | "logs">("dashboard");
+  const [activeTab, setActiveTabRaw] = useState<"dashboard" | "inbox" | "agents" | "channels" | "promotions" | "orders" | "knowledge" | "contacts" | "analytics" | "settings" | "leads-revival">("dashboard");
 
-  const setActiveTab = (tab: "dashboard" | "inbox" | "agents" | "channels" | "promotions" | "orders" | "knowledge" | "contacts" | "analytics" | "settings" | "leads-revival" | "logs") => {
+  const setActiveTab = (tab: "dashboard" | "inbox" | "agents" | "channels" | "promotions" | "orders" | "knowledge" | "contacts" | "analytics" | "settings" | "leads-revival") => {
     setActiveTabRaw(tab);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -272,49 +272,13 @@ export default function DashboardPage() {
     }
   };
 
-  // Real-time Per-Client Observability Logger State
-  const [clientLogs, setClientLogs] = useState<any[]>([]);
-  const [isFetchingClientLogs, setIsFetchingClientLogs] = useState(false);
-  const [selectedClientLog, setSelectedClientLog] = useState<any | null>(null);
-  const [clientLogTypeFilter, setClientLogTypeFilter] = useState("all");
-  const [clientLogLevelFilter, setClientLogLevelFilter] = useState("all");
-  const [clientLogSearchQuery, setClientLogSearchQuery] = useState("");
-  const [clientLogAutoRefresh, setClientLogAutoRefresh] = useState(true);
-
-  const fetchClientLogs = async () => {
-    setIsFetchingClientLogs(true);
-    try {
-      const res = await fetch(`/api/admin/logs?type=${clientLogTypeFilter}&level=${clientLogLevelFilter}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.logs)) {
-          setClientLogs(data.logs);
-        }
-      }
-    } catch (e) {
-      console.error("Failed to fetch client logs:", e);
-    } finally {
-      setIsFetchingClientLogs(false);
-    }
-  };
-
-  useEffect(() => {
-    if (activeTab === "logs") {
-      fetchClientLogs();
-      if (clientLogAutoRefresh) {
-        const interval = setInterval(fetchClientLogs, 4000);
-        return () => clearInterval(interval);
-      }
-    }
-  }, [activeTab, clientLogTypeFilter, clientLogLevelFilter, clientLogAutoRefresh]);
-
   // Sync tab from URL query on initial load & popstate (browser back/forward)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const syncTabFromUrl = () => {
         const params = new URLSearchParams(window.location.search);
         const urlTab = params.get('tab');
-        const validTabs = ["dashboard", "inbox", "agents", "channels", "promotions", "orders", "knowledge", "contacts", "analytics", "settings", "leads-revival", "logs"];
+        const validTabs = ["dashboard", "inbox", "agents", "channels", "promotions", "orders", "knowledge", "contacts", "analytics", "settings", "leads-revival"];
         if (urlTab && validTabs.includes(urlTab)) {
           setActiveTabRaw(urlTab as any);
         }
@@ -1953,15 +1917,6 @@ export default function DashboardPage() {
           </button>
           <button onClick={() => setActiveTab('channels')} className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${activeTab === 'channels' ? 'bg-[#111111] text-white shadow-xs' : 'text-[#626260] hover:bg-[#ebe7e1] hover:text-[#111111]'}`}>
             <Network className={`h-4 w-4 ${activeTab === 'channels' ? 'text-[#ff5600]' : 'text-[#7b7b78]'}`} /> Channels
-          </button>
-          <button onClick={() => setActiveTab('logs')} className={`flex items-center justify-between w-full px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${activeTab === 'logs' ? 'bg-[#111111] text-white shadow-xs' : 'text-[#626260] hover:bg-[#ebe7e1] hover:text-[#111111]'}`}>
-            <div className="flex items-center gap-3">
-              <Activity className={`h-4 w-4 ${activeTab === 'logs' ? 'text-[#ff5600]' : 'text-[#7b7b78]'}`} />
-              <span>System Logs</span>
-            </div>
-            <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-emerald-500/20 text-emerald-700 border border-emerald-500/30 uppercase tracking-wider animate-pulse">
-              LIVE
-            </span>
           </button>
         </div>
 
@@ -5983,293 +5938,7 @@ export default function DashboardPage() {
       </div>
     )}
 
-          {/* ================= TAB: SYSTEM & REQUEST OBSERVE LOGGER ================= */}
-          {activeTab === "logs" && (
-            <div className="space-y-6 animate-in fade-in">
-              {/* Header Bar */}
-              <div className="bg-white p-6 rounded-2xl border border-[#d3cec6] shadow-xs flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-bold text-[#111111] flex items-center gap-2 tracking-tight">
-                    <Activity className="w-6 h-6 text-[#ff5600] animate-pulse" />
-                    <span>Real-Time Observability System Logger</span>
-                  </h2>
-                  <p className="text-xs text-[#626260] font-normal mt-1">
-                    Accurate live tracking of incoming customer WhatsApp messages, AI turn outputs, STT audio transcriptions, order captures, and system alerts.
-                  </p>
-                </div>
 
-                <div className="flex items-center space-x-3">
-                  <button
-                    onClick={() => setClientLogAutoRefresh(!clientLogAutoRefresh)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center space-x-2 border cursor-pointer ${
-                      clientLogAutoRefresh
-                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                        : 'bg-[#f5f1ec] text-[#626260] border-[#d3cec6]'
-                    }`}
-                  >
-                    <span className={`w-2 h-2 rounded-full ${clientLogAutoRefresh ? 'bg-emerald-500 animate-ping' : 'bg-[#7b7b78]'}`} />
-                    <span>{clientLogAutoRefresh ? 'Live Auto-Polling (4s)' : 'Polling Paused'}</span>
-                  </button>
-
-                  <button
-                    onClick={fetchClientLogs}
-                    disabled={isFetchingClientLogs}
-                    className="px-4 py-2 bg-[#111111] hover:bg-black disabled:opacity-50 text-white rounded-lg text-xs font-medium flex items-center space-x-2 shadow-xs transition cursor-pointer"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 text-[#ff5600] ${isFetchingClientLogs ? 'animate-spin' : ''}`} />
-                    <span>Refresh Now</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Grid Layout: Main Logs (2 Cols) + Side Error Drawer (1 Col) */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-                {/* Left 2 Columns: Live System Stream & Filters */}
-                <div className="lg:col-span-2 space-y-4">
-                  {/* Filter Bar */}
-                  <div className="bg-white p-4 rounded-xl border border-[#d3cec6] shadow-xs flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-2 flex-1">
-                      <div className="relative flex-1 min-w-[180px]">
-                        <Search className="w-4 h-4 text-[#7b7b78] absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          placeholder="Filter phone, query, or action..."
-                          value={clientLogSearchQuery}
-                          onChange={e => setClientLogSearchQuery(e.target.value)}
-                          className="w-full pl-9 pr-3 py-1.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg text-xs font-medium text-[#111111] placeholder-[#7b7b78] focus:outline-none focus:border-[#ff5600]"
-                        />
-                      </div>
-
-                      <select
-                        value={clientLogTypeFilter}
-                        onChange={e => setClientLogTypeFilter(e.target.value)}
-                        className="px-2.5 py-1.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg text-xs font-semibold text-[#111111] focus:outline-none focus:border-[#ff5600] cursor-pointer"
-                      >
-                        <option value="all">⚡ All Log Types</option>
-                        <option value="WHATSAPP_MESSAGE">💬 WhatsApp Turns</option>
-                        <option value="TOOL_EXECUTION">🛠 Tool Actions</option>
-                        <option value="STT_TRANSCRIPTION">🎙 Voice STT</option>
-                        <option value="ORDER_CREATED">📦 Orders</option>
-                        <option value="API_ALERT">🚨 Alerts</option>
-                      </select>
-
-                      <select
-                        value={clientLogLevelFilter}
-                        onChange={e => setClientLogLevelFilter(e.target.value)}
-                        className="px-2.5 py-1.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg text-xs font-semibold text-[#111111] focus:outline-none focus:border-[#ff5600] cursor-pointer"
-                      >
-                        <option value="all">🎯 All Severities</option>
-                        <option value="info">ℹ️ Info</option>
-                        <option value="success">✅ Success</option>
-                        <option value="warn">⚠️ Warning</option>
-                        <option value="error">❌ Error</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Log Cards List */}
-                  <div className="bg-white rounded-2xl border border-[#d3cec6] shadow-xs overflow-hidden">
-                    {clientLogs.length === 0 ? (
-                      <div className="p-10 text-center space-y-2">
-                        <Activity className="w-10 h-10 text-[#d3cec6] mx-auto animate-pulse" />
-                        <h4 className="text-sm font-bold text-[#111111]">No Log Events Captured Yet</h4>
-                        <p className="text-xs text-[#626260]">All incoming WhatsApp messages, voice transcripts, and AI execution turns will stream here in real time.</p>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-[#ebe7e1]">
-                        {clientLogs
-                          .filter(l => 
-                            !clientLogSearchQuery || 
-                            l.summary?.toLowerCase().includes(clientLogSearchQuery.toLowerCase()) || 
-                            l.phone?.includes(clientLogSearchQuery) ||
-                            l.query?.toLowerCase().includes(clientLogSearchQuery.toLowerCase()) ||
-                            l.response?.toLowerCase().includes(clientLogSearchQuery.toLowerCase())
-                          )
-                          .map((log) => {
-                            const isError = log.level === 'error';
-                            const isWarn = log.level === 'warn';
-                            const isSuccess = log.level === 'success';
-
-                            return (
-                              <div
-                                key={log.id}
-                                onClick={() => setSelectedClientLog(log)}
-                                className="p-4 hover:bg-[#f5f1ec]/60 transition-colors cursor-pointer space-y-2 group"
-                              >
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <div className="flex items-center space-x-2">
-                                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
-                                      log.type === 'WHATSAPP_MESSAGE' ? 'bg-purple-100 text-purple-800' :
-                                      log.type === 'TOOL_EXECUTION' ? 'bg-indigo-100 text-indigo-800' :
-                                      log.type === 'ORDER_CREATED' ? 'bg-emerald-100 text-emerald-800' :
-                                      log.type === 'STT_TRANSCRIPTION' ? 'bg-cyan-100 text-cyan-800' :
-                                      'bg-rose-100 text-rose-800'
-                                    }`}>
-                                      {log.type.replace('_', ' ')}
-                                    </span>
-
-                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
-                                      isError ? 'bg-rose-600 text-white' :
-                                      isWarn ? 'bg-amber-500 text-white' :
-                                      isSuccess ? 'bg-emerald-600 text-white' :
-                                      'bg-slate-200 text-slate-700'
-                                    }`}>
-                                      {log.level}
-                                    </span>
-
-                                    {log.phone && (
-                                      <span className="text-xs font-mono font-bold text-[#111111]">
-                                        +{log.phone}
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  <div className="flex items-center space-x-2 text-[11px] font-mono text-[#7b7b78]">
-                                    <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
-                                    <span className="text-[#ff5600] font-bold group-hover:underline">Inspect →</span>
-                                  </div>
-                                </div>
-
-                                <p className="text-xs font-semibold text-[#111111]">
-                                  {log.summary}
-                                </p>
-
-                                {log.query && (
-                                  <div className="bg-[#f5f1ec] p-2 rounded-lg text-xs font-mono text-slate-700">
-                                    <span className="font-bold text-[#7b7b78] uppercase text-[9px] block mb-0.5">User Query:</span>
-                                    {log.query}
-                                  </div>
-                                )}
-
-                                {log.response && (
-                                  <div className="bg-purple-50/60 p-2 rounded-lg border border-purple-100 text-xs font-mono text-slate-800">
-                                    <span className="font-bold text-purple-600 uppercase text-[9px] block mb-0.5">AI Response:</span>
-                                    {log.response}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Right Column: LIVE ERROR & ALERT SIDEBAR DRAWER (as requested in voice message) */}
-                <div className="space-y-4">
-                  <div className="bg-white p-5 rounded-2xl border border-rose-200/80 shadow-xs space-y-4">
-                    <div className="flex items-center justify-between pb-3 border-b border-rose-100">
-                      <div className="flex items-center space-x-2">
-                        <AlertCircle className="w-5 h-5 text-rose-600 animate-bounce" />
-                        <h3 className="text-sm font-bold text-slate-900">Recent Errors & System Alerts</h3>
-                      </div>
-                      <span className="px-2 py-0.5 bg-rose-100 text-rose-700 font-extrabold text-[10px] rounded-full uppercase font-mono">
-                        {clientLogs.filter(l => l.level === 'error' || l.level === 'warn').length} Issues
-                      </span>
-                    </div>
-
-                    <p className="text-[11px] text-slate-500 font-normal leading-relaxed">
-                      Instant side screen tracking unexpected errors, failed API requests, socket drops, or tool execution issues by minute & timestamp.
-                    </p>
-
-                    <div className="space-y-2.5 max-h-[520px] overflow-y-auto pr-1">
-                      {clientLogs.filter(l => l.level === 'error' || l.level === 'warn').length === 0 ? (
-                        <div className="p-6 text-center bg-emerald-50/60 rounded-xl border border-emerald-200/80 space-y-1">
-                          <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
-                          <div className="text-xs font-bold text-emerald-900">0 Active System Errors</div>
-                          <div className="text-[10px] text-emerald-700">All WhatsApp turns, tool calls, and API providers are operating smoothly.</div>
-                        </div>
-                      ) : (
-                        clientLogs
-                          .filter(l => l.level === 'error' || l.level === 'warn')
-                          .map((errLog) => (
-                            <div
-                              key={`side-err-${errLog.id}`}
-                              onClick={() => setSelectedClientLog(errLog)}
-                              className="p-3 bg-rose-50/80 hover:bg-rose-100/80 border border-rose-200 rounded-xl transition cursor-pointer space-y-1.5 group"
-                            >
-                              <div className="flex items-center justify-between text-[10px] font-mono font-bold">
-                                <span className="text-rose-700 uppercase bg-rose-200/80 px-1.5 py-0.5 rounded">
-                                  {errLog.level} • {errLog.type.replace('_', ' ')}
-                                </span>
-                                <span className="text-slate-500">{new Date(errLog.timestamp).toLocaleTimeString()}</span>
-                              </div>
-                              <div className="text-xs font-bold text-slate-900 group-hover:text-rose-700 line-clamp-2">
-                                {errLog.summary}
-                              </div>
-                              {errLog.phone && (
-                                <div className="text-[10px] font-mono text-slate-500">
-                                  Customer: +{errLog.phone}
-                                </div>
-                              )}
-                            </div>
-                          ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Log Detail Inspector Modal */}
-              {selectedClientLog && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                  <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
-                    <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                      <div>
-                        <span className="text-[10px] font-mono font-bold text-[#ff5600] uppercase">Log Entry Inspector Payload</span>
-                        <h3 className="text-base font-bold text-slate-900">{selectedClientLog.summary}</h3>
-                      </div>
-                      <button
-                        onClick={() => setSelectedClientLog(null)}
-                        className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 cursor-pointer"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-                      <div className="grid grid-cols-2 gap-3 text-xs font-mono bg-[#f5f1ec] p-3 rounded-xl border border-[#d3cec6]">
-                        <div>
-                          <span className="text-slate-400 font-bold block text-[10px]">TIMESTAMP</span>
-                          <span className="text-slate-900 font-bold">{new Date(selectedClientLog.timestamp).toLocaleString()}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 font-bold block text-[10px]">EVENT TYPE</span>
-                          <span className="text-[#ff5600] font-bold">{selectedClientLog.type}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 font-bold block text-[10px]">LEVEL</span>
-                          <span className="text-slate-900 font-bold uppercase">{selectedClientLog.level}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 font-bold block text-[10px]">CUSTOMER PHONE</span>
-                          <span className="text-slate-900 font-bold">{selectedClientLog.phone || 'N/A'}</span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1">Raw Event Payload & Technical Traces</span>
-                        <pre className="bg-slate-950 text-emerald-400 p-4 rounded-xl text-[11px] font-mono overflow-x-auto max-h-72 border border-slate-800 leading-relaxed">
-                          {JSON.stringify(selectedClientLog.details || selectedClientLog, null, 2)}
-                        </pre>
-                      </div>
-                    </div>
-
-                    <div className="pt-3 border-t border-slate-100 flex justify-end">
-                      <button
-                        onClick={() => setSelectedClientLog(null)}
-                        className="px-5 py-2 bg-[#111111] text-white font-bold rounded-xl text-xs shadow-sm cursor-pointer"
-                      >
-                        Close Inspector
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
   );
 }
