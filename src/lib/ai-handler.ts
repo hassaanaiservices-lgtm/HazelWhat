@@ -1841,14 +1841,38 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     
     let existingCustomer = await DB.getCustomer(from, resolvedTenantId);
 
-    // Heuristic Auto-Complaint Detection
-    const complaintKeywords = [
-      "complain", "shikayat", "kharab", "tuta", "khraab", "ganda", "defective", "worst", 
-      "bekar", "slow", "late", "delay", "fraud", "bad", "scam", "wrong", "galat", "defect", 
-      "tota", "toota", "wapas", "refund", "broken", "complaint", "khatam", "messed", 
-      "naqis", "kharaab", "nahi mila", "missing"
+    // Heuristic Auto-Complaint Detection (word-boundary aware, false-positive resistant)
+    // Strong complaint signals — these alone are sufficient
+    const strongComplaintSignals = [
+      "complain", "complaint", "shikayat", "fraud", "scam", "refund", "wapas karo",
+      "defective", "defect", "khraab tha", "kharab tha", "kharaab tha",
+      "naqis tha", "bekar tha", "ganda tha", "messed", "replacement chahiye",
+      "broken", "tuta hua", "toota hua", "missing tha", "nahi mila tha",
     ];
-    const isHeuristicComplaint = complaintKeywords.some(w => lowerContent.includes(w));
+    // Weaker signals — only count if paired with another weak signal or strong signal
+    const weakComplaintSignals = [
+      "kharab", "khraab", "kharaab", "naqis", "bekar", "galat", "wrong",
+      "late", "delay", "tuta", "toota", "thanda", "rude", "ganda",
+    ];
+    // Order exclusion terms — presence of these reduces complaint likelihood
+    const orderPositiveTerms = [
+      "order karna", "chahiye", "deliver", "menu", "price", "rate", "available",
+      "kitna", "kya hai", "batao", "show", "bohat acha", "shukriya", "thank",
+    ];
+
+    const hasOrderPositiveContext = orderPositiveTerms.some(t => lowerContent.includes(t));
+    const strongSignalMatch = strongComplaintSignals.some(w => lowerContent.includes(w));
+    
+    // Count weak signals using word-boundary check
+    const contentWords = lowerContent.split(/\s+/);
+    const weakSignalCount = weakComplaintSignals.filter(w => {
+      if (w.includes(" ")) return lowerContent.includes(w);
+      return contentWords.some(word => word === w || word === w + "!" || word === w + "." || word === w + ",");
+    }).length;
+
+    // Decision: strong signal always fires; weak signals need 2+ AND no order context
+    const isHeuristicComplaint = strongSignalMatch || (weakSignalCount >= 2 && !hasOrderPositiveContext);
+
     if (isHeuristicComplaint) {
       let currentPrefs: any = {};
       try {
@@ -2064,7 +2088,9 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
 8. NO REPEATING GREETINGS: If you have ALREADY greeted this customer, DO NOT say Walaikum Assalam again. Answer their latest question directly.
 9. ORDER COLLECTION FLOW & NO PAYMENT QUESTIONS:
     a. Confirm items, quantities, and sizes/variations.
-    b. Check saved address. If saved, confirm delivery to saved address. If missing, ask ONLY for delivery address.
+    b. ADDRESS FAST-PATH: Check the saved address variable "${savedCustomerAddress || ""}".
+       - IF address IS saved: Do NOT ask for address again. Directly confirm: "Delivery address: [saved address]. Confirm karen?" and if they say yes, immediately call place_order.
+       - IF address is NOT saved: Ask ONLY once for delivery address, then place_order as soon as they provide it.
     c. DO NOT ASK FOR PAYMENT METHOD! Always default to "Cash on Delivery" (COD). Never ask 1 or 2 for payment options or ask how they want to pay unless the customer explicitly requests online transfer.
     d. Do NOT ask for phone number (we already have it from WhatsApp).
     e. Call place_order tool with all details and paymentMethod set to "Cash on Delivery".
