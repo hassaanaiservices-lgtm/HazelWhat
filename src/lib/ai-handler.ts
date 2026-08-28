@@ -1839,7 +1839,37 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
       }, resolvedTenantId);
     }
     
-    const existingCustomer = await DB.getCustomer(from, resolvedTenantId);
+    let existingCustomer = await DB.getCustomer(from, resolvedTenantId);
+
+    // Heuristic Auto-Complaint Detection
+    const complaintKeywords = [
+      "complain", "shikayat", "kharab", "tuta", "khraab", "ganda", "defective", "worst", 
+      "bekar", "slow", "late", "delay", "fraud", "bad", "scam", "wrong", "galat", "defect", 
+      "tota", "toota", "wapas", "refund", "broken", "complaint", "khatam", "messed", 
+      "naqis", "kharaab", "nahi mila", "missing"
+    ];
+    const isHeuristicComplaint = complaintKeywords.some(w => lowerContent.includes(w));
+    if (isHeuristicComplaint) {
+      let currentPrefs: any = {};
+      try {
+        if (existingCustomer?.preferences) {
+          currentPrefs = JSON.parse(existingCustomer.preferences);
+        }
+      } catch (e) {
+        if (existingCustomer?.preferences) {
+          currentPrefs = { notes: existingCustomer.preferences };
+        }
+      }
+      
+      if (!currentPrefs.hasComplaint) {
+        currentPrefs.hasComplaint = true;
+        currentPrefs.complaintSummary = content.substring(0, 100) + (content.length > 100 ? "..." : "");
+        await DB.updateCustomer(from, { preferences: JSON.stringify(currentPrefs) }, resolvedTenantId);
+        // Refresh customer reference
+        existingCustomer = await DB.getCustomer(from, resolvedTenantId);
+      }
+    }
+
     const currentStage = existingCustomer?.pipelineStage || "new";
     
     let updatedTags = existingCustomer?.tags || [];
@@ -2051,6 +2081,7 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
 11. PROACTIVE FOLLOW-UPS: If you promise to check back or follow up with the customer later, you MUST call schedule_followup tool with the appropriate time.
 12. CRM PROFILE UPDATES (INCREMENTAL VARIABLE-SAVING FLOW):
     - As soon as the customer mentions any of their details (name, contact number, delivery address, preferred service/product, or requested appointment date/time), you MUST call the update_customer_profile tool immediately to persist these variables in the database.
+    - If the customer expresses dissatisfaction, complains about an order/delivery/service, or registers an issue, you MUST call the update_customer_profile tool immediately with has_complaint set to true and a brief 1-2 sentence complaint_summary summarizing the issue.
     - Do NOT wait until the end of the conversation or booking to call this tool. Use it to record details step-by-step as they are disclosed in chat.
 13. VOICE NOTES: When you receive a voice note (marked with 🎤 [Voice Note] followed by the transcription), respond directly to what they said. Treat the transcription as if the customer typed it.
 14. ROMAN URDU PERSONA & LANGUAGE SUPPORT:
@@ -2242,6 +2273,8 @@ This customer is a revived dead lead who recently responded to our re-engagement
             product_preference: { type: "string", description: "The customer's preferred product/item name (if provided in chat)" },
             appointment_date: { type: "string", description: "The customer's requested appointment date (YYYY-MM-DD) (if provided in chat)" },
             appointment_time: { type: "string", description: "The customer's requested appointment time (e.g. '4 PM') (if provided in chat)" },
+            has_complaint: { type: "boolean", description: "Set to true if the customer is expressing a complaint, dissatisfaction, or reporting an issue with an order/service." },
+            complaint_summary: { type: "string", description: "A brief, 1-2 sentence summary of what the customer is complaining about (e.g., 'Received broken product', 'Order delivery is delayed')." },
             notes: { type: "string", description: "Any general notes, custom sizes, requirements or user preferences" }
           }
         }
@@ -2439,6 +2472,8 @@ This customer is a revived dead lead who recently responded to our re-engagement
               if (args.product_preference !== undefined) currentPrefs.productPreference = args.product_preference;
               if (args.appointment_date !== undefined) currentPrefs.appointmentDate = args.appointment_date;
               if (args.appointment_time !== undefined) currentPrefs.appointmentTime = args.appointment_time;
+              if (args.has_complaint !== undefined) currentPrefs.hasComplaint = args.has_complaint;
+              if (args.complaint_summary !== undefined) currentPrefs.complaintSummary = args.complaint_summary;
               if (args.notes !== undefined) currentPrefs.notes = args.notes;
 
               const updates: any = { 

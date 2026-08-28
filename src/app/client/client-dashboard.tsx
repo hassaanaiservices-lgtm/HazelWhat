@@ -290,7 +290,7 @@ export default function DashboardPage() {
     }
   }, []);
 
-  const [inboxFilter, setInboxFilter] = useState<"all" | "normal" | "groups" | "revival">("all");
+  const [inboxFilter, setInboxFilter] = useState<"all" | "normal" | "groups" | "revival" | "complaints">("all");
   const [inboxSearch, setInboxSearch] = useState<string>("");
   const [revivalCampaigns, setRevivalCampaigns] = useState<any[]>([]);
   const [activeRevivalCampaign, setActiveRevivalCampaign] = useState<any | null>(null);
@@ -566,6 +566,8 @@ export default function DashboardPage() {
   const isFirstOrderFetchRef = useRef<boolean>(true);
   const lastLoggedStatusRef = useRef<string | null>(null);
   const orderAlarmIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const knownComplaintPhonesRef = useRef<Set<string>>(new Set());
+  const isFirstComplaintFetchRef = useRef<boolean>(true);
 
   const stopOrderAlarm = () => {
     if (orderAlarmIntervalRef.current) {
@@ -681,6 +683,72 @@ export default function DashboardPage() {
       });
     } catch (e) {
       console.warn("Could not play sweet order sound:", e);
+    }
+  };
+
+  const playComplaintSound = (vol = 0.95) => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      if (ctx.state === "suspended") {
+        ctx.resume();
+      }
+      const now = ctx.currentTime;
+
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.setValueAtTime(-10, now);
+      compressor.knee.setValueAtTime(40, now);
+      compressor.ratio.setValueAtTime(12, now);
+      compressor.attack.setValueAtTime(0, now);
+      compressor.release.setValueAtTime(0.25, now);
+      compressor.connect(ctx.destination);
+
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(vol, now);
+      masterGain.connect(compressor);
+
+      // Distinct alert: A4 -> Eb4 (tritone alarm)
+      const notes = [
+        { freq: 440.00, start: 0.00, duration: 0.25 }, // A4
+        { freq: 311.13, start: 0.15, duration: 0.25 }, // Eb4
+        { freq: 440.00, start: 0.30, duration: 0.25 }, // A4
+        { freq: 311.13, start: 0.45, duration: 0.60 }, // Eb4
+      ];
+
+      notes.forEach(({ freq, start, duration }) => {
+        const startTime = now + start;
+
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = "sawtooth";
+        osc1.frequency.setValueAtTime(freq, startTime);
+        
+        gain1.gain.setValueAtTime(0.0001, startTime);
+        gain1.gain.linearRampToValueAtTime(0.18, startTime + 0.02);
+        gain1.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+        
+        osc1.connect(gain1);
+        gain1.connect(masterGain);
+        osc1.start(startTime);
+        osc1.stop(startTime + duration);
+
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = "sine";
+        osc2.frequency.setValueAtTime(freq, startTime);
+        
+        gain2.gain.setValueAtTime(0.0001, startTime);
+        gain2.gain.exponentialRampToValueAtTime(0.40, startTime + 0.015);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+        
+        osc2.connect(gain2);
+        gain2.connect(masterGain);
+        osc2.start(startTime);
+        osc2.stop(startTime + duration);
+      });
+    } catch (e) {
+      console.warn("Could not play complaint sound:", e);
     }
   };
 
@@ -993,12 +1061,39 @@ export default function DashboardPage() {
         const mergedChats = { ...data.chats };
         const customersMap: Record<string, any> = {};
         if (data.customers) {
+          let newlyDetectedComplaint = false;
           data.customers.forEach((c: any) => {
             customersMap[c.phone] = c;
             if (!mergedChats[c.phone]) {
               mergedChats[c.phone] = [];
             }
+
+            const hasComplaint = (() => {
+              try {
+                const p = JSON.parse(c.preferences || "{}");
+                return p.hasComplaint === true;
+              } catch(e) {
+                return false;
+              }
+            })();
+
+            if (hasComplaint) {
+              if (!knownComplaintPhonesRef.current.has(c.phone)) {
+                knownComplaintPhonesRef.current.add(c.phone);
+                newlyDetectedComplaint = true;
+              }
+            } else {
+              knownComplaintPhonesRef.current.delete(c.phone);
+            }
           });
+
+          if (isFirstComplaintFetchRef.current) {
+            isFirstComplaintFetchRef.current = false;
+          } else if (newlyDetectedComplaint) {
+            if (soundEnabled) {
+              playComplaintSound(0.98);
+            }
+          }
         }
         
         // Non-destructive update: Only update if mergedChats has data or if current state is empty
@@ -2438,13 +2533,40 @@ export default function DashboardPage() {
             >
               Groups
             </button>
-            <button 
+             <button 
               onClick={() => setInboxFilter("revival")}
               className={`px-3 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${
                 inboxFilter === "revival" ? "bg-[#ff5600] text-white shadow-xs" : "bg-[#ebe7e1] text-[#626260] hover:text-[#111111]"
               }`}
             >
               Leads Revival
+            </button>
+            <button 
+              onClick={() => setInboxFilter("complaints")}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
+                inboxFilter === "complaints" ? "bg-rose-600 text-white shadow-xs" : "bg-rose-50 text-rose-700 border border-rose-200/50 hover:bg-rose-100"
+              }`}
+            >
+              <span>Complaints</span>
+              {Object.values(customers).filter(c => {
+                try {
+                  const p = JSON.parse(c.preferences || "{}");
+                  return p.hasComplaint === true;
+                } catch(e) {
+                  return false;
+                }
+              }).length > 0 && (
+                <span className="px-1.5 py-0.2 text-[9px] font-bold rounded-full bg-rose-200 text-rose-800 animate-pulse">
+                  {Object.values(customers).filter(c => {
+                    try {
+                      const p = JSON.parse(c.preferences || "{}");
+                      return p.hasComplaint === true;
+                    } catch(e) {
+                      return false;
+                    }
+                  }).length}
+                </span>
+              )}
             </button>
           </div>
 
@@ -2465,13 +2587,43 @@ export default function DashboardPage() {
                   const customer = customers[phone];
                   const isRevival = customer?.tags?.includes("revival-sent");
                   const isGroup = phone.includes("@g.us");
+                  const hasComplaint = (() => {
+                    try {
+                      const p = JSON.parse(customer?.preferences || "{}");
+                      return p.hasComplaint === true;
+                    } catch(e) {
+                      return false;
+                    }
+                  })();
+
                   if (inboxFilter === "normal" && (isRevival || isGroup)) return false;
                   if (inboxFilter === "groups" && !isGroup) return false;
                   if (inboxFilter === "revival" && !isRevival) return false;
+                  if (inboxFilter === "complaints" && !hasComplaint) return false;
 
                   return true;
                 })
                 .sort((a, b) => {
+                  const aHasComplaint = (() => {
+                    try {
+                      const p = JSON.parse(customers[a[0]]?.preferences || "{}");
+                      return p.hasComplaint === true;
+                    } catch(e) {
+                      return false;
+                    }
+                  })();
+                  const bHasComplaint = (() => {
+                    try {
+                      const p = JSON.parse(customers[b[0]]?.preferences || "{}");
+                      return p.hasComplaint === true;
+                    } catch(e) {
+                      return false;
+                    }
+                  })();
+
+                  if (aHasComplaint && !bHasComplaint) return -1;
+                  if (!aHasComplaint && bHasComplaint) return 1;
+
                   const aLast = a[1][a[1].length - 1];
                   const bLast = b[1][b[1].length - 1];
                   const aTime = aLast ? new Date(aLast.timestamp).getTime() : 0;
@@ -2500,6 +2652,14 @@ export default function DashboardPage() {
                 const displayName = formatContactName(phone);
                  const isSelected = selectedChat === phone;
                  const isChatAiEnabled = customers[phone]?.aiEnabled !== undefined ? customers[phone].aiEnabled : (config.globalAiEnabled !== false);
+                 const hasComplaint = (() => {
+                   try {
+                     const p = JSON.parse(customers[phone]?.preferences || "{}");
+                     return p.hasComplaint === true;
+                   } catch(e) {
+                     return false;
+                   }
+                 })();
                  const timeStr = (() => {
                    if (!lastMessage?.timestamp) return "";
                    const d = new Date(lastMessage.timestamp);
@@ -2519,10 +2679,16 @@ export default function DashboardPage() {
                      className={`cursor-pointer px-4 py-3 flex items-start gap-3 transition-all border-b border-[#ebe7e1] relative ${isSelected ? 'bg-[#f5f1ec] before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:bg-[#ff5600]' : 'hover:bg-[#f5f1ec]/60'}`}
                    >
                      <div className="relative flex-shrink-0 mt-0.5">
-                       <div className={`h-10 w-10 rounded-full border ${isChatAiEnabled ? 'border-[#ff5600]' : 'border-[#d3cec6]'} p-0.5 relative flex items-center justify-center bg-white shadow-xs`}>
-                         <div className="h-full w-full bg-[#111111] text-white rounded-full flex items-center justify-center overflow-hidden">
+                       <div className={`h-10 w-10 rounded-full border ${hasComplaint ? 'border-rose-500 bg-rose-50 shadow-[0_0_8px_rgba(244,63,94,0.35)]' : isChatAiEnabled ? 'border-[#ff5600]' : 'border-[#d3cec6]'} p-0.5 relative flex items-center justify-center bg-white shadow-xs`}>
+                         <div className={`h-full w-full ${hasComplaint ? 'bg-rose-600' : 'bg-[#111111]'} text-white rounded-full flex items-center justify-center overflow-hidden`}>
                            <User className="h-4 w-4 text-white" />
                          </div>
+                         {hasComplaint && (
+                           <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-600 border border-white"></span>
+                           </span>
+                         )}
                        </div>
                        <div className={`absolute -bottom-1 -left-1 bg-[#111111] text-white text-[8px] font-medium px-1.5 rounded-full border border-white`}>
                          {ringPercent}%
@@ -2531,7 +2697,14 @@ export default function DashboardPage() {
                      
                      <div className="flex-1 min-w-0">
                        <div className="flex justify-between items-baseline mb-0.5">
-                         <h4 className="text-xs font-semibold text-[#111111] truncate">{displayName}</h4>
+                         <h4 className={`text-xs font-semibold truncate flex items-center gap-1.5 ${hasComplaint ? 'text-rose-700 font-bold' : 'text-[#111111]'}`}>
+                           <span>{displayName}</span>
+                           {hasComplaint && (
+                             <span className="text-[8px] bg-rose-100 text-rose-800 font-bold px-1 rounded-sm border border-rose-200">
+                               COMPLAINT
+                             </span>
+                           )}
+                         </h4>
                          <span className="text-[10px] font-medium text-[#7b7b78]">{isMounted ? timeStr : ""}</span>
                        </div>
                        <div className="flex items-center gap-1.5 text-xs text-[#626260] font-normal">
@@ -2610,6 +2783,59 @@ export default function DashboardPage() {
                 </div>
               </div>
               
+              {/* Complaint Summary Box */}
+              {(() => {
+                const customer = customers[selectedChat];
+                let hasComplaint = false;
+                let complaintSummary = "";
+                try {
+                  const p = JSON.parse(customer?.preferences || "{}");
+                  hasComplaint = p.hasComplaint === true;
+                  complaintSummary = p.complaintSummary || "";
+                } catch(e) {}
+
+                if (!hasComplaint) return null;
+
+                return (
+                  <div className="bg-rose-50 border-b border-rose-200/60 px-6 py-3.5 flex items-center justify-between z-10 flex-shrink-0 animate-fade-in">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="bg-rose-100 p-2 rounded-lg text-rose-700 flex-shrink-0 mt-0.5">
+                        <AlertCircle className="h-5 w-5" />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-[10px] font-bold text-rose-800 tracking-wider uppercase mb-0.5">
+                          ACTIVE CUSTOMER COMPLAINT SUMMARY
+                        </span>
+                        <p className="text-xs text-rose-700 font-medium leading-relaxed">
+                          "{complaintSummary || "Customer has filed an active complaint."}"
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                      <button 
+                        onClick={async () => {
+                          let currentPrefs: any = {};
+                          try {
+                            if (customer?.preferences) {
+                              currentPrefs = JSON.parse(customer.preferences);
+                            }
+                          } catch(e) {}
+                          
+                          currentPrefs.hasComplaint = false;
+                          currentPrefs.complaintSummary = "";
+                          
+                          await updateCustomerField(selectedChat, { preferences: JSON.stringify(currentPrefs) });
+                        }}
+                        className="bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold px-3 py-1.5 rounded transition cursor-pointer flex items-center gap-1 shadow-xs"
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        <span>Resolve & Clear Flag</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Chat Messages */}
               <div 
                 ref={chatContainerRef}

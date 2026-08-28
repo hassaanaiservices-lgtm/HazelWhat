@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     }
     const tenantId = session?.tenantId;
 
-    const { phone, aiEnabled, name, tags, pipelineStage, isLead, pipelineStageSetByUser } = await req.json();
+    const { phone, aiEnabled, name, tags, pipelineStage, isLead, pipelineStageSetByUser, hasComplaint, complaintSummary } = await req.json();
 
     if (!phone) {
       return NextResponse.json({ success: false, error: "Phone number required" }, { status: 400 });
@@ -27,6 +27,25 @@ export async function POST(req: NextRequest) {
     }
     if (isLead !== undefined) updates.isLead = isLead;
     if (pipelineStageSetByUser !== undefined) updates.pipelineStageSetByUser = pipelineStageSetByUser;
+
+    if (hasComplaint !== undefined || complaintSummary !== undefined) {
+      const existing = await DB.getCustomer(phone, tenantId);
+      let currentPrefs: any = {};
+      try {
+        if (existing?.preferences) {
+          currentPrefs = JSON.parse(existing.preferences);
+        }
+      } catch (e) {
+        if (existing?.preferences) {
+          currentPrefs = { notes: existing.preferences };
+        }
+      }
+      if (hasComplaint !== undefined) currentPrefs.hasComplaint = hasComplaint;
+      if (complaintSummary !== undefined) {
+        currentPrefs.complaintSummary = complaintSummary;
+      }
+      updates.preferences = JSON.stringify(currentPrefs);
+    }
 
     await DB.updateCustomer(phone, updates, tenantId);
     return NextResponse.json({ success: true });
