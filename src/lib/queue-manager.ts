@@ -14,11 +14,11 @@ import { WhatsAppSessionRegistry } from "./whatsapp-session-registry";
 
 const logger = pino({ name: "queue-manager" });
 
-// Explicit Backpressure Limits
-export const CONCURRENCY_LIMIT = 20;
-export const MAX_TENANT_CONCURRENCY = 5;
-export const MAX_GLOBAL_QUEUE_DEPTH = 1000;
-export const MAX_TENANT_QUEUE_BACKLOG = 200;
+// Explicit Backpressure Limits (Configured for Production Concurrency)
+export const CONCURRENCY_LIMIT = parseInt(process.env.QUEUE_CONCURRENCY_LIMIT || "50", 10);
+export const MAX_TENANT_CONCURRENCY = parseInt(process.env.MAX_TENANT_CONCURRENCY || "25", 10);
+export const MAX_GLOBAL_QUEUE_DEPTH = 5000;
+export const MAX_TENANT_QUEUE_BACKLOG = 1000;
 export const MAX_RETRY_BACKLOG = 500;
 export const MAX_MEMORY_QUEUE_SIZE = 1000;
 export const MAX_JOB_PAYLOAD_SIZE = 128 * 1024; // 128 KB limit

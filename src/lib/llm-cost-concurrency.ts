@@ -5,8 +5,8 @@ import { getTenantLLMUsage } from "./observability-store";
 const logger = pino({ name: "llm-cost-concurrency" });
 
 // Global & Per-Tenant Concurrency Limits
-export const MAX_GLOBAL_LLM_CONCURRENCY = 10;
-export const MAX_TENANT_LLM_CONCURRENCY = 3;
+export const MAX_GLOBAL_LLM_CONCURRENCY = parseInt(process.env.MAX_GLOBAL_LLM_CONCURRENCY || "30", 10);
+export const MAX_TENANT_LLM_CONCURRENCY = parseInt(process.env.MAX_TENANT_LLM_CONCURRENCY || "15", 10);
 
 // Default Cost Protection Caps
 export const DEFAULT_DAILY_TENANT_BUDGET_USD = parseFloat(process.env.DEFAULT_DAILY_TENANT_BUDGET_USD || "5.00");

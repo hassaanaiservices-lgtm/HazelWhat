@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/auth-session";
+import { handleWhatsAppMessage } from "@/lib/ai-handler";
 
 /**
  * POST /api/whatsapp/simulate-bulk
@@ -38,8 +39,6 @@ export async function POST(req: NextRequest) {
       },
     };
 
-    // Import and call the real AI handler — this hits the queue and real processing
-    const { handleWhatsAppMessage } = await import("@/lib/ai-handler");
     // Fire and forget — don't await, let the queue handle it
     handleWhatsAppMessage(syntheticMsg, resolvedTenantId).catch((err: any) => {
       console.error(`[SimulateBulk] Error for ${phone}:`, err.message);
