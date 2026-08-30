@@ -577,6 +577,16 @@ export default function DashboardPage() {
     setNewOrderBanner(null);
   };
 
+  // Clean up order alarm interval on component unmount
+  useEffect(() => {
+    return () => {
+      if (orderAlarmIntervalRef.current) {
+        clearInterval(orderAlarmIntervalRef.current);
+        orderAlarmIntervalRef.current = null;
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const storedSound = localStorage.getItem("hazel_order_sound_enabled");
     if (storedSound !== null) {
@@ -5227,6 +5237,7 @@ export default function DashboardPage() {
                                   value={order.status === 'pending' ? 'new_order' : order.status === 'confirmed' ? 'under_baking' : order.status}
                                   onChange={async (e) => {
                                     const newStatus = e.target.value;
+                                    stopOrderAlarm();
                                     await fetch('/api/whatsapp/orders', {
                                       method: 'PATCH',
                                       headers: { 'Content-Type': 'application/json' },
@@ -5307,6 +5318,7 @@ export default function DashboardPage() {
                         value={selectedOrderDetail.status === 'pending' ? 'new_order' : selectedOrderDetail.status === 'confirmed' ? 'under_baking' : selectedOrderDetail.status}
                         onChange={async (e) => {
                           const newStatus = e.target.value;
+                          stopOrderAlarm();
                           await fetch('/api/whatsapp/orders', {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
