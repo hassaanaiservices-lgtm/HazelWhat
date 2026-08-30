@@ -933,13 +933,9 @@ export default function DashboardPage() {
           });
 
           if (brandNewOrder) {
-            // Start continuous loud alarm bell if enabled until accepted
+            // Play single sweet alert chime for new incoming order
             if (soundEnabled) {
               playSweetOrderSound(0.98);
-              if (orderAlarmIntervalRef.current) clearInterval(orderAlarmIntervalRef.current);
-              orderAlarmIntervalRef.current = setInterval(() => {
-                playSweetOrderSound(0.98);
-              }, 1800);
             }
 
             // Trigger floating order alert banner
