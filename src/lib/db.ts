@@ -76,6 +76,8 @@ export interface Config {
   apiKey?: string;
   deepgramApiKey?: string;
   deepgramVoice?: string;
+  openaiApiKey?: string;
+  geminiApiKey?: string;
 }
 
 function sanitizeCatalogField(val: string | undefined | null): string {
@@ -509,8 +511,29 @@ export class DB {
       return {};
     }
     try {
-      const { data, error } = await supabase.from('chat_messages').select('*').eq('tenant_id', tenantId).order('timestamp', { ascending: false }).limit(1000);
-      if (error || !data) return {};
+      // Primary: Use high-performance partitioned function to avoid flat truncation
+      let data: any[] | null = null;
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_recent_chats', { 
+        p_tenant_id: tenantId, 
+        p_limit: 100 
+      });
+
+      if (!rpcError && rpcData) {
+        data = rpcData;
+      } else {
+        // Fallback to flat query if RPC function does not exist yet
+        console.warn('[DB/Supabase] get_recent_chats RPC failed, falling back to flat query. Error:', rpcError?.message || rpcError);
+        const { data: flatData, error: flatError } = await supabase
+          .from('chat_messages')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .order('timestamp', { ascending: false })
+          .limit(2000); // Increased limit as a fallback
+        if (flatError) throw flatError;
+        data = flatData;
+      }
+
+      if (!data) return {};
 
       const result: Record<string, ChatMessage[]> = {};
       data.forEach((m: any) => {

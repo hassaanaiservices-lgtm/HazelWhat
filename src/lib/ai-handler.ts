@@ -155,8 +155,7 @@ async function getDeepgramSettings(config: any): Promise<{ apiKey: string; voice
 
 async function transcribeAudioWithDeepgram(buffer: Buffer, apiKey: string, mimetype = "audio/ogg"): Promise<string> {
   if (!apiKey || !apiKey.trim()) {
-    console.warn("[Deepgram STT] Deepgram API key is missing.");
-    return "";
+    throw new Error("Deepgram API key is missing.");
   }
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -199,8 +198,7 @@ async function transcribeAudioWithDeepgram(buffer: Buffer, apiKey: string, mimet
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error(`[Deepgram STT] API error (${res.status}):`, errText);
-      return "";
+      throw new Error(`Deepgram API error (${res.status}): ${errText}`);
     }
 
     const data = await res.json();
@@ -209,7 +207,7 @@ async function transcribeAudioWithDeepgram(buffer: Buffer, apiKey: string, mimet
     return transcript;
   } catch (err: any) {
     console.error("[Deepgram STT] Exception during transcription:", err.message || err);
-    return "";
+    throw err;
   } finally {
     clearTimeout(timeoutId);
   }
@@ -217,7 +215,9 @@ async function transcribeAudioWithDeepgram(buffer: Buffer, apiKey: string, mimet
 
 
 async function transcribeAudioWithOpenAI(buffer: Buffer, apiKey: string, mimetype = "audio/ogg"): Promise<string> {
-  if (!apiKey || !apiKey.trim() || (!apiKey.startsWith("sk-") && !apiKey.startsWith("sk-proj-"))) return "";
+  if (!apiKey || !apiKey.trim() || (!apiKey.startsWith("sk-") && !apiKey.startsWith("sk-proj-"))) {
+    throw new Error("OpenAI API key is missing or invalid.");
+  }
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
   try {
@@ -239,8 +239,7 @@ async function transcribeAudioWithOpenAI(buffer: Buffer, apiKey: string, mimetyp
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error(`[Whisper STT] API error (${res.status}):`, errText);
-      return "";
+      throw new Error(`OpenAI API error (${res.status}): ${errText}`);
     }
 
     const data = await res.json();
@@ -249,14 +248,16 @@ async function transcribeAudioWithOpenAI(buffer: Buffer, apiKey: string, mimetyp
     return transcript;
   } catch (err: any) {
     console.error("[Whisper STT] Exception during transcription:", err.message || err);
-    return "";
+    throw err;
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
 async function transcribeAudioWithGemini(buffer: Buffer, apiKey: string, mimetype = "audio/ogg"): Promise<string> {
-  if (!apiKey || !apiKey.trim()) return "";
+  if (!apiKey || !apiKey.trim()) {
+    throw new Error("Gemini API key is missing.");
+  }
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 12000);
   try {
@@ -330,8 +331,7 @@ async function transcribeAudioWithGemini(buffer: Buffer, apiKey: string, mimetyp
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error(`[Gemini STT] API error (${res.status}):`, errText);
-      return "";
+      throw new Error(`Gemini API error (${res.status}): ${errText}`);
     }
 
     const data = await res.json();
@@ -340,14 +340,16 @@ async function transcribeAudioWithGemini(buffer: Buffer, apiKey: string, mimetyp
     return transcript;
   } catch (err: any) {
     console.error("[Gemini STT] Exception during transcription:", err.message || err);
-    return "";
+    throw err;
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
 async function transcribeAudioWithGroq(buffer: Buffer, apiKey: string, mimetype = "audio/ogg"): Promise<string> {
-  if (!apiKey || !apiKey.trim()) return "";
+  if (!apiKey || !apiKey.trim()) {
+    throw new Error("Groq API key is missing.");
+  }
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
   try {
@@ -370,8 +372,7 @@ async function transcribeAudioWithGroq(buffer: Buffer, apiKey: string, mimetype 
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error(`[Groq STT] API error (${res.status}):`, errText);
-      return "";
+      throw new Error(`Groq API error (${res.status}): ${errText}`);
     }
 
     const data = await res.json();
@@ -380,14 +381,16 @@ async function transcribeAudioWithGroq(buffer: Buffer, apiKey: string, mimetype 
     return transcript;
   } catch (err: any) {
     console.error("[Groq STT] Exception during transcription:", err.message || err);
-    return "";
+    throw err;
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
-export async function transcribeAudio(buffer: Buffer, mimetype = "audio/ogg", config?: any): Promise<string> {
+export async function transcribeAudio(buffer: Buffer, mimetype = "audio/ogg", config?: any, tenantId?: string): Promise<string> {
   if (!buffer || buffer.length === 0) return "";
+
+  const errors: Record<string, string> = {};
 
   // 1. Gather keys
   const geminiKey = getEnvKey("GEMINI_API_KEY") || process.env.GEMINI_API_KEY || getEnvKey("GOOGLE_API_KEY") || process.env.GOOGLE_API_KEY || config?.geminiApiKey || "";
@@ -399,32 +402,71 @@ export async function transcribeAudio(buffer: Buffer, mimetype = "audio/ogg", co
 
   // 2. Try Deepgram STT if Deepgram key available (Highly accurate for WhatsApp OGG Opus)
   if (deepgramKey) {
-    const transcript = await transcribeAudioWithDeepgram(buffer, deepgramKey, mimetype);
-    if (transcript && transcript.trim()) return transcript.trim();
+    try {
+      const transcript = await transcribeAudioWithDeepgram(buffer, deepgramKey, mimetype);
+      if (transcript && transcript.trim()) return transcript.trim();
+      errors["Deepgram"] = "Empty transcript returned";
+    } catch (err: any) {
+      errors["Deepgram"] = err.message || String(err);
+    }
+  } else {
+    errors["Deepgram"] = "No API key configured";
   }
 
   // 3. Try Groq Whisper STT if Groq key available
   const effectiveGroqKey = groqKey || (generalKey.startsWith("gsk_") ? generalKey : "");
   if (effectiveGroqKey) {
-    const transcript = await transcribeAudioWithGroq(buffer, effectiveGroqKey, mimetype);
-    if (transcript && transcript.trim()) return transcript.trim();
+    try {
+      const transcript = await transcribeAudioWithGroq(buffer, effectiveGroqKey, mimetype);
+      if (transcript && transcript.trim()) return transcript.trim();
+      errors["Groq"] = "Empty transcript returned";
+    } catch (err: any) {
+      errors["Groq"] = err.message || String(err);
+    }
+  } else {
+    errors["Groq"] = "No API key configured";
   }
 
   // 4. Try OpenAI Whisper STT if OpenAI key available
   const effectiveOpenAIKey = openaiKey || ((generalKey.startsWith("sk-") || generalKey.startsWith("sk-proj-")) && !generalKey.startsWith("sk-ant-") && !generalKey.startsWith("sk-or-") ? generalKey : "");
   if (effectiveOpenAIKey) {
-    const transcript = await transcribeAudioWithOpenAI(buffer, effectiveOpenAIKey, mimetype);
-    if (transcript && transcript.trim()) return transcript.trim();
+    try {
+      const transcript = await transcribeAudioWithOpenAI(buffer, effectiveOpenAIKey, mimetype);
+      if (transcript && transcript.trim()) return transcript.trim();
+      errors["OpenAI"] = "Empty transcript returned";
+    } catch (err: any) {
+      errors["OpenAI"] = err.message || String(err);
+    }
+  } else {
+    errors["OpenAI"] = "No API key configured";
   }
 
   // 5. Try Gemini Flash STT if Gemini key available (Fallback: limited OGG Opus decoding)
   const effectiveGeminiKey = geminiKey || (generalKey.startsWith("AIza") ? generalKey : "");
   if (effectiveGeminiKey) {
-    const transcript = await transcribeAudioWithGemini(buffer, effectiveGeminiKey, mimetype);
-    if (transcript && transcript.trim()) return transcript.trim();
+    try {
+      const transcript = await transcribeAudioWithGemini(buffer, effectiveGeminiKey, mimetype);
+      if (transcript && transcript.trim()) return transcript.trim();
+      errors["Gemini"] = "Empty transcript returned";
+    } catch (err: any) {
+      errors["Gemini"] = err.message || String(err);
+    }
+  } else {
+    errors["Gemini"] = "No API key configured";
   }
 
-  console.warn("[STT Engine] No valid STT API key found (GEMINI_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, or DEEPGRAM_API_KEY) or all transcription attempts returned empty.");
+  console.warn("[STT Engine] All transcription attempts failed or returned empty. Error details:", errors);
+
+  // Instrument logAppError for STT failures to capture exactly why transcription failed
+  await logAppError({
+    service: 'stt-pipeline',
+    operation: 'transcribe',
+    error: new Error(`STTAllProvidersFailed: All speech-to-text providers failed to transcribe audio. Details: ${JSON.stringify(errors)}`),
+    tenantId,
+    severity: 'medium',
+    metadata: { errors, mimetype, bufferSize: buffer.length }
+  }).catch(() => {});
+
   return "";
 }
 
@@ -1730,23 +1772,26 @@ export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
 async function processWhatsAppWorkerJob(payload: WhatsAppJobPayload) {
   const { msg, tenantId, customerId } = payload;
 
-  // Correct DistributedLock API: acquire(key, options) — two args only.
-  // Lock key is per-customer to serialize messages from the same number.
-  const lockKey = `msg:${tenantId}:${customerId}`;
-  const lockResult = await DistributedLock.acquire(lockKey, { ttlMs: 30000 });
-  const lockHandle = lockResult.lock; // may be undefined if lock not acquired
+  let lockHandle: { release: () => Promise<void> } | undefined;
 
   try {
+    // Call the correct inline DistributedLock.acquire(tenantId, customerId, ttlMs)
+    lockHandle = await DistributedLock.acquire(tenantId, customerId, 30000);
+    
     const processPromise = processWhatsAppMessage(msg, customerId, tenantId);
     const timeoutPromise = new Promise<void>((_, reject) => 
       setTimeout(() => reject(new Error("Message processing timed out (35s)")), 35000)
     );
     await Promise.race([processPromise, timeoutPromise]);
   } catch (error: any) {
-    console.error(`[AI Handler] Error for customer ${customerId}:`, error.message || error);
+    console.error(`[AI Handler] Processing failure for customer ${customerId} under tenant ${tenantId}:`, error.message || error);
+    // Rethrow to let the queue manager know the job failed and should be retried or sent to DLQ
+    throw error;
   } finally {
     if (lockHandle) {
-      await lockHandle.release().catch(() => {});
+      await lockHandle.release().catch((releaseErr: any) => {
+        console.warn(`[AI Handler] Failed to release lock for customer ${customerId}:`, releaseErr.message || releaseErr);
+      });
     }
   }
 }
@@ -1755,12 +1800,13 @@ async function processWhatsAppWorkerJob(payload: WhatsAppJobPayload) {
 registerQueueWorker(processWhatsAppWorkerJob);
 
 async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: string) {
+  let resolvedTenantId: string | undefined = inputTenantId || undefined;
   try {
     const interactiveResponse = msg.message?.interactiveResponseMessage;
     let content = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || "";
     
     // Resolve Tenant ID early!
-    let resolvedTenantId = inputTenantId || WhatsAppManager.getActiveTenantId() || undefined;
+    resolvedTenantId = inputTenantId || WhatsAppManager.getActiveTenantId() || undefined;
     if (!resolvedTenantId) {
       resolvedTenantId = (await WhatsAppManager.resolveActiveTenantFromSocket()) || undefined;
     }
@@ -1844,7 +1890,7 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     let voiceTranscript = "";
     if (hasAudio && audioBuffer) {
       console.log(`[AI Handler] Voice note detected. Audio buffer size: ${audioBuffer.length} bytes. Mime: ${audioMime}`);
-      voiceTranscript = await transcribeAudio(audioBuffer, audioMime, config);
+      voiceTranscript = await transcribeAudio(audioBuffer, audioMime, config, resolvedTenantId);
       
       if (voiceTranscript) {
         // Run regex digit extraction for address validation (STT Safeguard)
@@ -2105,7 +2151,7 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     const lastMsg = tenantChats[tenantChats.length - 1];
     let isTemporalReset = false;
     if (lastMsg) {
-      const lastMsgTime = new Date(lastMsg.timestamp || lastMsg.created_at || Date.now()).getTime();
+      const lastMsgTime = new Date(lastMsg.timestamp || (lastMsg as any).created_at || Date.now()).getTime();
       if (Date.now() - lastMsgTime > FOUR_HOURS_MS) {
         isTemporalReset = true;
       }
@@ -2945,8 +2991,17 @@ This customer is a revived dead lead who recently responded to our re-engagement
       await DB.addChatMessage(from, { id: "ai_" + (sentMsg?.key?.id || ""), role: "assistant", content: aiReply || "[Media Sent]" }, resolvedTenantId);
     }
     
-  } catch (error) {
+  } catch (error: any) {
     console.error("[AI Handler] processWhatsAppMessage error:", error);
+    await logAppError({
+      service: 'ai-handler',
+      operation: 'process-message',
+      error: error instanceof Error ? error : new Error(String(error)),
+      tenantId: resolvedTenantId,
+      severity: 'high',
+      metadata: { customerPhone: from, messageId: msg?.key?.id }
+    }).catch(() => {});
+    throw error;
   }
 }
 

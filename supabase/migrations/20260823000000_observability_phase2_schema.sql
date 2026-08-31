@@ -352,10 +352,45 @@ ON CONFLICT (provider, model, pricing_version) DO NOTHING;
 -- model_pricing:    Indefinite. Never delete records referenced by llm_usage_logs.
 -- =============================================================================
 
+-- =============================================================================
+-- HELPER FUNCTION: Get recent chats partitioned by phone number (avoids flat limit truncation)
+-- =============================================================================
+CREATE OR REPLACE FUNCTION public.get_recent_chats(p_tenant_id TEXT, p_limit INT DEFAULT 100)
+RETURNS SETOF public.chat_messages
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    t.id, 
+    t.message_id, 
+    t.tenant_id, 
+    t.phone, 
+    t.role, 
+    t.content, 
+    t.timestamp, 
+    t.status, 
+    t.media_url, 
+    t.media_type, 
+    t.created_at
+  FROM (
+    SELECT 
+      *,
+      ROW_NUMBER() OVER (PARTITION BY phone ORDER BY timestamp DESC) as rn
+    FROM public.chat_messages
+    WHERE tenant_id = p_tenant_id
+  ) t
+  WHERE t.rn <= p_limit
+  ORDER BY t.timestamp DESC;
+END;
+$$;
+
 -- ROLLBACK
 -- =============================================================================
 -- SELECT public.increment_affected_tenant_count(NULL, NULL); -- no-op, just ensure fn exists
 -- DROP FUNCTION IF EXISTS public.increment_affected_tenant_count(UUID, TEXT);
+-- DROP FUNCTION IF EXISTS public.get_recent_chats(TEXT, INT);
 -- DROP TABLE IF EXISTS public.error_group_tenants CASCADE;
 -- DROP TABLE IF EXISTS public.llm_usage_logs CASCADE;
 -- DROP TABLE IF EXISTS public.app_errors CASCADE;
