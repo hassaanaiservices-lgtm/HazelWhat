@@ -1498,7 +1498,7 @@ function isKeywordMatch(query: string, target: string): boolean {
  * Automatically derives keyword rules from Knowledge Base (productInfo/knowledgeBase) & Product Catalog (products).
  * Manages 0-token Sequential Chatbot Flows & instant rule-based responses.
  */
-async function processHybridEngine(
+export async function processHybridEngine(
   from: string,
   content: string,
   config: any,
@@ -1571,46 +1571,143 @@ async function processHybridEngine(
       }
     }
 
-    let categoryMatch: string | null = null;
-    let matchedProducts: any[] = [];
+    // Synonym mappings to standard categories for Pizza Box & general stores
+    const categorySynonyms: Record<string, string[]> = {
+      "Starters": ["wings", "wing", "hot wings", "flaming wings", "chicken wings", "fries", "nuggets", "cheese sticks", "chunks", "starters", "platter", "spin roll"],
+      "Beverages": ["drink", "drinks", "bottle", "bottles", "coke", "pepsi", "sprite", "7up", "fanta", "dew", "cola", "water", "beverage", "soft drink", "botol"],
+      "Burgers & Sandwiches": ["burger", "burgers", "sandwich", "sandwiches", "zinger", "patty"],
+      "Pasta": ["pasta", "pastas", "alfredo", "macaroni"],
+      "Salad & Dessert": ["dessert", "desserts", "sweet", "sweets", "cake", "lava cake", "salad"],
+      "Legends Pizza": ["legends pizza", "pizza", "pizzas"],
+      "Ultimates Pizza": ["ultimates pizza", "pizza", "pizzas"],
+      "Signature Pizza": ["signature pizza", "pizza", "pizzas"]
+    };
 
-    // Category match only fires for SPECIFIC category keywords (burger, pizza, dessert etc).
-    // If it's a generic menu/catalog request, skip category filter — show full catalog.
-    // CRITICAL: "menu" keyword must NOT match the literal "Menu" category (which stores
-    // menu-board photos, not actual product items).
-    const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean))) as string[];
-    if (!isMenuRequest) {
-      for (const cat of categories) {
-        // Skip categories literally named "Menu" or "menu." — they contain board images, not items
-        if (/^menu\.?$/i.test(cat.trim())) continue;
-        if (isKeywordMatch(lowerContent, cat)) {
-          categoryMatch = cat;
-          matchedProducts = products.filter(p => p.category && isKeywordMatch(categoryMatch!, p.category));
+    const matchedCategories = new Set<string>();
+    for (const [catName, synonyms] of Object.entries(categorySynonyms)) {
+      for (const syn of synonyms) {
+        const regex = new RegExp(`\\b${syn}\\b`, 'i');
+        if (regex.test(lowerContent)) {
+          matchedCategories.add(catName);
           break;
-        }
-      }
-
-      // If no category match, try product title matching
-      if (!categoryMatch) {
-        matchedProducts = products.filter(p => p.title && isKeywordMatch(lowerContent, p.title));
-        if (matchedProducts.length > 0) {
-          categoryMatch = matchedProducts[0].title;
         }
       }
     }
 
-    if (isMenuRequest || categoryMatch) {
-      const displayProducts = categoryMatch && matchedProducts.length > 0 ? matchedProducts : products;
+    // Bypassing rule engine for complex multiple-category questions to let LLM formulate natural responses
+    if (matchedCategories.size > 1) {
+      console.log(`[AI Handler] Bypassing Hybrid Engine: user query spans multiple categories (${Array.from(matchedCategories).join(', ')}).`);
+      return { matched: false };
+    }
 
-      let menuText = categoryMatch
-        ? `📜 *${categoryMatch.toUpperCase()} MENU — ${activeTenant?.businessName || config.businessName || "OUR STORE"}* 🍕🍔\n\n`
-        : `📜 *${activeTenant?.businessName || config.businessName || "OUR"} MENU* 🍕🍔\n\n`;
+    let matchedProducts: any[] = [];
+    if (matchedCategories.size > 0) {
+      const activeCats = Array.from(matchedCategories).map(c => c.toLowerCase().trim());
+      matchedProducts = products.filter(p => {
+        if (!p.category) return false;
+        const pCatLower = p.category.toLowerCase().trim();
+        const isCatMatch = activeCats.includes(pCatLower);
+        if (!isCatMatch) return false;
 
-      const grouped: Record<string, any[]> = {};
-      displayProducts.forEach(p => {
-        if (!p.title) return;
+        const cleanTitle = p.title ? p.title.toLowerCase().trim() : "";
+        const queryWords = lowerContent.split(/[\s,.-]+/);
+        const titleWords = cleanTitle.split(/[\s,.-]+/);
+        
+        // Exact title match or query contains word stem
+        const titleMatch = titleWords.some((tw: string) => {
+          if (tw.length < 3) return false;
+          const twStem = tw.endsWith('s') ? tw.slice(0, -1) : tw;
+          return queryWords.some((qw: string) => {
+            if (qw.length < 3) return false;
+            const qwStem = qw.endsWith('s') ? qw.slice(0, -1) : qw;
+            return qwStem === twStem;
+          });
+        });
+
+        let specificMatch = false;
+        if (cleanTitle.includes("soft drink") && ["coke", "sprite", "7up", "pepsi", "fanta", "dew", "drink", "bottle", "botol"].some(w => lowerContent.includes(w))) {
+          specificMatch = true;
+        }
+        if (cleanTitle.includes("water") && ["water", "paani", "pani"].some(w => lowerContent.includes(w))) {
+          specificMatch = true;
+        }
+        
+        return titleMatch || specificMatch || lowerContent.includes(cleanTitle) || cleanTitle.includes(lowerContent);
+      });
+    } else {
+      matchedProducts = products.filter(p => {
+        if (!p.title) return false;
+        const cleanTitle = p.title.toLowerCase().trim();
+        if (/^menu\.?$/i.test(cleanTitle) || (p.category && /^menu\.?$/i.test(p.category.trim()))) return false;
+
+        const queryWords = lowerContent.split(/[\s,.-]+/);
+        const titleWords = cleanTitle.split(/[\s,.-]+/);
+        
+        const titleMatch = titleWords.some((tw: string) => {
+          if (tw.length < 3) return false;
+          const twStem = tw.endsWith('s') ? tw.slice(0, -1) : tw;
+          return queryWords.some((qw: string) => {
+            if (qw.length < 3) return false;
+            const qwStem = qw.endsWith('s') ? qw.slice(0, -1) : qw;
+            return qwStem === twStem;
+          });
+        });
+
+        return titleMatch || lowerContent.includes(cleanTitle) || cleanTitle.includes(lowerContent);
+      });
+    }
+
+    // A. Specific Item Request matched
+    if (matchedProducts.length > 0 && !isMenuRequest) {
+      const uniqueMatched = matchedProducts.filter((v, i, a) => a.findIndex(t => t.title === v.title) === i);
+      
+      let replyText = `📜 *${activeTenant?.businessName || config.businessName || "Pizza Box"} Menu* 🍕🍔\n\n`;
+      const albumImages: string[] = [];
+      
+      uniqueMatched.forEach(p => {
+        const cleanPrice = p.price ? p.price.replace(new RegExp(currency, 'gi'), '').trim() : "";
+        const priceDisplay = cleanPrice && cleanPrice !== "0" && cleanPrice !== "N/A" ? `${currency} ${cleanPrice}` : "N/A";
+        replyText += `• *${p.title}* — ${priceDisplay}\n`;
+        
+        if (isValidImage(p.image)) {
+          if (!albumImages.includes(p.image.trim())) albumImages.push(p.image.trim());
+        }
+        if (isValidImage(p.imageUrl)) {
+          if (!albumImages.includes(p.imageUrl.trim())) albumImages.push(p.imageUrl.trim());
+        }
+        if (p.images && Array.isArray(p.images)) {
+          p.images.forEach((img: string) => {
+            if (isValidImage(img) && !albumImages.includes(img.trim())) {
+              albumImages.push(img.trim());
+            }
+          });
+        }
+      });
+      
+      replyText += `\nKaunsa order karna hai aur kitne pieces/quantity?`;
+      
+      return {
+        matched: true,
+        reply: replyText,
+        images: albumImages.length > 0 ? albumImages.slice(0, 15) : undefined,
+        source: "product_catalog"
+      };
+    }
+
+    // B. Full Menu/Catalog Request matched
+    if (isMenuRequest) {
+      const displayProducts = products.filter(p => {
+        if (!p.title) return false;
         const titleLower = p.title.toLowerCase().trim();
-        if (["menu", "menu.", "pizza menu", "website", "link", "card"].includes(titleLower)) return;
+        if (["menu", "menu.", "pizza menu", "website", "link", "card"].includes(titleLower)) return false;
+        if (p.category && /^menu\.?$/i.test(p.category.trim())) return false;
+        return true;
+      });
+
+      let menuText = `📜 *${activeTenant?.businessName || config.businessName || "Pizza Box"} Menu* 🍕🍔\n\n`;
+      const grouped: Record<string, any[]> = {};
+      
+      displayProducts.forEach(p => {
         const cat = p.category || "Menu Items";
         if (!grouped[cat]) grouped[cat] = [];
         grouped[cat].push(p);
@@ -1622,34 +1719,20 @@ async function processHybridEngine(
         menuText += `*${cat.toUpperCase()}*\n`;
         items.forEach(p => {
           itemCount++;
-          const priceClean = p.price && p.price !== "0" && p.price !== "N/A" ? `${currency} ${p.price}` : "";
-          menuText += `• *${p.title}*${priceClean ? ` — ${priceClean}` : ""}\n`;
-          if (p.description) {
-            menuText += `   _${p.description}_\n`;
-          }
+          const cleanPrice = p.price ? p.price.replace(new RegExp(currency, 'gi'), '').trim() : "";
+          const priceDisplay = cleanPrice && cleanPrice !== "0" && cleanPrice !== "N/A" ? `${currency} ${cleanPrice}` : "";
+          menuText += `• *${p.title}*${priceDisplay ? ` — ${priceDisplay}` : ""}\n`;
+          
           if (isValidImage(p.image)) {
             if (!albumImages.includes(p.image.trim())) albumImages.push(p.image.trim());
           }
           if (isValidImage(p.imageUrl)) {
             if (!albumImages.includes(p.imageUrl.trim())) albumImages.push(p.imageUrl.trim());
           }
-          if (p.images && Array.isArray(p.images)) {
-            p.images.forEach((img: string) => {
-              if (isValidImage(img) && !albumImages.includes(img.trim())) {
-                albumImages.push(img.trim());
-              }
-            });
-          }
-          if (p.imageUrls && Array.isArray(p.imageUrls)) {
-            p.imageUrls.forEach((img: string) => {
-              if (isValidImage(img) && !albumImages.includes(img.trim())) {
-                albumImages.push(img.trim());
-              }
-            });
-          }
         });
         menuText += `\n`;
       }
+      
       if (itemCount > 0) {
         menuText += `Order karne ke liye item ka naam aur quantity bata dein! 😊`;
         return {

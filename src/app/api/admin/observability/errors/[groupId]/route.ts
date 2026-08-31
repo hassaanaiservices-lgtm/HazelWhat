@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { groupId: string } }
+  { params }: { params: Promise<{ groupId: string }> }
 ) {
   const session = await requireAdminSession(request);
   if (!session) {
@@ -22,7 +22,7 @@ export async function GET(
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
 
-  const { groupId } = params;
+  const { groupId } = await params;
   if (!groupId) {
     return NextResponse.json({ error: "Missing groupId" }, { status: 400 });
   }
