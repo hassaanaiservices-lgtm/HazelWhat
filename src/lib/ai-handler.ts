@@ -1477,8 +1477,53 @@ async function processHybridEngine(
 
   // 1. FAST-PATH: Category & Instant Catalog / Menu Generator with Multi-Image Album Burst (0 Tokens)
   if (products.length > 0) {
-    const isMenuRequest = ["menu", "show menu", "send menu", "deikhao menu", "dikhao menu", "menu bhajo", "menu do", "menu bhej do", "catalog", "rate list", "list", "card", "website", "products", "services"].some(w => lowerContent === w || lowerContent.includes(w));
+    const isMenuRequest = ["menu", "show menu", "send menu", "deikhao menu", "dikhao menu", "menu bhajo", "menu do", "menu bhej do", "catalog", "rate list", "list", "card", "website", "products", "services", "deals", "deal", "special deal", "deal dikhao", "deals dikhao", "kya khane ko hai", "khane ko kya hai", "kya kya hai"].some(w => lowerContent === w || lowerContent.includes(w));
     
+    // FAST-PATH: If they ask for the menu, search for products named "Menu" / "menu." or in the "Menu" category (which represent the board images).
+    if (isMenuRequest) {
+      const menuBoardProducts = products.filter(p => 
+        (p.title && /^menu\.?$/i.test(p.title.trim())) || 
+        (p.category && /^menu\.?$/i.test(p.category.trim()))
+      );
+
+      if (menuBoardProducts.length > 0) {
+        const albumImages: string[] = [];
+        menuBoardProducts.forEach(p => {
+          if (p.image && typeof p.image === 'string' && p.image.startsWith('http')) {
+            if (!albumImages.includes(p.image.trim())) albumImages.push(p.image.trim());
+          }
+          if (p.imageUrl && typeof p.imageUrl === 'string' && p.imageUrl.startsWith('http')) {
+            if (!albumImages.includes(p.imageUrl.trim())) albumImages.push(p.imageUrl.trim());
+          }
+          if (p.images && Array.isArray(p.images)) {
+            p.images.forEach((img: string) => {
+              if (img && typeof img === 'string' && img.startsWith('http') && !albumImages.includes(img.trim())) {
+                albumImages.push(img.trim());
+              }
+            });
+          }
+          if (p.imageUrls && Array.isArray(p.imageUrls)) {
+            p.imageUrls.forEach((img: string) => {
+              if (img && typeof img === 'string' && img.startsWith('http') && !albumImages.includes(img.trim())) {
+                albumImages.push(img.trim());
+              }
+            });
+          }
+        });
+
+        if (albumImages.length > 0) {
+          const businessName = activeTenant?.businessName || config.businessName || "Pizza Box";
+          console.log(`[AI Handler] Menu board fast-path: returning ${albumImages.length} images.`);
+          return {
+            matched: true,
+            reply: `Yeh raha *${businessName}* ka menu! 🍕📋 Aur kuch order karna chahenge?`,
+            images: albumImages,
+            source: "product_catalog"
+          };
+        }
+      }
+    }
+
     let categoryMatch: string | null = null;
     let matchedProducts: any[] = [];
 
