@@ -124,7 +124,8 @@ export function formatProductsToCatalog(products: ProductItem[], currency: strin
       }
       
       const cleanTitle = sanitizeCatalogField(p.title);
-      const cleanImage = sanitizeCatalogField(p.image);
+      const imgVal = p.image || p.imageUrl || (p.imageUrls && p.imageUrls[0]) || (p.images && p.images[0]) || "N/A";
+      const cleanImage = sanitizeCatalogField(imgVal);
       const cleanLink = sanitizeCatalogField(p.link);
       const cleanDescription = p.description ? sanitizeCatalogField(p.description) : "";
       const basePrice = formatPrice(p.price);
@@ -1383,19 +1384,19 @@ export class DB {
     {
       id: 't-1002',
       clientNumber: '1002',
-      name: 'Leads',
-      businessName: 'Hazeldid Store',
+      name: 'Pizza Box',
+      businessName: 'Pizza Box',
       phoneNumber: '03177598978',
-      email: 'client@business.com',
+      email: 'pizzabox@business.com',
       status: 'active',
       installationFee: 0,
-      monthlySubscriptionFee: 0,
+      monthlySubscriptionFee: 9000,
       currency: 'PKR',
       paymentStatus: 'paid',
       allocatedMinutes: 800,
       usedMinutes: 0,
-      clientUsername: 'hazeldid_346',
-      clientPassword: 'client1002',
+      clientUsername: 'pizzabox_peshawar',
+      clientPassword: 'PizzaBox@123',
       systemPrompt: '',
       knowledgeBase: '',
       productKnowledgeBase: '',
@@ -1555,6 +1556,34 @@ export class DB {
       t.clientNumber?.toString().replace(/^#/, '').trim().toLowerCase() === cleanId ||
       t.clientUsername?.trim().toLowerCase() === cleanId
     ) || null;
+  }
+
+  static async getTenantByPhoneNumber(phone: string): Promise<Tenant | null> {
+    if (!phone) return null;
+    const cleanDigits = phone.replace(/\D/g, "");
+    if (!cleanDigits) return null;
+    const tenants = await DB.getTenants();
+    return tenants.find(t => {
+      if (!t.phoneNumber) return false;
+      const tDigits = t.phoneNumber.replace(/\D/g, "");
+      return tDigits && (tDigits === cleanDigits || tDigits.endsWith(cleanDigits) || cleanDigits.endsWith(tDigits));
+    }) || null;
+  }
+
+  static async updateTenant(tenantId: string, updates: Partial<Tenant>): Promise<boolean> {
+    try {
+      const tenants = await DB.getTenants();
+      const tenantIndex = tenants.findIndex(t => t.id === tenantId);
+      if (tenantIndex !== -1) {
+        tenants[tenantIndex] = { ...tenants[tenantIndex], ...updates };
+        await DB.saveTenants(tenants);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error("[DB] updateTenant error:", e);
+      return false;
+    }
   }
 
   static async saveTenants(tenants: Tenant[]): Promise<boolean> {

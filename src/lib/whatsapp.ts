@@ -800,7 +800,7 @@ export class WhatsAppManager {
         retryRequestOptions: {
           maxRetries: 5
         }
-      });
+      } as any);
 
       session.sock = sock;
 
@@ -955,6 +955,26 @@ export class WhatsAppManager {
 
           await WhatsAppSessionRegistry.updateStatus(tenantId, "CONNECTED", "active");
 
+          // Cross-tenant phone re-assignment guard:
+          const connectedPhone = session.sock?.user?.id?.split("@")[0].split(":")[0].replace(/[^0-9]/g, "");
+          if (connectedPhone) {
+            await DB.updateTenant(tenantId, { phoneNumber: connectedPhone }).catch(() => {});
+
+            if (globalForBaileys.baileysSessions) {
+              for (const [otherTenantId, otherSession] of globalForBaileys.baileysSessions.entries()) {
+                if (otherTenantId !== tenantId) {
+                  const otherPhone = otherSession.sock?.user?.id?.split("@")[0].split(":")[0].replace(/[^0-9]/g, "");
+                  if (otherPhone && otherPhone === connectedPhone) {
+                    console.warn(`[WhatsApp] Phone ${connectedPhone} re-assigned to tenant ${tenantId}. Disconnecting duplicate session on tenant ${otherTenantId}...`);
+                    WhatsAppManager.disconnectTenant(otherTenantId).catch(err => {
+                      console.error(`[WhatsApp] Error disconnecting duplicate session on ${otherTenantId}:`, err);
+                    });
+                  }
+                }
+              }
+            }
+          }
+
           WhatsAppManager.resolveActiveTenantFromSocket(tenantId).catch(err => {
             console.error(`[WhatsApp] Error resolving active tenant on connection open for ${tenantId}:`, err);
           });
@@ -963,6 +983,16 @@ export class WhatsAppManager {
 
       sock.ev.on("messages.upsert", async (m) => {
         if (m.type === "notify") {
+          // Guard: Verify that this socket is still the active session owner for this phone number
+          const currentSockPhone = sock.user?.id?.split("@")[0].split(":")[0].replace(/[^0-9]/g, "");
+          if (currentSockPhone) {
+            const activeTenant = await DB.getTenantByPhoneNumber(currentSockPhone);
+            if (activeTenant && activeTenant.id !== tenantId) {
+              console.warn(`[WhatsApp] Suppressing message handler for tenant ${tenantId} because phone ${currentSockPhone} is now assigned to tenant ${activeTenant.id}`);
+              WhatsAppManager.disconnectTenant(tenantId).catch(() => {});
+              return;
+            }
+          }
           for (const msg of m.messages) {
             const remoteJid = msg.key.remoteJid;
             if (!remoteJid || remoteJid === "status@broadcast" || remoteJid.endsWith("@newsletter")) {
@@ -993,7 +1023,7 @@ export class WhatsAppManager {
                   if (originalJid) {
                     await DB.updateCustomer(from, { jid: originalJid }, tenantId);
                   }
-                  const history = await DB.getChats(from);
+                  const history = await DB.getChats(from, tenantId);
                   const exists = history.some((chatMsg: any) => chatMsg.id === msg.key.id);
                   if (!exists) {
                     await DB.addChatMessage(from, { id: msg.key.id || undefined, role: "assistant", content }, tenantId);
@@ -1051,7 +1081,7 @@ export class WhatsAppManager {
                   if (originalJid) {
                     await DB.updateCustomer(from, { jid: originalJid }, tenantId);
                   }
-                  const history = await DB.getChats(from);
+                  const history = await DB.getChats(from, tenantId);
                   const exists = history.some((chatMsg: any) => chatMsg.id === msg.key.id);
                   if (!exists) {
                     const timestampStr = msg.messageTimestamp 
@@ -1430,7 +1460,41 @@ export class WhatsAppManager {
     }
   }
 
-  static async sendProductCard(to: string, product: { title: string; price: string; image: string; link: string; id?: string; description?: string }, tenantId?: string) {
+  static async sendMediaAlbumBurst(to: string, imageUrls: string[], caption?: string, tenantId?: string) {
+    if (!imageUrls || imageUrls.length === 0) return null;
+    const tId = tenantId || await this.resolveTenantForPhone(to);
+    const session = this.getOrCreateSession(tId);
+    if (session.status !== "CONNECTED" || !session.sock) {
+      throw new Error("WhatsApp not connected");
+    }
+    const jid = await this.resolveJid(to, tId);
+    
+    const validUrls = imageUrls.filter(url => 
+      url && typeof url === 'string' && 
+      (url.startsWith('http://') || url.startsWith('https://')) && 
+      !url.includes('placeholder')
+    );
+
+    if (validUrls.length === 0) return null;
+
+    let firstSentMsg = null;
+    for (let i = 0; i < validUrls.length; i++) {
+      const url = validUrls[i];
+      const imgCap = i === 0 ? (caption || "") : "";
+      try {
+        const sent = await session.sock.sendMessage(jid, { image: { url: url.trim() }, caption: imgCap });
+        if (i === 0) firstSentMsg = sent;
+        if (i < validUrls.length - 1) {
+          await new Promise(r => setTimeout(r, 250));
+        }
+      } catch (e) {
+        console.error(`[WhatsApp] Failed to send album image ${i + 1}/${validUrls.length}:`, e);
+      }
+    }
+    return firstSentMsg;
+  }
+
+  static async sendProductCard(to: string, product: { title: string; price: string; image: string; images?: string[]; link?: string; id?: string; description?: string }, tenantId?: string) {
     const tId = tenantId || await this.resolveTenantForPhone(to);
     const session = this.getOrCreateSession(tId);
     if (session.status !== "CONNECTED" || !session.sock) {
@@ -1459,10 +1523,23 @@ export class WhatsAppManager {
       caption += `\n\nView Product: ${product.link}`;
     }
 
-    if (isValidUrl(product.image)) {
+    const allImages: string[] = [];
+    if (isValidUrl(product.image)) allImages.push(product.image.trim());
+    if (product.images && Array.isArray(product.images)) {
+      product.images.forEach(img => {
+        if (isValidUrl(img) && !allImages.includes(img.trim())) {
+          allImages.push(img.trim());
+        }
+      });
+    }
+
+    if (allImages.length > 1) {
+      console.log(`[sendProductCard] Sending multi-image album burst (${allImages.length} images) for ${product.title}...`);
+      await this.sendMediaAlbumBurst(to, allImages, caption, tId);
+    } else if (allImages.length === 1) {
       try {
         await session.sock.sendMessage(jid, { 
-          image: { url: product.image.trim() }, 
+          image: { url: allImages[0] }, 
           caption 
         });
       } catch (e) {

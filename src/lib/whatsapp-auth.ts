@@ -144,7 +144,7 @@ export const useSupabaseAuthState = async (tenantId: string): Promise<{ state: A
     }
 
     // Sync changes to DB synchronously to ensure pre-keys/app-state keys aren't lost on restart
-    const tasks: Promise<any>[] = [];
+    const tasks: PromiseLike<any>[] = [];
     if (toWrite.length > 0) {
       tasks.push(
         client.from("whatsapp_auth").upsert(toWrite, { onConflict: 'tenant_id,key_id' }).then(({ error }) => {

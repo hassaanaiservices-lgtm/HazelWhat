@@ -71,6 +71,65 @@ export async function checkTenantDailyBudget(
 }
 
 /**
+ * Rate Limiter for Requests Per Minute (RPM) & Tokens Per Minute (TPM)
+ */
+export async function checkTenantRateLimit(
+  tenantId: string,
+  estimatedTokens: number = 1000
+): Promise<{ allowed: boolean; reason?: "rate_limit_exceeded" }> {
+  const redis = getRedisClient();
+  const minuteKey = new Date().toISOString().substring(0, 16); // YYYY-MM-DDTHH:MM
+  const rpmKey = `llm:rate:rpm:${tenantId}:${minuteKey}`;
+  const tpmKey = `llm:rate:tpm:${tenantId}:${minuteKey}`;
+
+  // Limit constants
+  const maxRpm = 60; // 60 requests per minute
+  const maxTpm = DEFAULT_MAX_TOKENS_PER_MINUTE;
+
+  if (redis) {
+    try {
+      const currentRpm = await redis.incr(rpmKey);
+      await redis.expire(rpmKey, 120);
+      if (currentRpm > maxRpm) {
+        await redis.decr(rpmKey);
+        return { allowed: false, reason: "rate_limit_exceeded" };
+      }
+
+      const currentTpm = await redis.incrby(tpmKey, estimatedTokens);
+      await redis.expire(tpmKey, 120);
+      if (currentTpm > maxTpm) {
+        await redis.decrby(tpmKey, estimatedTokens);
+        await redis.decr(rpmKey);
+        return { allowed: false, reason: "rate_limit_exceeded" };
+      }
+
+      return { allowed: true };
+    } catch (err: any) {
+      logger.warn({ event: "redis_rate_limit_check_failed", error: err.message, tenantId });
+    }
+  }
+
+  // InMemory Fallback
+  const inMemoryRpmKey = `${tenantId}:${minuteKey}:rpm`;
+  const inMemoryTpmKey = `${tenantId}:${minuteKey}:tpm`;
+
+  const currRpm = inMemoryDailyCost.get(inMemoryRpmKey) || 0;
+  if (currRpm >= maxRpm) {
+    return { allowed: false, reason: "rate_limit_exceeded" };
+  }
+
+  const currTpm = inMemoryDailyCost.get(inMemoryTpmKey) || 0;
+  if (currTpm + estimatedTokens > maxTpm) {
+    return { allowed: false, reason: "rate_limit_exceeded" };
+  }
+
+  inMemoryDailyCost.set(inMemoryRpmKey, currRpm + 1);
+  inMemoryDailyCost.set(inMemoryTpmKey, currTpm + estimatedTokens);
+
+  return { allowed: true };
+}
+
+/**
  * Atomic Concurrency Control: Acquire an execution slot for an LLM provider call.
  */
 export async function acquireLLMConcurrencySlot(
@@ -93,6 +152,24 @@ export async function acquireLLMConcurrencySlot(
       tenantId,
       provider,
       reason: "budget_exceeded",
+      release: async () => {},
+    };
+  }
+
+  // 1.5 Rate Limit Check
+  const rateLimitCheck = await checkTenantRateLimit(tenantId);
+  if (!rateLimitCheck.allowed) {
+    logger.warn({
+      event: "llm_rate_limit_exceeded",
+      tenant_id: tenantId,
+      provider,
+      reason: rateLimitCheck.reason,
+    });
+    return {
+      acquired: false,
+      tenantId,
+      provider,
+      reason: "rate_limit_exceeded",
       release: async () => {},
     };
   }

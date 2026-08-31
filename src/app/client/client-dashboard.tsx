@@ -129,7 +129,23 @@ export default function DashboardPage() {
     setEditingProduct(prod);
     setProdTitle(prod.title || "");
     setProdPrice(prod.price || "");
-    setProdImage(prod.image || "");
+    
+    // Combine image, imageUrl, images, and imageUrls
+    const allImgs: string[] = [];
+    if (prod.image) allImgs.push(prod.image);
+    if (prod.imageUrl && !allImgs.includes(prod.imageUrl)) allImgs.push(prod.imageUrl);
+    if (prod.images && Array.isArray(prod.images)) {
+      prod.images.forEach((img: string) => {
+        if (img && !allImgs.includes(img)) allImgs.push(img);
+      });
+    }
+    if (prod.imageUrls && Array.isArray(prod.imageUrls)) {
+      prod.imageUrls.forEach((img: string) => {
+        if (img && !allImgs.includes(img)) allImgs.push(img);
+      });
+    }
+    setProdImage(allImgs.join("\n"));
+    
     setProdLink(prod.link || "");
     setProdCategory(prod.category || "");
     setProdDesc(prod.description || "");
@@ -172,7 +188,8 @@ export default function DashboardPage() {
           });
         }
         const basePrice = formatPrice(p.price);
-        text += `- ${p.title} (Base Price/Range: ${basePrice})\n  Image: ${p.image || "N/A"}\n  Link: ${p.link || "N/A"}${p.description ? `\n  Description: ${p.description}` : ""}${variationsText}\n\n`;
+        const imgVal = p.image || p.imageUrl || (p.imageUrls && p.imageUrls[0]) || (p.images && p.images[0]) || "N/A";
+        text += `- ${p.title} (Base Price/Range: ${basePrice})\n  Image: ${imgVal}\n  Link: ${p.link || "N/A"}${p.description ? `\n  Description: ${p.description}` : ""}${variationsText}\n\n`;
       });
     }
     return text;
@@ -220,11 +237,17 @@ export default function DashboardPage() {
         })
       : undefined;
 
+    const urls = prodImage.split("\n").map(u => u.trim()).filter(Boolean);
+    const mainImage = urls[0] || "";
+
     const newProdItem = {
       id: editingProduct ? editingProduct.id : `custom-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
       title: prodTitle.trim(),
       price: prodPrice.trim() || `${scrapeCurrency}0.00`,
-      image: prodImage.trim(),
+      image: mainImage,
+      imageUrl: mainImage,
+      images: urls,
+      imageUrls: urls,
       link: prodLink.trim(),
       category: prodCategory.trim() || "General Products",
       description: prodDesc.trim(),
@@ -1293,6 +1316,29 @@ export default function DashboardPage() {
 
 
 
+  const openChatForPhone = (rawPhone: string) => {
+    if (!rawPhone) return;
+
+    const cleanDigits = rawPhone.replace(/\D/g, "");
+    const chatKeys = Object.keys(chats);
+    const customerKeys = Object.keys(customers);
+    const allKeys = Array.from(new Set([...chatKeys, ...customerKeys]));
+
+    let targetKey = allKeys.find(k => k === rawPhone || k.replace(/\D/g, "") === cleanDigits);
+
+    if (!targetKey && cleanDigits.length >= 7) {
+      const suffix = cleanDigits.slice(-9);
+      targetKey = allKeys.find(k => k.replace(/\D/g, "").endsWith(suffix));
+    }
+
+    const finalPhoneKey = targetKey || rawPhone;
+
+    setInboxSearch("");
+    setInboxFilter("all");
+    setSelectedChat(finalPhoneKey);
+    setActiveTab("inbox");
+  };
+
   const markChatAsRead = async (phone: string) => {
     try {
       await fetch("/api/whatsapp/read", {
@@ -1947,8 +1993,7 @@ export default function DashboardPage() {
               onClick={() => {
                 stopOrderAlarm();
                 if (newOrderBanner.phone) {
-                  setSelectedChat(newOrderBanner.phone);
-                  setActiveTab('inbox');
+                  openChatForPhone(newOrderBanner.phone);
                 } else {
                   setActiveTab('orders');
                 }
@@ -2739,117 +2784,151 @@ export default function DashboardPage() {
             </div>
           ) : (
             <>
-               {/* Chat Header */}
-               <div className="h-[68px] bg-white border-b border-[#d3cec6] px-6 flex items-center justify-between z-10 flex-shrink-0 shadow-xs">
-                 <div className="flex items-center gap-3.5 cursor-pointer">
-                   {(() => {
-                     const isHeaderAiEnabled = customers[selectedChat]?.aiEnabled !== undefined ? customers[selectedChat].aiEnabled : (config.globalAiEnabled !== false);
-                     return (
-                       <div className={`h-10 w-10 rounded-full ${isHeaderAiEnabled ? 'bg-[#ff5600]' : 'bg-[#111111]'} flex items-center justify-center overflow-hidden flex-shrink-0 shadow-xs`}>
-                         <User className="h-5 w-5 text-white" />
-                       </div>
-                     );
-                   })()}
-                   <div className="flex flex-col">
-                    <h4 className="font-semibold text-[#111111] text-sm">
-                      {(() => {
-                        const savedName = customers[selectedChat]?.name;
-                        if (savedName && savedName !== selectedChat) return savedName;
-                        if (selectedChat.includes('@g.us')) return `Group: ${selectedChat.split('@')[0]}`;
-                        if (selectedChat.includes('@lid')) return `+${selectedChat.split('@')[0]} (Linked Device)`;
-                        if (selectedChat.includes('@')) return `+${selectedChat.split('@')[0]}`;
-                        return `+${selectedChat}`;
-                      })()}
-                    </h4>
-                    <span className="text-[11px] text-[#7b7b78] font-normal">({selectedChat.split('@')[0]}) | Active Contact</span>
-                  </div>
-                </div>
-                
-                {/* Autopilot Toggle */}
-                <div className="flex items-center bg-[#ebe7e1] border border-[#d3cec6] rounded-lg p-1">
-                  {(() => {
-                    const isAiEnabled = customers[selectedChat]?.aiEnabled !== undefined ? customers[selectedChat].aiEnabled : (config.globalAiEnabled !== false);
-                    return (
-                      <>
-                        <button 
-                          onClick={() => toggleChatAi(true)}
-                          className={`${isAiEnabled ? 'bg-[#111111] text-white shadow-xs' : 'text-[#626260] hover:text-[#111111]'} text-xs font-medium px-3.5 py-1 rounded-md transition cursor-pointer`}
-                        >
-                          Autopilot
-                        </button>
-                        <button 
-                          onClick={() => toggleChatAi(false)}
-                          className={`${!isAiEnabled ? 'bg-[#111111] text-white shadow-xs' : 'text-[#626260] hover:text-[#111111]'} text-xs font-medium px-3.5 py-1 rounded-md transition cursor-pointer`}
-                        >
-                          Copilot
-                        </button>
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-              
-              {/* Complaint Summary Box */}
               {(() => {
-                const customer = customers[selectedChat];
-                let hasComplaint = false;
-                let complaintSummary = "";
-                try {
-                  const p = JSON.parse(customer?.preferences || "{}");
-                  hasComplaint = p.hasComplaint === true;
-                  complaintSummary = p.complaintSummary || "";
-                } catch(e) {}
+                const resolvedChatKey = (() => {
+                  if (!selectedChat) return null;
+                  if (chats[selectedChat]) return selectedChat;
+                  const cleanDigits = selectedChat.replace(/\D/g, "");
+                  const chatKeys = Object.keys(chats);
+                  const matched = chatKeys.find(k => k.replace(/\D/g, "") === cleanDigits);
+                  if (matched) return matched;
+                  if (cleanDigits.length >= 7) {
+                    const suffix = cleanDigits.slice(-9);
+                    const suffixMatched = chatKeys.find(k => k.replace(/\D/g, "").endsWith(suffix));
+                    if (suffixMatched) return suffixMatched;
+                  }
+                  return selectedChat;
+                })();
 
-                if (!hasComplaint) return null;
+                const resolvedCustomerKey = (() => {
+                  if (!selectedChat) return null;
+                  if (customers[selectedChat]) return selectedChat;
+                  const cleanDigits = selectedChat.replace(/\D/g, "");
+                  const custKeys = Object.keys(customers);
+                  const matched = custKeys.find(k => k.replace(/\D/g, "") === cleanDigits);
+                  if (matched) return matched;
+                  if (cleanDigits.length >= 7) {
+                    const suffix = cleanDigits.slice(-9);
+                    const suffixMatched = custKeys.find(k => k.replace(/\D/g, "").endsWith(suffix));
+                    if (suffixMatched) return suffixMatched;
+                  }
+                  return selectedChat;
+                })();
+
+                const activeCustomer = (resolvedCustomerKey && customers[resolvedCustomerKey]) || (selectedChat && customers[selectedChat]) || null;
+                const activeMessages = (resolvedChatKey && chats[resolvedChatKey]) || (selectedChat && chats[selectedChat]) || [];
 
                 return (
-                  <div className="bg-rose-50 border-b border-rose-200/60 px-6 py-3.5 flex items-center justify-between z-10 flex-shrink-0 animate-fade-in">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="bg-rose-100 p-2 rounded-lg text-rose-700 flex-shrink-0 mt-0.5">
-                        <AlertCircle className="h-5 w-5" />
+                  <>
+                    {/* Chat Header */}
+                    <div className="h-[68px] bg-white border-b border-[#d3cec6] px-6 flex items-center justify-between z-10 flex-shrink-0 shadow-xs">
+                      <div className="flex items-center gap-3.5 cursor-pointer">
+                        {(() => {
+                          const isHeaderAiEnabled = activeCustomer?.aiEnabled !== undefined ? activeCustomer.aiEnabled : (config.globalAiEnabled !== false);
+                          return (
+                            <div className={`h-10 w-10 rounded-full ${isHeaderAiEnabled ? 'bg-[#ff5600]' : 'bg-[#111111]'} flex items-center justify-center overflow-hidden flex-shrink-0 shadow-xs`}>
+                              <User className="h-5 w-5 text-white" />
+                            </div>
+                          );
+                        })()}
+                        <div className="flex flex-col">
+                          <h4 className="font-semibold text-[#111111] text-sm">
+                            {(() => {
+                              const savedName = activeCustomer?.name;
+                              if (savedName && savedName !== selectedChat) return savedName;
+                              if (selectedChat.includes('@g.us')) return `Group: ${selectedChat.split('@')[0]}`;
+                              if (selectedChat.includes('@lid')) return `+${selectedChat.split('@')[0]} (Linked Device)`;
+                              if (selectedChat.includes('@')) return `+${selectedChat.split('@')[0]}`;
+                              return `+${selectedChat}`;
+                            })()}
+                          </h4>
+                          <span className="text-[11px] text-[#7b7b78] font-normal">({selectedChat.split('@')[0]}) | Active Contact</span>
+                        </div>
                       </div>
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-[10px] font-bold text-rose-800 tracking-wider uppercase mb-0.5">
-                          ACTIVE CUSTOMER COMPLAINT SUMMARY
-                        </span>
-                        <p className="text-xs text-rose-700 font-medium leading-relaxed">
-                          "{complaintSummary || "Customer has filed an active complaint."}"
-                        </p>
+                      
+                      {/* Autopilot Toggle */}
+                      <div className="flex items-center bg-[#ebe7e1] border border-[#d3cec6] rounded-lg p-1">
+                        {(() => {
+                          const isAiEnabled = activeCustomer?.aiEnabled !== undefined ? activeCustomer.aiEnabled : (config.globalAiEnabled !== false);
+                          return (
+                            <>
+                              <button 
+                                onClick={() => toggleChatAi(true, resolvedCustomerKey || selectedChat)}
+                                className={`${isAiEnabled ? 'bg-[#111111] text-white shadow-xs' : 'text-[#626260] hover:text-[#111111]'} text-xs font-medium px-3.5 py-1 rounded-md transition cursor-pointer`}
+                              >
+                                Autopilot
+                              </button>
+                              <button 
+                                onClick={() => toggleChatAi(false, resolvedCustomerKey || selectedChat)}
+                                className={`${!isAiEnabled ? 'bg-[#111111] text-white shadow-xs' : 'text-[#626260] hover:text-[#111111]'} text-xs font-medium px-3.5 py-1 rounded-md transition cursor-pointer`}
+                              >
+                                Copilot
+                              </button>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-                      <button 
-                        onClick={async () => {
-                          let currentPrefs: any = {};
-                          try {
-                            if (customer?.preferences) {
-                              currentPrefs = JSON.parse(customer.preferences);
-                            }
-                          } catch(e) {}
-                          
-                          currentPrefs.hasComplaint = false;
-                          currentPrefs.complaintSummary = "";
-                          
-                          await updateCustomerField(selectedChat, { preferences: JSON.stringify(currentPrefs) });
-                        }}
-                        className="bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold px-3 py-1.5 rounded transition cursor-pointer flex items-center gap-1 shadow-xs"
-                      >
-                        <Check className="h-3.5 w-3.5" />
-                        <span>Resolve & Clear Flag</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })()}
+                    
+                    {/* Complaint Summary Box */}
+                    {(() => {
+                      let hasComplaint = false;
+                      let complaintSummary = "";
+                      try {
+                        const p = JSON.parse(activeCustomer?.preferences || "{}");
+                        hasComplaint = p.hasComplaint === true;
+                        complaintSummary = p.complaintSummary || "";
+                      } catch(e) {}
 
-              {/* Chat Messages */}
-              <div 
-                ref={chatContainerRef}
-                onScroll={handleChatScroll}
-                className="flex-1 overflow-y-auto px-[8%] py-6 flex flex-col space-y-3 z-10 custom-scrollbar"
-              >
-                
-                {chats[selectedChat]?.map((m, i) => {
+                      if (!hasComplaint) return null;
+
+                      return (
+                        <div className="bg-rose-50 border-b border-rose-200/60 px-6 py-3.5 flex items-center justify-between z-10 flex-shrink-0 animate-fade-in">
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className="bg-rose-100 p-2 rounded-lg text-rose-700 flex-shrink-0 mt-0.5">
+                              <AlertCircle className="h-5 w-5" />
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-[10px] font-bold text-rose-800 tracking-wider uppercase mb-0.5">
+                                ACTIVE CUSTOMER COMPLAINT SUMMARY
+                              </span>
+                              <p className="text-xs text-rose-700 font-medium leading-relaxed">
+                                "{complaintSummary || "Customer has filed an active complaint."}"
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                            <button 
+                              onClick={async () => {
+                                let currentPrefs: any = {};
+                                try {
+                                  if (activeCustomer?.preferences) {
+                                    currentPrefs = JSON.parse(activeCustomer.preferences);
+                                  }
+                                } catch(e) {}
+                                
+                                currentPrefs.hasComplaint = false;
+                                currentPrefs.complaintSummary = "";
+                                
+                                await updateCustomerField(resolvedCustomerKey || selectedChat, { preferences: JSON.stringify(currentPrefs) });
+                              }}
+                              className="bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold px-3 py-1.5 rounded transition cursor-pointer flex items-center gap-1 shadow-xs"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              <span>Resolve & Clear Flag</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Chat Messages */}
+                    <div 
+                      ref={chatContainerRef}
+                      onScroll={handleChatScroll}
+                      className="flex-1 overflow-y-auto px-[8%] py-6 flex flex-col space-y-3 z-10 custom-scrollbar"
+                    >
+                      {activeMessages.map((m, i) => {
                   const isSent = m.role === 'assistant';
                   const isDataUri = m.content?.startsWith('data:image/');
                   const isImageUrl = m.content?.match(/^https?:\/\/.*\.(png|jpg|jpeg|gif|webp)(\?.*)?$/i);
@@ -2992,10 +3071,12 @@ export default function DashboardPage() {
                 </div>
               )}
             </>
-          )
-        }
-        </div>
-      )}
+          );
+        })()}
+      </>
+    )}
+  </div>
+)}
 
         {/* Channels Tab (QR Connection) */}
         {activeTab === 'channels' && (
@@ -4053,17 +4134,26 @@ export default function DashboardPage() {
                             </div>
 
                             <div>
-                              <label className="block text-[#111111] font-semibold mb-1">Product Image (URL)</label>
-                              <input
-                                type="url"
+                              <label className="block text-[#111111] font-semibold mb-1">Product Images (URLs, one per line)</label>
+                              <textarea
+                                rows={3}
                                 value={prodImage}
                                 onChange={(e) => setProdImage(e.target.value)}
-                                placeholder="https://images.unsplash.com/..."
-                                className="w-full p-2.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg outline-none text-[#111111]"
+                                placeholder="https://images.unsplash.com/photo-1...&#10;https://images.unsplash.com/photo-2..."
+                                className="w-full p-2.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg outline-none text-[#111111] font-medium"
                               />
                               {prodImage && (
-                                <div className="mt-2 h-20 w-20 rounded-lg overflow-hidden border border-[#d3cec6]">
-                                  <img src={prodImage} alt="Preview" className="w-full h-full object-cover" />
+                                <div className="mt-2 flex gap-2 flex-wrap max-h-32 overflow-y-auto p-1 border border-dashed border-[#d3cec6] rounded-lg bg-[#fcfbf9]">
+                                  {prodImage.split("\n").map((url, idx) => {
+                                    const trimmed = url.trim();
+                                    if (!trimmed || (!trimmed.startsWith("http://") && !trimmed.startsWith("https://") && !trimmed.startsWith("data:"))) return null;
+                                    return (
+                                      <div key={idx} className="relative h-16 w-16 rounded-lg overflow-hidden border border-[#d3cec6] flex-shrink-0 group">
+                                        <img src={trimmed} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                                        <span className="absolute bottom-0 right-0 bg-black/60 text-[8px] text-white px-1 rounded-tl">{idx + 1}</span>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
@@ -5164,10 +5254,7 @@ export default function DashboardPage() {
                               {/* Clickable Customer / Lead Cell (Opens Inbox Chat directly) */}
                               <td className="py-3.5 px-4 align-top">
                                 <div 
-                                  onClick={() => {
-                                    setSelectedChat(order.phone);
-                                    setActiveTab("inbox");
-                                  }}
+                                  onClick={() => openChatForPhone(order.phone)}
                                   className="flex items-center gap-2.5 group cursor-pointer w-fit p-1 -m-1 rounded-lg hover:bg-[#ebe7e1]/80 transition-all"
                                   title="Click to open full chat history in Inbox"
                                 >
@@ -5406,8 +5493,7 @@ export default function DashboardPage() {
 
                           <button
                             onClick={() => {
-                              setSelectedChat(selectedOrderDetail.phone);
-                              setActiveTab("inbox");
+                              openChatForPhone(selectedOrderDetail.phone);
                               setSelectedOrderDetail(null);
                             }}
                             className="p-2.5 bg-[#111111] hover:bg-black text-white rounded-xl transition-all shadow-xs flex items-center justify-center cursor-pointer"
@@ -6000,10 +6086,7 @@ export default function DashboardPage() {
                                   </select>
 
                                   <button 
-                                    onClick={() => {
-                                      setSelectedChat(lead.phone);
-                                      setActiveTab('inbox');
-                                    }}
+                                    onClick={() => openChatForPhone(lead.phone)}
                                     className="text-[11px] font-extrabold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200/60 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
                                   >
                                     <Inbox className="w-3 h-3" /> Chat
@@ -6151,10 +6234,7 @@ export default function DashboardPage() {
                             </td>
                             <td className="py-4 px-6 text-right">
                               <button 
-                                onClick={() => {
-                                  setSelectedChat(customer.phone);
-                                  setActiveTab('inbox');
-                                }}
+                                onClick={() => openChatForPhone(customer.phone)}
                                 className="text-xs font-extrabold text-purple-700 hover:bg-purple-50 px-3 py-1.5 rounded-lg transition-colors border border-purple-200/60 cursor-pointer"
                               >
                                 Message

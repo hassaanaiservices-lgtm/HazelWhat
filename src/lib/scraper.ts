@@ -5,6 +5,9 @@ export interface ProductItem {
   title: string;
   price: string;
   image: string;
+  imageUrl?: string;
+  images?: string[];
+  imageUrls?: string[];
   link: string;
   category?: string;
   description?: string;

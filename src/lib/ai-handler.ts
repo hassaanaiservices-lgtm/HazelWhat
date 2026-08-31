@@ -680,7 +680,11 @@ export function isRetryableProviderError(err: unknown): boolean {
     "account deactivated",
     "disabled account",
     "unauthorized",
-    "permission denied"
+    "permission denied",
+    "resource has been exhausted",
+    "resource_exhausted",
+    "quota_exhausted",
+    "check quota"
   ];
 
   for (const keyword of nonRetryableKeywords) {
@@ -828,11 +832,9 @@ export async function callLLMWithFallback(
   tools: any[] = [],
   temperature: number = 0.7
 ): Promise<{ res: LLMCallResult; provider: string }> {
-  // 1. Context Window Protection (prevent ballooning input context costs)
   const safeMessages = truncateContextWindow(messages);
   const tenantId = config?.tenantId || config?.id || "default_tenant";
 
-  // 2. Concurrency Control & Pre-flight Budget Guard
   const slot = await acquireLLMConcurrencySlot(tenantId, "llm_fallback", config?.dailyBudgetUsd);
   if (!slot.acquired) {
     if (slot.reason === "budget_exceeded") {
@@ -844,107 +846,50 @@ export async function callLLMWithFallback(
   }
 
   try {
-    const primaryKey = config?.apiKey || config?.openRouterApiKey || config?.openaiApiKey || process.env.DEEPSEEK_API_KEY || getEnvKey("DEEPSEEK_API_KEY") || process.env.OPENROUTER_API_KEY || getEnvKey("OPENROUTER_API_KEY") || process.env.OPENAI_API_KEY || getEnvKey("OPENAI_API_KEY") || "";
-    const anthropicKey = config?.anthropicApiKey || process.env.ANTHROPIC_API_KEY || getEnvKey("ANTHROPIC_API_KEY") || "";
+    const candidateKeys: { key: string; name: string }[] = [];
+    
+    if (config?.apiKey) candidateKeys.push({ key: config.apiKey, name: "tenant_primary" });
+    if (config?.openRouterApiKey) candidateKeys.push({ key: config.openRouterApiKey, name: "tenant_openrouter" });
+    if (config?.anthropicApiKey) candidateKeys.push({ key: config.anthropicApiKey, name: "tenant_anthropic" });
+    
+    const sysDeepSeek = process.env.DEEPSEEK_API_KEY || getEnvKey("DEEPSEEK_API_KEY");
+    if (sysDeepSeek) candidateKeys.push({ key: sysDeepSeek, name: "system_deepseek" });
+    
+    const sysOpenRouter = process.env.OPENROUTER_API_KEY;
+    if (sysOpenRouter) candidateKeys.push({ key: sysOpenRouter, name: "system_openrouter" });
+    
+    const sysAnthropic = process.env.ANTHROPIC_API_KEY;
+    if (sysAnthropic) candidateKeys.push({ key: sysAnthropic, name: "system_anthropic" });
 
-    const dsStatus = getCircuitStatus("deepseek");
-    if (primaryKey && dsStatus.state === "open" && Date.now() - dsStatus.lastFailureTime > 10000) {
-      providerCircuits.deepseek.state = "closed";
-    }
-
-    const deepseekAvailable = primaryKey && isProviderAvailable("deepseek");
-    const anthropicAvailable = anthropicKey && isProviderAvailable("anthropic");
-
-    if (!deepseekAvailable && !anthropicAvailable) {
-      const dsStatusNow = getCircuitStatus("deepseek");
-      const antStatus = getCircuitStatus("anthropic");
-      const errMsg = `All configured LLM providers are currently unavailable or circuit-open. ` +
-        `(DeepSeek: ${dsStatusNow.state} - "${dsStatusNow.lastErrorReason || "No key"}", ` +
-        `Anthropic: ${antStatus.state} - "${antStatus.lastErrorReason || "No key"})`;
-      console.error(`[callLLMWithFallback] ${errMsg}`);
-      throw new Error(errMsg);
-    }
-
-    const hasImage = safeMessages.some(msg => 
-      Array.isArray(msg.content) && msg.content.some((block: any) => block.type === "image")
-    );
-
-    const prioritizeAnthropic = hasImage && anthropicAvailable;
-
-    let result: { res: LLMCallResult; provider: string };
-
-    if (prioritizeAnthropic) {
-      try {
-        console.log("[callLLMWithFallback] Vision Request: prioritizing vision-capable Anthropic (Claude)...");
-        const res = await callLLM(anthropicKey, systemPrompt, safeMessages, tools, temperature);
-        recordProviderSuccess("anthropic");
-        console.log("[callLLMWithFallback] Provider used: anthropic (vision)");
-        result = { res, provider: "anthropic" };
-      } catch (err: any) {
-        console.error("[callLLMWithFallback] Prioritized vision Anthropic failed:", err.message || err);
-        recordProviderFailure("anthropic", err);
-        if (deepseekAvailable) {
-          console.warn("[callLLMWithFallback] Falling back to DeepSeek after vision Anthropic failure...");
-          const res = await callLLM(primaryKey, systemPrompt, safeMessages, tools, temperature);
-          recordProviderSuccess("deepseek");
-          result = { res, provider: "deepseek" };
-        } else {
-          throw err;
-        }
+    // Deduplicate candidate keys
+    const uniqueCandidates: { key: string; name: string }[] = [];
+    const seenKeys = new Set<string>();
+    for (const c of candidateKeys) {
+      const trimmed = c.key.trim();
+      if (trimmed && !seenKeys.has(trimmed)) {
+        seenKeys.add(trimmed);
+        uniqueCandidates.push({ key: trimmed, name: c.name });
       }
-    } else if (deepseekAvailable) {
-      try {
-        console.log("[callLLMWithFallback] Attempting primary LLM (DeepSeek)...");
-        const res = await callLLM(primaryKey, systemPrompt, safeMessages, tools, temperature);
-        recordProviderSuccess("deepseek");
-        console.log("[callLLMWithFallback] Provider used: deepseek");
-        result = { res, provider: "deepseek" };
-      } catch (err: any) {
-        console.error("[callLLMWithFallback] Primary LLM (DeepSeek) failed:", err.message || err);
-        recordProviderFailure("deepseek", err);
-
-        if (anthropicAvailable) {
-          console.warn("[callLLMWithFallback] Falling back to backup LLM (Anthropic)...");
-          try {
-            const res = await callLLM(anthropicKey, systemPrompt, safeMessages, tools, temperature);
-            recordProviderSuccess("anthropic");
-            console.log("[callLLMWithFallback] Provider used: anthropic-fallback");
-            result = { res, provider: "anthropic-fallback" };
-          } catch (anthropicErr: any) {
-            console.error("[callLLMWithFallback] Backup LLM (Anthropic) failed:", anthropicErr.message || anthropicErr);
-            recordProviderFailure("anthropic", anthropicErr);
-            throw anthropicErr;
-          }
-        } else {
-          throw err;
-        }
-      }
-    } else if (anthropicAvailable) {
-      console.log("[callLLMWithFallback] DeepSeek unavailable/circuit-open. Attempting Anthropic...");
-      try {
-        const res = await callLLM(anthropicKey, systemPrompt, safeMessages, tools, temperature);
-        recordProviderSuccess("anthropic");
-        console.log("[callLLMWithFallback] Provider used: anthropic");
-        result = { res, provider: "anthropic" };
-      } catch (err: any) {
-        console.error("[callLLMWithFallback] Anthropic LLM failed:", err.message || err);
-        recordProviderFailure("anthropic", err);
-        throw err;
-      }
-    } else {
-      throw new Error("No API keys configured or all providers circuit-open.");
     }
 
-    // 3. Post-call Cost Accounting
-    if (result.res?.inputTokens || result.res?.outputTokens) {
-      // Approximate cost calculation per provider
-      const inPrice = result.provider.includes("anthropic") ? 3.0 : 0.14;
-      const outPrice = result.provider.includes("anthropic") ? 15.0 : 0.28;
-      const estCost = ((result.res.inputTokens * inPrice) + (result.res.outputTokens * outPrice)) / 1000000;
-      await recordTenantLLMCost(tenantId, estCost);
+    if (uniqueCandidates.length === 0) {
+      throw new Error("No LLM API keys configured in environment or tenant settings.");
     }
 
-    return result;
+    let lastError: any = null;
+    for (const cand of uniqueCandidates) {
+      try {
+        const keyType = detectKeyType(cand.key);
+        console.log(`[AI Handler] Attempting LLM call with key ${cand.name} (${keyType})...`);
+        const res = await callLLM(cand.key, systemPrompt, safeMessages, tools, temperature);
+        return { res, provider: keyType };
+      } catch (err: any) {
+        console.error(`[AI Handler] Key ${cand.name} failed:`, err.message || err);
+        lastError = err;
+        // Keep looping to try the next key
+      }
+    }
+    throw lastError || new Error("All LLM providers and fallbacks failed.");
   } finally {
     await slot.release();
   }
@@ -975,8 +920,8 @@ async function callLLM(
   if (keyType === "anthropic") {
     const anthropic = new Anthropic({ apiKey: trimmed });
     const anthropicModels = [
-      "claude-sonnet-4-6",
       "claude-3-5-sonnet-20241022",
+      "claude-3-5-haiku-20241022",
       "claude-3-haiku-20240307"
     ];
     let lastErr: any = null;
@@ -1007,6 +952,11 @@ async function callLLM(
       } catch (err: any) {
         console.error(`[callLLM] Anthropic model ${model} error:`, err.message || err);
         lastErr = err;
+        const errStr = (err?.message || String(err)).toLowerCase();
+        if (errStr.includes("not_found") || errStr.includes("model") || err?.status === 404) {
+          console.warn(`[callLLM] Model ${model} not found/supported. Trying next model...`);
+          continue;
+        }
         if (!isRetryableProviderError(err)) {
           console.warn(`[callLLM] Non-retryable Anthropic error (${err.status || err.message}). Stopping model fallback loop.`);
           break;
@@ -1168,7 +1118,7 @@ async function callLLM(
         console.log(`[callLLM] DeepSeek API attempt ${attempt} of ${attempts}...`);
         
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 7000);
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
 
         res = await fetch("https://api.deepseek.com/chat/completions", {
           method: "POST",
@@ -1470,7 +1420,35 @@ interface HybridMatchResult {
   reply?: string;
   source?: "sequential_flow" | "manual_keyword" | "knowledge_base_faq" | "product_catalog";
   image?: string;
+  images?: string[];
   imageCaption?: string;
+}
+
+function isKeywordMatch(query: string, target: string): boolean {
+  const cleanQuery = query.toLowerCase().trim();
+  const cleanTarget = target.toLowerCase().trim();
+  
+  if (cleanQuery.includes(cleanTarget) || cleanTarget.includes(cleanQuery)) {
+    return true;
+  }
+  
+  const queryWords = cleanQuery.split(/[\s,.-]+/);
+  const targetWords = cleanTarget.split(/[\s,.-]+/);
+  
+  for (const qw of queryWords) {
+    if (qw.length < 3) continue;
+    const qwStem = qw.endsWith('s') ? qw.slice(0, -1) : qw;
+    
+    for (const tw of targetWords) {
+      if (tw.length < 3) continue;
+      const twStem = tw.endsWith('s') ? tw.slice(0, -1) : tw;
+      
+      if (qwStem === twStem || qwStem.includes(twStem) || twStem.includes(qwStem)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /**
@@ -1497,14 +1475,40 @@ async function processHybridEngine(
     await DB.updateCustomer(from, { preferences: cleanedNote }, tenantId);
   }
 
-  // 1. FAST-PATH: Instant Catalog / Menu Generator (0 Tokens)
+  // 1. FAST-PATH: Category & Instant Catalog / Menu Generator with Multi-Image Album Burst (0 Tokens)
   if (products.length > 0) {
-    const isMenuRequest = ["menu", "show menu", "send menu", "deikhao menu", "dikhao menu", "menu bhajo", "menu do", "menu bhej do", "catalog", "rate list", "list", "pizza menu", "card", "website"].some(w => lowerContent === w || lowerContent.includes(w));
+    const isMenuRequest = ["menu", "show menu", "send menu", "deikhao menu", "dikhao menu", "menu bhajo", "menu do", "menu bhej do", "catalog", "rate list", "list", "card", "website", "products", "services"].some(w => lowerContent === w || lowerContent.includes(w));
     
-    if (isMenuRequest) {
-      let menuText = `📜 *${activeTenant?.businessName || config.businessName || "OUR"} MENU* 🍕🍔\n\n`;
+    let categoryMatch: string | null = null;
+    let matchedProducts: any[] = [];
+
+    // First try category matching
+    const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean))) as string[];
+    for (const cat of categories) {
+      if (isKeywordMatch(lowerContent, cat)) {
+        categoryMatch = cat;
+        matchedProducts = products.filter(p => p.category && isKeywordMatch(categoryMatch!, p.category));
+        break;
+      }
+    }
+
+    // If no category match, try product title matching
+    if (!categoryMatch) {
+      matchedProducts = products.filter(p => p.title && isKeywordMatch(lowerContent, p.title));
+      if (matchedProducts.length > 0) {
+        categoryMatch = matchedProducts[0].title;
+      }
+    }
+
+    if (isMenuRequest || categoryMatch) {
+      const displayProducts = categoryMatch && matchedProducts.length > 0 ? matchedProducts : products;
+
+      let menuText = categoryMatch
+        ? `📜 *${categoryMatch.toUpperCase()} MENU — ${activeTenant?.businessName || config.businessName || "OUR STORE"}* 🍕🍔\n\n`
+        : `📜 *${activeTenant?.businessName || config.businessName || "OUR"} MENU* 🍕🍔\n\n`;
+
       const grouped: Record<string, any[]> = {};
-      products.forEach(p => {
+      displayProducts.forEach(p => {
         if (!p.title) return;
         const titleLower = p.title.toLowerCase().trim();
         if (["menu", "menu.", "pizza menu", "website", "link", "card"].includes(titleLower)) return;
@@ -1513,6 +1517,7 @@ async function processHybridEngine(
         grouped[cat].push(p);
       });
       
+      const albumImages: string[] = [];
       let itemCount = 0;
       for (const [cat, items] of Object.entries(grouped)) {
         menuText += `*${cat.toUpperCase()}*\n`;
@@ -1523,6 +1528,26 @@ async function processHybridEngine(
           if (p.description) {
             menuText += `   _${p.description}_\n`;
           }
+          if (p.image && typeof p.image === 'string' && p.image.startsWith('http')) {
+            if (!albumImages.includes(p.image.trim())) albumImages.push(p.image.trim());
+          }
+          if (p.imageUrl && typeof p.imageUrl === 'string' && p.imageUrl.startsWith('http')) {
+            if (!albumImages.includes(p.imageUrl.trim())) albumImages.push(p.imageUrl.trim());
+          }
+          if (p.images && Array.isArray(p.images)) {
+            p.images.forEach((img: string) => {
+              if (img && typeof img === 'string' && img.startsWith('http') && !albumImages.includes(img.trim())) {
+                albumImages.push(img.trim());
+              }
+            });
+          }
+          if (p.imageUrls && Array.isArray(p.imageUrls)) {
+            p.imageUrls.forEach((img: string) => {
+              if (img && typeof img === 'string' && img.startsWith('http') && !albumImages.includes(img.trim())) {
+                albumImages.push(img.trim());
+              }
+            });
+          }
         });
         menuText += `\n`;
       }
@@ -1531,6 +1556,7 @@ async function processHybridEngine(
         return {
           matched: true,
           reply: menuText,
+          images: albumImages.length > 0 ? albumImages.slice(0, 15) : undefined,
           source: "product_catalog"
         };
       }
@@ -1867,7 +1893,7 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     const contentWords = lowerContent.split(/\s+/);
     const weakSignalCount = weakComplaintSignals.filter(w => {
       if (w.includes(" ")) return lowerContent.includes(w);
-      return contentWords.some(word => word === w || word === w + "!" || word === w + "." || word === w + ",");
+      return contentWords.some((word: string) => word === w || word === w + "!" || word === w + "." || word === w + ",");
     }).length;
 
     // Decision: strong signal always fires; weak signals need 2+ AND no order context
@@ -1949,7 +1975,16 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
 
     if (hybridResult.matched && hybridResult.reply) {
       console.log(`[AI Handler] Hybrid Engine matched via [${hybridResult.source}]. 0 Tokens used!`);
-      if (hybridResult.image) {
+      if (hybridResult.images && hybridResult.images.length > 0) {
+        try {
+          console.log(`[AI Handler] Sending Category Album Burst (${hybridResult.images.length} images)...`);
+          await WhatsAppManager.sendMediaAlbumBurst(from, hybridResult.images, hybridResult.reply, resolvedTenantId);
+          await DB.addChatMessage(from, { role: "assistant", content: hybridResult.reply }, resolvedTenantId);
+          return;
+        } catch (imgErr) {
+          console.error("[AI Handler] Failed to send hybrid result album images:", imgErr);
+        }
+      } else if (hybridResult.image) {
         try {
           await WhatsAppManager.sendImageUrl(from, hybridResult.image, hybridResult.imageCaption || "");
         } catch (imgErr) {
@@ -2004,7 +2039,15 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
 
     const existingChats = await DB.getChats(from, resolvedTenantId);
     const simpleGreetings = new Set(["hi", "hello", "hey", "aoa", "assalam o alaikum", "assalamu alaikum", "slam", "salam"]);
-    if (existingChats.length <= 1 && simpleGreetings.has(cleanGreetingContent)) {
+
+    // Session-aware greeting: send fresh greeting if this is the first message in this tenant's session
+    // OR if the last conversation had no recent messages for this tenant
+    const tenantChats = existingChats.filter((m: any) => m.role === 'user' || m.role === 'assistant');
+    const lastTenantWelcome = tenantChats.findIndex((m: any) => m.role === 'assistant' && m.content?.includes(`Welcome to ${activeBusinessName}`));
+    // It's a new session if: no previous chat with this tenant, OR last message was a greeting with nothing after, OR total messages very few
+    const isNewSession = tenantChats.length <= 1 || (lastTenantWelcome < 0 && tenantChats.length <= 2);
+
+    if (isNewSession && simpleGreetings.has(cleanGreetingContent)) {
       const fastGreeting = `Walaikum Assalam! Welcome to ${activeBusinessName}. How can I assist you today?`;
       console.log(`[AI Handler Guardrail] Fast-path greeting reply for "${cleanGreetingContent}". Replying without LLM call.`);
       const sentMsg = await WhatsAppManager.sendMessage(from, fastGreeting);
@@ -2167,9 +2210,22 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
 This customer is a revived dead lead who recently responded to our re-engagement outreach campaign. Treat them as a returning customer and offer a special discount.`;
     }
 
+    // Session Isolation Guard: Only use messages from the CURRENT session.
+    // A new session starts after the latest "Welcome to" greeting message.
+    // This prevents cross-tenant chat history contamination.
+    const allFilteredChats = existingChats.filter((m: any) => m.role === 'user' || m.role === 'assistant');
+    let sessionStartIndex = 0;
+    for (let i = allFilteredChats.length - 1; i >= 0; i--) {
+      const m = allFilteredChats[i];
+      if (m.role === 'assistant' && m.content?.includes(`Welcome to ${activeBusinessName}`)) {
+        sessionStartIndex = i;
+        break;
+      }
+    }
+    const sessionChats = allFilteredChats.slice(sessionStartIndex);
+
     // Filter out system messages and sanitize past assistant refusal messages so LLM never gets primed by past errors!
-    let recentHistory = existingChats
-      .filter((m: any) => m.role === 'user' || m.role === 'assistant')
+    let recentHistory = sessionChats
       .slice(-8)
       .map((m: any) => {
         let textContent = m.content || "";
@@ -2382,10 +2438,13 @@ This customer is a revived dead lead who recently responded to our re-engagement
           }
           else if (toolCall.name === "send_product_card") {
             try {
+              const matchedProd = activeProducts.find((p: any) => p.title && p.title.toLowerCase().trim() === args.product_name.toLowerCase().trim());
+              const prodImages = matchedProd?.images || (args.image_urls || undefined);
               await WhatsAppManager.sendProductCard(from, {
                 title: args.product_name,
                 price: args.price,
                 image: args.image_url,
+                images: prodImages,
                 link: args.product_page_url,
                 description: args.description
               });

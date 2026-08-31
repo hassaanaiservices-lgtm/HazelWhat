@@ -890,7 +890,23 @@ export default function VoiceSaaSApp() {
     setEditingProduct(prod);
     setProdTitle(prod.title || "");
     setProdPrice(prod.price || "");
-    setProdImage(prod.image || "");
+    
+    // Combine image, imageUrl, images, and imageUrls
+    const allImgs: string[] = [];
+    if (prod.image) allImgs.push(prod.image);
+    if (prod.imageUrl && !allImgs.includes(prod.imageUrl)) allImgs.push(prod.imageUrl);
+    if (prod.images && Array.isArray(prod.images)) {
+      prod.images.forEach((img: string) => {
+        if (img && !allImgs.includes(img)) allImgs.push(img);
+      });
+    }
+    if (prod.imageUrls && Array.isArray(prod.imageUrls)) {
+      prod.imageUrls.forEach((img: string) => {
+        if (img && !allImgs.includes(img)) allImgs.push(img);
+      });
+    }
+    setProdImage(allImgs.join("\n"));
+    
     setProdLink(prod.link || "");
     setProdCategory(prod.category || "");
     setProdDesc(prod.description || "");
@@ -943,11 +959,17 @@ export default function VoiceSaaSApp() {
         })
       : undefined;
 
+    const urls = prodImage.split("\n").map(u => u.trim()).filter(Boolean);
+    const mainImage = urls[0] || "";
+
     const newProdItem = {
       id: editingProduct ? editingProduct.id : `custom-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
       title: prodTitle.trim(),
       price: prodPrice.trim() || `${selectedTenant.currency || 'PKR'} 0`,
-      image: prodImage.trim(),
+      image: mainImage,
+      imageUrl: mainImage,
+      images: urls,
+      imageUrls: urls,
       link: prodLink.trim(),
       category: prodCategory.trim() || "General Products",
       description: prodDesc.trim(),
@@ -2483,17 +2505,26 @@ export default function VoiceSaaSApp() {
                       </div>
 
                       <div>
-                        <label className="block text-slate-700 font-bold mb-1">Product Image URL</label>
-                        <input
-                          type="url"
+                        <label className="block text-slate-700 font-bold mb-1">Product Images (URLs, one per line)</label>
+                        <textarea
+                          rows={3}
                           value={prodImage}
                           onChange={(e) => setProdImage(e.target.value)}
-                          placeholder="https://yourstore.com/images/heroic.jpg"
-                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-slate-900"
+                          placeholder="https://yourstore.com/images/heroic1.jpg&#10;https://yourstore.com/images/heroic2.jpg"
+                          className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-slate-900 font-medium"
                         />
                         {prodImage && (
-                          <div className="mt-2 h-16 w-16 rounded-lg overflow-hidden border border-slate-200">
-                            <img src={prodImage} alt="Preview" className="w-full h-full object-cover" />
+                          <div className="mt-2 flex gap-2 flex-wrap max-h-32 overflow-y-auto p-1 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                            {prodImage.split("\n").map((url, idx) => {
+                              const trimmed = url.trim();
+                              if (!trimmed || (!trimmed.startsWith("http://") && !trimmed.startsWith("https://") && !trimmed.startsWith("data:"))) return null;
+                              return (
+                                <div key={idx} className="relative h-14 w-14 rounded-lg overflow-hidden border border-slate-200 flex-shrink-0 group">
+                                  <img src={trimmed} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                                  <span className="absolute bottom-0 right-0 bg-slate-900/60 text-[8px] text-white px-1 rounded-tl">{idx + 1}</span>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
