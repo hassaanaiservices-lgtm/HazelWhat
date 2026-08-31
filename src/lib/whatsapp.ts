@@ -902,13 +902,22 @@ export class WhatsAppManager {
             return;
           }
 
-          // Phase 6B: Verify ownership BEFORE attempting normal reconnect backoff
-          const stillOwner = await WhatsAppSessionRegistry.isOwner(tenantId);
-          if (!stillOwner) {
-            console.log(`[WhatsApp] Reconnection cancelled for ${tenantId}: instance ${getInstanceId()} no longer holds session lease.`);
-            session.status = "DISCONNECTED";
-            session.sock = null;
-            return;
+          // Phase 6B: Verify ownership BEFORE attempting normal reconnect backoff.
+          // SAFETY FIX: Only cancel reconnection if Redis is explicitly available AND
+          // confirms a DIFFERENT instance owns the lease. If Redis is unavailable or
+          // returns an ambiguous result, we assume we are still the owner (single-instance
+          // safe-default). This prevents spurious WhatsApp logouts on Redis hiccups.
+          const { isRedisReady } = await import("./redis");
+          if (isRedisReady()) {
+            const stillOwner = await WhatsAppSessionRegistry.isOwner(tenantId);
+            if (!stillOwner) {
+              console.log(`[WhatsApp] Reconnection cancelled for ${tenantId}: Redis confirms instance ${getInstanceId()} no longer holds session lease.`);
+              session.status = "DISCONNECTED";
+              session.sock = null;
+              return;
+            }
+          } else {
+            console.log(`[WhatsApp] Redis unavailable — assuming ownership retained for ${tenantId}, proceeding with reconnect.`);
           }
 
           const localCredsFile = path.join(DB_DIR, `.baileys_auth_${tenantId}`, "creds.json");

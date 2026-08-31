@@ -672,7 +672,9 @@ export class DB {
         followUps: data?.follow_ups || DEFAULT_CONFIG.followUps,
         apiKey: data?.api_key || data?.apiKey || (tenantRecord as any)?.apiKey || (tenantRecord as any)?.api_key || '',
         openRouterApiKey: data?.openrouter_api_key || data?.openRouterApiKey || (tenantRecord as any)?.openRouterApiKey || '',
-        anthropicApiKey: data?.anthropic_api_key || data?.anthropicApiKey || (tenantRecord as any)?.anthropicApiKey || ''
+        anthropicApiKey: data?.anthropic_api_key || data?.anthropicApiKey || (tenantRecord as any)?.anthropicApiKey || '',
+        // Pull openaiApiKey from tenants.openai_api_key so DeepSeek keys stored there are used
+        openaiApiKey: (tenantRecord as any)?.openaiApiKey || (tenantRecord as any)?.openai_api_key || ''
       };
     } catch (e) {
       console.error('[DB/Supabase] getConfig exception:', e);

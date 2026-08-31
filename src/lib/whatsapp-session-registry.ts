@@ -199,28 +199,41 @@ export class WhatsAppSessionRegistry {
           lease_expires_at: now + ttlMs,
         });
       } else {
-        active.consecutiveFailures++;
-        console.warn(
-          `[SessionRegistry] Lease renewal failed for tenant ${tenantId} (Attempt ${active.consecutiveFailures}/3)`
-        );
+        // Only count as a genuine failure if Redis is available.
+        // If Redis itself is down, renewal will fail but we STILL own the session.
+        // Counting Redis-down failures as ownership loss causes spurious WhatsApp logouts.
+        const { isRedisReady } = await import("./redis");
+        if (isRedisReady()) {
+          active.consecutiveFailures++;
+          console.warn(
+            `[SessionRegistry] Lease renewal failed for tenant ${tenantId} (Attempt ${active.consecutiveFailures}/5) — Redis is up, possible ownership contest.`
+          );
 
-        if (active.consecutiveFailures >= 3) {
-          logger.error({
-            event: "session_lock_lost",
-            tenant_id: tenantId,
-            instance_id: getInstanceId(),
-            reason: "heartbeat_renewal_exhausted",
-          });
+          if (active.consecutiveFailures >= 5) {
+            logger.error({
+              event: "session_lock_lost",
+              tenant_id: tenantId,
+              instance_id: getInstanceId(),
+              reason: "heartbeat_renewal_exhausted",
+            });
 
-          this.stopHeartbeat(tenantId);
+            this.stopHeartbeat(tenantId);
 
-          if (active.onOwnershipLost) {
-            try {
-              active.onOwnershipLost();
-            } catch (err) {
-              console.error(`[SessionRegistry] Error executing ownership lost callback for ${tenantId}:`, err);
+            if (active.onOwnershipLost) {
+              try {
+                active.onOwnershipLost();
+              } catch (err) {
+                console.error(`[SessionRegistry] Error executing ownership lost callback for ${tenantId}:`, err);
+              }
             }
           }
+        } else {
+          // Redis unavailable — reset failure counter, do NOT signal ownership loss.
+          // We are still the owner; Redis just can't confirm it right now.
+          active.consecutiveFailures = 0;
+          console.warn(
+            `[SessionRegistry] Lease renewal skipped for tenant ${tenantId}: Redis unavailable. Retaining ownership assumption.`
+          );
         }
       }
     }, renewMs);
