@@ -69,7 +69,7 @@ export const PATCH = withObservability(async (req: NextRequest) => {
 
   updateTraceContext({ tenantId: session.tenantId });
 
-  const { id, status, notes, customerName } = await req.json();
+  const { id, status, notes, customerName, deliveredAt } = await req.json();
   if (!id) {
     return NextResponse.json({ error: 'Missing id' }, { status: 400 });
   }
@@ -92,9 +92,13 @@ export const PATCH = withObservability(async (req: NextRequest) => {
   const updates: any = {};
   if (status) {
     updates.status = status === 'completed' ? 'delivered' : status;
+    if (updates.status === 'delivered') {
+      updates.deliveredAt = deliveredAt || new Date().toISOString();
+    }
   }
   if (notes !== undefined) updates.notes = notes;
   if (customerName) updates.customerName = customerName;
+  if (deliveredAt !== undefined) updates.deliveredAt = deliveredAt;
 
   await DB.updateOrder(id, updates, targetTenantId);
 

@@ -9,7 +9,7 @@ export const MAX_GLOBAL_LLM_CONCURRENCY = parseInt(process.env.MAX_GLOBAL_LLM_CO
 export const MAX_TENANT_LLM_CONCURRENCY = parseInt(process.env.MAX_TENANT_LLM_CONCURRENCY || "15", 10);
 
 // Default Cost Protection Caps
-export const DEFAULT_DAILY_TENANT_BUDGET_USD = parseFloat(process.env.DEFAULT_DAILY_TENANT_BUDGET_USD || "5.00");
+export const DEFAULT_DAILY_TENANT_BUDGET_USD = parseFloat(process.env.DEFAULT_DAILY_TENANT_BUDGET_USD || "50.00");
 export const DEFAULT_MAX_TOKENS_PER_MINUTE = parseInt(process.env.DEFAULT_MAX_TOKENS_PER_MINUTE || "50000", 10);
 export const MAX_LLM_RESPONSE_TOKENS = 400;
 export const MAX_CONTEXT_INPUT_TOKENS = 3000;
@@ -55,14 +55,17 @@ export async function checkTenantDailyBudget(
     currentCostUsd = inMemoryDailyCost.get(`${tenantId}:${todayKey}`) || 0;
   }
 
-  // Fallback to database aggregate if zero
+  // Fallback to database aggregate if zero — with hard timeout to prevent blocking
   if (currentCostUsd === 0) {
     try {
-      const usages = await getTenantLLMUsage(tenantId);
+      const usages = await Promise.race([
+        getTenantLLMUsage(tenantId),
+        new Promise<any[]>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+      ]).catch(() => []);
       const startOfDay = new Date(`${todayKey}T00:00:00.000Z`).getTime();
       currentCostUsd = usages
-        .filter((u) => new Date(u.createdAt || "").getTime() >= startOfDay)
-        .reduce((acc, curr) => acc + (curr.estimatedCost || 0), 0);
+        .filter((u: any) => new Date(u.createdAt || "").getTime() >= startOfDay)
+        .reduce((acc: number, curr: any) => acc + (curr.estimatedCost || 0), 0);
     } catch (_) {}
   }
 

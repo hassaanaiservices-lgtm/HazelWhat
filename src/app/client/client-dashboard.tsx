@@ -5198,14 +5198,25 @@ export default function DashboardPage() {
               {/* Full-Width Intercom Data Table */}
               <div className="dash-card p-0 overflow-hidden min-h-[500px] bg-white border border-[#d3cec6] rounded-xl shadow-xs">
                 {orders.filter(o => {
+                  const statusLower = o.status?.toLowerCase() || '';
+                  const isDelivered = statusLower === 'delivered' || statusLower === 'deliver';
+                  
+                  // Auto-hide delivered orders older than 5 minutes to prevent clutter
+                  if (isDelivered) {
+                    const deliveredTime = o.deliveredAt ? new Date(o.deliveredAt).getTime() : (o.timestamp ? new Date(o.timestamp).getTime() : null);
+                    if (deliveredTime && (Date.now() - deliveredTime > 5 * 60 * 1000)) {
+                      return false;
+                    }
+                  }
+
                   if (orderFilter === 'all') return true;
-                  if (orderFilter === 'new_order') return o.status === 'new_order' || o.status === 'new' || o.status === 'new order' || o.status === 'pending';
-                  if (orderFilter === 'under_baking') return o.status === 'under_baking' || o.status === 'under baking' || o.status === 'under_booking' || o.status === 'confirmed';
-                  if (orderFilter === 'delivered') return o.status === 'delivered' || o.status === 'deliver';
+                  if (orderFilter === 'new_order') return statusLower === 'new_order' || statusLower === 'new' || statusLower === 'new order' || statusLower === 'pending';
+                  if (orderFilter === 'under_baking') return statusLower === 'under_baking' || statusLower === 'under baking' || statusLower === 'under_booking' || statusLower === 'confirmed';
+                  if (orderFilter === 'delivered') return isDelivered;
                   return o.status === orderFilter;
                 }).length === 0 ? (
                   <div className="text-center p-12 bg-[#f5f1ec] text-[#7b7b78] font-medium text-xs">
-                    No orders found.
+                    No active orders found.
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -5224,10 +5235,21 @@ export default function DashboardPage() {
                       </thead>
                       <tbody className="divide-y divide-[#ebe7e1] text-xs">
                         {orders.filter(o => {
+                          const statusLower = o.status?.toLowerCase() || '';
+                          const isDelivered = statusLower === 'delivered' || statusLower === 'deliver';
+
+                          // Auto-hide delivered orders older than 5 minutes to prevent clutter
+                          if (isDelivered) {
+                            const deliveredTime = o.deliveredAt ? new Date(o.deliveredAt).getTime() : (o.timestamp ? new Date(o.timestamp).getTime() : null);
+                            if (deliveredTime && (Date.now() - deliveredTime > 5 * 60 * 1000)) {
+                              return false;
+                            }
+                          }
+
                           if (orderFilter === 'all') return true;
-                          if (orderFilter === 'new_order') return o.status === 'new_order' || o.status === 'new' || o.status === 'new order' || o.status === 'pending';
-                          if (orderFilter === 'under_baking') return o.status === 'under_baking' || o.status === 'under baking' || o.status === 'under_booking' || o.status === 'confirmed';
-                          if (orderFilter === 'delivered') return o.status === 'delivered' || o.status === 'deliver';
+                          if (orderFilter === 'new_order') return statusLower === 'new_order' || statusLower === 'new' || statusLower === 'new order' || statusLower === 'pending';
+                          if (orderFilter === 'under_baking') return statusLower === 'under_baking' || statusLower === 'under baking' || statusLower === 'under_booking' || statusLower === 'confirmed';
+                          if (orderFilter === 'delivered') return isDelivered;
                           return o.status === orderFilter;
                         }).map((order, idx) => {
                           const isAppointment = order.productName.includes('Appointment') || order.productName.startsWith('📅');
@@ -5321,10 +5343,12 @@ export default function DashboardPage() {
                                   onChange={async (e) => {
                                     const newStatus = e.target.value;
                                     stopOrderAlarm();
+                                    const deliveredAtISO = newStatus === 'delivered' ? new Date().toISOString() : undefined;
+                                    setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: newStatus, deliveredAt: deliveredAtISO } : o));
                                     await fetch('/api/whatsapp/orders', {
                                       method: 'PATCH',
                                       headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ id: order.id, status: newStatus })
+                                      body: JSON.stringify({ id: order.id, status: newStatus, deliveredAt: deliveredAtISO })
                                     });
                                     fetchOrders();
                                   }}
@@ -5402,12 +5426,15 @@ export default function DashboardPage() {
                         onChange={async (e) => {
                           const newStatus = e.target.value;
                           stopOrderAlarm();
+                          const deliveredAtISO = newStatus === 'delivered' ? new Date().toISOString() : undefined;
+                          setOrders(prev => prev.map(o => o.id === selectedOrderDetail.id ? { ...o, status: newStatus, deliveredAt: deliveredAtISO } : o));
                           await fetch('/api/whatsapp/orders', {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id: selectedOrderDetail.id, status: newStatus })
+                            body: JSON.stringify({ id: selectedOrderDetail.id, status: newStatus, deliveredAt: deliveredAtISO })
                           });
                           selectedOrderDetail.status = newStatus;
+                          selectedOrderDetail.deliveredAt = deliveredAtISO;
                           fetchOrders();
                         }}
                         className={`text-xs font-black px-3.5 py-2 rounded-xl border-2 outline-none cursor-pointer transition-all shadow-xs ${

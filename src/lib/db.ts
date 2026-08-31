@@ -196,6 +196,7 @@ export interface Order {
   price?: string;
   timestamp: string;
   status: "pending" | "processing" | "shipped" | "delivered" | "cancelled" | "confirmed" | "new_order" | "under_baking";
+  deliveredAt?: string;
   recoveryStage?: number;
   notes?: string;
 }
@@ -429,6 +430,7 @@ export class DB {
         price: o.price,
         timestamp: o.created_at || o.timestamp,
         status: o.status || 'new_order',
+        deliveredAt: o.delivered_at || o.deliveredAt || undefined,
         recoveryStage: o.recovery_stage || 0,
         notes: o.notes
       }));
@@ -949,6 +951,7 @@ export class DB {
         price: o.price,
         timestamp: o.created_at || o.timestamp,
         status: o.status || 'pending',
+        deliveredAt: o.delivered_at || o.deliveredAt || undefined,
         recoveryStage: o.recovery_stage || 0,
         notes: o.notes
       }));
@@ -1061,6 +1064,9 @@ export class DB {
     try {
       const payload: any = {};
       if (updates.status) payload.status = updates.status;
+      if (updates.deliveredAt !== undefined || updates.status === 'delivered' || updates.status === 'completed') {
+        payload.delivered_at = updates.deliveredAt || new Date().toISOString();
+      }
       if (updates.notes !== undefined) payload.notes = updates.notes;
       if (updates.customerName) payload.customer_name = updates.customerName;
       if (updates.recoveryStage !== undefined) payload.recovery_stage = updates.recoveryStage;
