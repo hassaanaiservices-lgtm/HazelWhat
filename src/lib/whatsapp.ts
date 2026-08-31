@@ -1480,7 +1480,7 @@ export class WhatsAppManager {
     
     const validUrls = imageUrls.filter(url => 
       url && typeof url === 'string' && 
-      (url.startsWith('http://') || url.startsWith('https://')) && 
+      (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image/')) && 
       !url.includes('placeholder')
     );
 
@@ -1491,7 +1491,14 @@ export class WhatsAppManager {
       const url = validUrls[i];
       const imgCap = i === 0 ? (caption || "") : "";
       try {
-        const sent = await session.sock.sendMessage(jid, { image: { url: url.trim() }, caption: imgCap });
+        let sent;
+        if (url.startsWith('data:image/')) {
+          const base64Data = url.split(',')[1] || url;
+          const buffer = Buffer.from(base64Data, 'base64');
+          sent = await session.sock.sendMessage(jid, { image: buffer, caption: imgCap });
+        } else {
+          sent = await session.sock.sendMessage(jid, { image: { url: url.trim() }, caption: imgCap });
+        }
         if (i === 0) firstSentMsg = sent;
         if (i < validUrls.length - 1) {
           await new Promise(r => setTimeout(r, 250));
@@ -1521,7 +1528,7 @@ export class WhatsAppManager {
     const isValidUrl = (url?: string) => {
       if (!url || typeof url !== 'string') return false;
       const clean = url.trim();
-      return (clean.startsWith('http://') || clean.startsWith('https://')) && 
+      return (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('data:image/')) && 
              !clean.includes('example.com') && 
              !clean.includes('placeholder') && 
              clean !== 'N/A' && 
@@ -1547,10 +1554,17 @@ export class WhatsAppManager {
       await this.sendMediaAlbumBurst(to, allImages, caption, tId);
     } else if (allImages.length === 1) {
       try {
-        await session.sock.sendMessage(jid, { 
-          image: { url: allImages[0] }, 
-          caption 
-        });
+        const img = allImages[0];
+        if (img.startsWith('data:image/')) {
+          const base64Data = img.split(',')[1] || img;
+          const buffer = Buffer.from(base64Data, 'base64');
+          await session.sock.sendMessage(jid, { image: buffer, caption });
+        } else {
+          await session.sock.sendMessage(jid, { 
+            image: { url: img }, 
+            caption 
+          });
+        }
       } catch (e) {
         console.warn("[sendProductCard] Failed to send image, falling back to clean text card:", e);
         await session.sock.sendMessage(jid, { text: caption });

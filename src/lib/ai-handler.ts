@@ -1479,6 +1479,11 @@ async function processHybridEngine(
   if (products.length > 0) {
     const isMenuRequest = ["menu", "show menu", "send menu", "deikhao menu", "dikhao menu", "menu bhajo", "menu do", "menu bhej do", "catalog", "rate list", "list", "card", "website", "products", "services", "deals", "deal", "special deal", "deal dikhao", "deals dikhao", "kya khane ko hai", "khane ko kya hai", "kya kya hai"].some(w => lowerContent === w || lowerContent.includes(w));
     
+    const isValidImage = (img: any): boolean => {
+      return img && typeof img === 'string' && 
+             (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:image/'));
+    };
+
     // FAST-PATH: If they ask for the menu, search for products named "Menu" / "menu." or in the "Menu" category (which represent the board images).
     if (isMenuRequest) {
       const menuBoardProducts = products.filter(p => 
@@ -1489,22 +1494,22 @@ async function processHybridEngine(
       if (menuBoardProducts.length > 0) {
         const albumImages: string[] = [];
         menuBoardProducts.forEach(p => {
-          if (p.image && typeof p.image === 'string' && p.image.startsWith('http')) {
+          if (isValidImage(p.image)) {
             if (!albumImages.includes(p.image.trim())) albumImages.push(p.image.trim());
           }
-          if (p.imageUrl && typeof p.imageUrl === 'string' && p.imageUrl.startsWith('http')) {
+          if (isValidImage(p.imageUrl)) {
             if (!albumImages.includes(p.imageUrl.trim())) albumImages.push(p.imageUrl.trim());
           }
           if (p.images && Array.isArray(p.images)) {
             p.images.forEach((img: string) => {
-              if (img && typeof img === 'string' && img.startsWith('http') && !albumImages.includes(img.trim())) {
+              if (isValidImage(img) && !albumImages.includes(img.trim())) {
                 albumImages.push(img.trim());
               }
             });
           }
           if (p.imageUrls && Array.isArray(p.imageUrls)) {
             p.imageUrls.forEach((img: string) => {
-              if (img && typeof img === 'string' && img.startsWith('http') && !albumImages.includes(img.trim())) {
+              if (isValidImage(img) && !albumImages.includes(img.trim())) {
                 albumImages.push(img.trim());
               }
             });
@@ -1580,22 +1585,22 @@ async function processHybridEngine(
           if (p.description) {
             menuText += `   _${p.description}_\n`;
           }
-          if (p.image && typeof p.image === 'string' && p.image.startsWith('http')) {
+          if (isValidImage(p.image)) {
             if (!albumImages.includes(p.image.trim())) albumImages.push(p.image.trim());
           }
-          if (p.imageUrl && typeof p.imageUrl === 'string' && p.imageUrl.startsWith('http')) {
+          if (isValidImage(p.imageUrl)) {
             if (!albumImages.includes(p.imageUrl.trim())) albumImages.push(p.imageUrl.trim());
           }
           if (p.images && Array.isArray(p.images)) {
             p.images.forEach((img: string) => {
-              if (img && typeof img === 'string' && img.startsWith('http') && !albumImages.includes(img.trim())) {
+              if (isValidImage(img) && !albumImages.includes(img.trim())) {
                 albumImages.push(img.trim());
               }
             });
           }
           if (p.imageUrls && Array.isArray(p.imageUrls)) {
             p.imageUrls.forEach((img: string) => {
-              if (img && typeof img === 'string' && img.startsWith('http') && !albumImages.includes(img.trim())) {
+              if (isValidImage(img) && !albumImages.includes(img.trim())) {
                 albumImages.push(img.trim());
               }
             });
