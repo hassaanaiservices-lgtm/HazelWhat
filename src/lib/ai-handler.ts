@@ -1482,21 +1482,28 @@ async function processHybridEngine(
     let categoryMatch: string | null = null;
     let matchedProducts: any[] = [];
 
-    // First try category matching
+    // Category match only fires for SPECIFIC category keywords (burger, pizza, dessert etc).
+    // If it's a generic menu/catalog request, skip category filter — show full catalog.
+    // CRITICAL: "menu" keyword must NOT match the literal "Menu" category (which stores
+    // menu-board photos, not actual product items).
     const categories = Array.from(new Set(products.map(p => p.category).filter(Boolean))) as string[];
-    for (const cat of categories) {
-      if (isKeywordMatch(lowerContent, cat)) {
-        categoryMatch = cat;
-        matchedProducts = products.filter(p => p.category && isKeywordMatch(categoryMatch!, p.category));
-        break;
+    if (!isMenuRequest) {
+      for (const cat of categories) {
+        // Skip categories literally named "Menu" or "menu." — they contain board images, not items
+        if (/^menu\.?$/i.test(cat.trim())) continue;
+        if (isKeywordMatch(lowerContent, cat)) {
+          categoryMatch = cat;
+          matchedProducts = products.filter(p => p.category && isKeywordMatch(categoryMatch!, p.category));
+          break;
+        }
       }
-    }
 
-    // If no category match, try product title matching
-    if (!categoryMatch) {
-      matchedProducts = products.filter(p => p.title && isKeywordMatch(lowerContent, p.title));
-      if (matchedProducts.length > 0) {
-        categoryMatch = matchedProducts[0].title;
+      // If no category match, try product title matching
+      if (!categoryMatch) {
+        matchedProducts = products.filter(p => p.title && isKeywordMatch(lowerContent, p.title));
+        if (matchedProducts.length > 0) {
+          categoryMatch = matchedProducts[0].title;
+        }
       }
     }
 
@@ -2040,12 +2047,22 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     const existingChats = await DB.getChats(from, resolvedTenantId);
     const simpleGreetings = new Set(["hi", "hello", "hey", "aoa", "assalam o alaikum", "assalamu alaikum", "slam", "salam"]);
 
-    // Session-aware greeting: send fresh greeting if this is the first message in this tenant's session
-    // OR if the last conversation had no recent messages for this tenant
     const tenantChats = existingChats.filter((m: any) => m.role === 'user' || m.role === 'assistant');
     const lastTenantWelcome = tenantChats.findIndex((m: any) => m.role === 'assistant' && m.content?.includes(`Welcome to ${activeBusinessName}`));
-    // It's a new session if: no previous chat with this tenant, OR last message was a greeting with nothing after, OR total messages very few
-    const isNewSession = tenantChats.length <= 1 || (lastTenantWelcome < 0 && tenantChats.length <= 2);
+
+    // Temporal Reset Guard: If the last message was more than 4 hours ago, treat this as a fresh session
+    const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+    const lastMsg = tenantChats[tenantChats.length - 1];
+    let isTemporalReset = false;
+    if (lastMsg) {
+      const lastMsgTime = new Date(lastMsg.timestamp || lastMsg.created_at || Date.now()).getTime();
+      if (Date.now() - lastMsgTime > FOUR_HOURS_MS) {
+        isTemporalReset = true;
+      }
+    }
+
+    // It's a new session if: no previous chat with this tenant, OR last message was a greeting with nothing after, OR total messages very few, OR a long time has passed since last interaction.
+    const isNewSession = tenantChats.length <= 1 || (lastTenantWelcome < 0 && tenantChats.length <= 2) || isTemporalReset;
 
     if (isNewSession && simpleGreetings.has(cleanGreetingContent)) {
       const fastGreeting = `Walaikum Assalam! Welcome to ${activeBusinessName}. How can I assist you today?`;
@@ -2089,6 +2106,11 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     // 3. DeepSeek Prompt Cache Prefix Assembly (Static Top, Dynamic Bottom)
     const botPurposeMode = config.botMode || "both";
     let fullSystemPrompt = `${activeSystemPrompt}\n\n=== BOT MODE: ${botPurposeMode.toUpperCase()} (ORDERS & APPOINTMENTS SUPPORTED) ===\n`;
+
+    // Append FAQs and Business Knowledge Base (Product Info) to prompt context!
+    if (config.productInfo && config.productInfo.trim() !== '') {
+      fullSystemPrompt += `\n\n=== BUSINESS KNOWLEDGE BASE & FAQS (Use this to answer customer questions) ===\n${config.productInfo}\n=======================================================\n`;
+    }
 
     fullSystemPrompt += `\n=== CUSTOMER SAVED PROFILE DATA (Variables extracted from conversation) ===\n`;
     fullSystemPrompt += `- Name: ${customer?.name || "None"}\n`;
@@ -2211,15 +2233,20 @@ This customer is a revived dead lead who recently responded to our re-engagement
     }
 
     // Session Isolation Guard: Only use messages from the CURRENT session.
-    // A new session starts after the latest "Welcome to" greeting message.
-    // This prevents cross-tenant chat history contamination.
+    // A new session starts if there is a temporal gap of > 4 hours OR after the latest "Welcome to" greeting.
+    // This prevents old orders or cross-tenant chat history from contaminating fresh chats.
     const allFilteredChats = existingChats.filter((m: any) => m.role === 'user' || m.role === 'assistant');
     let sessionStartIndex = 0;
-    for (let i = allFilteredChats.length - 1; i >= 0; i--) {
-      const m = allFilteredChats[i];
-      if (m.role === 'assistant' && m.content?.includes(`Welcome to ${activeBusinessName}`)) {
-        sessionStartIndex = i;
-        break;
+
+    if (isTemporalReset) {
+      sessionStartIndex = allFilteredChats.length; // start fresh
+    } else {
+      for (let i = allFilteredChats.length - 1; i >= 0; i--) {
+        const m = allFilteredChats[i];
+        if (m.role === 'assistant' && m.content?.includes(`Welcome to ${activeBusinessName}`)) {
+          sessionStartIndex = i;
+          break;
+        }
       }
     }
     const sessionChats = allFilteredChats.slice(sessionStartIndex);
