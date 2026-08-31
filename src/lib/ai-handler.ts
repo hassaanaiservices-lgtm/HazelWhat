@@ -1673,13 +1673,11 @@ export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
 async function processWhatsAppWorkerJob(payload: WhatsAppJobPayload) {
   const { msg, tenantId, customerId } = payload;
 
-  let lock;
-  try {
-    lock = await DistributedLock.acquire(tenantId, customerId, 30000);
-  } catch (err: any) {
-    console.error(`[AI Handler] Failed to acquire lock for customer ${customerId} (tenant: ${tenantId}):`, err.message || err);
-    return;
-  }
+  // Correct DistributedLock API: acquire(key, options) — two args only.
+  // Lock key is per-customer to serialize messages from the same number.
+  const lockKey = `msg:${tenantId}:${customerId}`;
+  const lockResult = await DistributedLock.acquire(lockKey, { ttlMs: 30000 });
+  const lockHandle = lockResult.lock; // may be undefined if lock not acquired
 
   try {
     const processPromise = processWhatsAppMessage(msg, customerId, tenantId);
@@ -1690,7 +1688,9 @@ async function processWhatsAppWorkerJob(payload: WhatsAppJobPayload) {
   } catch (error: any) {
     console.error(`[AI Handler] Error for customer ${customerId}:`, error.message || error);
   } finally {
-    await lock.release();
+    if (lockHandle) {
+      await lockHandle.release().catch(() => {});
+    }
   }
 }
 
