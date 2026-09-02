@@ -2213,14 +2213,16 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
    - ONLY ask for a delivery address if NO saved address exists or if the customer explicitly says they want to deliver to a new/different address.
 
 2. MULTIPLE FOOD ITEMS IN SINGLE ORDER:
-   - Customers can order multiple items and quantities at once (e.g. "Mujhe 2 Zinger Burgers, 1 Medium Pepperoni Pizza, aur 2 Mint Margaritas chahiye").
-   - You MUST support multi-item orders in a single transaction.
-   - Calculate total cost per item (Quantity x Unit Price).
-   - Calculate Grand Total Bill (Sum of all items).
-   - Call place_order tool with:
-     * productName: Combine all items ordered with quantities & sizes (e.g. "2x Smokey Zinger Burger Supreme, 1x Gourmet Pepperoni Feast Pizza (Medium), 2x Chilled Mint Margarita")
-     * price: Total calculated bill (e.g. "3680")
-     * deliveryAddress: The saved address ("${savedCustomerAddress || ""}") or user's provided address.
+   - Customers can order multiple items and quantities at once (e.g. "4x Chicken Tikka (Small), 7x Pizza Fries (Regular), 2x Behari Chicken Spin Rolls, 5x 1.5L Pepsi").
+   - You MUST support multi-item orders in ONE SINGLE place_order tool call!
+   - NEVER tell the customer "Order place karne ke liye mujhe ek ek product alag karna hoga" or try to split an order into multiple single-item orders.
+   - Calculate individual item prices and the Grand Total Bill (Sum of all items).
+   - Call place_order tool ONCE with:
+     * product_name: Combine ALL items ordered with their quantities & sizes (e.g. "4x Chicken Tikka (Small), 7x Pizza Fries (Regular), 2x Behari Chicken Spin Rolls, 5x 1.5L Pepsi")
+     * price: Grand Total calculated bill (e.g. "8983")
+     * quantity: 1
+     * address: The customer's delivery address
+   - IMPORTANT: NEVER drop or forget any previously confirmed items when the customer adds new items or specifies drinks/sizes! Always keep the full list of items in the cart!
 
 3. NEVER call send_product_card — this tool is DISABLED. Do NOT send product images or product cards when a customer asks for a specific product. Respond with TEXT ONLY (product name + price from the catalog).
 4. Do NOT cross-sell or upsell by sending extra product images or cards. Keep the conversation focused on what the customer asked for.
@@ -2339,7 +2341,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
 
     // Filter out system messages and sanitize past assistant refusal messages so LLM never gets primed by past errors!
     let recentHistory = sessionChats
-      .slice(-8)
+      .slice(-24)
       .map((m: any) => {
         let textContent = m.content || "";
         if (m.role === 'assistant' && (
@@ -2413,21 +2415,21 @@ This customer is a revived dead lead who recently responded to our re-engagement
       // Menu images are still served via the Hybrid Engine fast-path when the customer explicitly asks for the menu.
       {
         name: "place_order",
-        description: "Finalizes and places an order for the user after all details (size, color, delivery address, contact number, payment method) have been collected.",
+        description: "Finalizes and places a complete order (containing single or multiple items) for the user in ONE single tool call after order details and address are confirmed. Supports multi-item orders.",
         input_schema: {
           type: "object",
           properties: {
-            product_name: { type: "string", description: "The name of the product" },
-            quantity: { type: "integer", description: "The quantity/number of items ordered. If the user specifies a quantity (e.g. 4 sandwiches), pass it here." },
+            product_name: { type: "string", description: "The complete list or summary of items ordered with quantities and sizes (e.g. '4x Chicken Tikka (Small), 7x Pizza Fries (Regular), 2x Behari Chicken Spin Rolls, 5x 1.5L Pepsi'). Combine ALL items into this single string." },
+            quantity: { type: "integer", description: "Total quantity or 1 for multi-item orders." },
             size: { type: "string" },
             color: { type: "string" },
             address: { type: "string" },
             contact_number: { type: "string" },
             payment_method: { type: "string", description: "e.g. Cash on Delivery, Bank Transfer" },
-            price: { type: "string", description: "Single-item price (the base price of one unit). The system will automatically calculate the total price based on quantity." },
+            price: { type: "string", description: "The Grand Total calculated bill for the ENTIRE order (e.g. '8983' or 'PKR 8983'). Pass the exact final total bill amount here." },
             notes: { type: "string", description: "Special instructions, customizations, size adjustments, or notes requested by the client." }
           },
-          required: ["product_name"]
+          required: ["product_name", "price"]
         }
       },
       {
@@ -2559,7 +2561,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
             try {
               // --- ORDER GUARDRAIL VALIDATION ---
               const rawProduct = (args.product_name || "").trim();
-              const isInvalidProduct = !rawProduct || rawProduct.length > 80 || rawProduct.toLowerCase().includes("confirm karne") || rawProduct.toLowerCase().includes("bata dein");
+              const isInvalidProduct = !rawProduct || rawProduct.length > 500 || rawProduct.toLowerCase().includes("confirm karne") || rawProduct.toLowerCase().includes("bata dein");
 
               if (isInvalidProduct) {
                 console.warn(`[AI Handler Guardrail] Blocked place_order tool call due to invalid product name: "${rawProduct}"`);
@@ -2572,11 +2574,14 @@ This customer is a revived dead lead who recently responded to our re-engagement
               }
 
               const qty = Math.max(1, parseInt(args.quantity) || 1);
-              let finalPrice = args.price || "";
+              let finalPrice = (args.price || "").trim();
+
+              const hasMultipleOrQty = /^\d+x\s/i.test(rawProduct) || rawProduct.includes(",") || rawProduct.includes("+") || rawProduct.includes("\n");
+              const productName = (qty > 1 && !hasMultipleOrQty) ? `${qty}x ${rawProduct}` : rawProduct;
 
               const numericPrice = parseFloat(finalPrice.replace(/[^\d.]/g, ""));
               if (!isNaN(numericPrice)) {
-                const total = numericPrice * qty;
+                const total = (qty > 1 && !hasMultipleOrQty) ? (numericPrice * qty) : numericPrice;
                 let cur: string = activeCurrency;
                 if (finalPrice.includes("PKR")) {
                   cur = "PKR";
@@ -2587,9 +2592,9 @@ This customer is a revived dead lead who recently responded to our re-engagement
                 }
 
                 if (cur === "$") {
-                  finalPrice = `$${total}`;
+                  finalPrice = `$${total.toLocaleString()}`;
                 } else {
-                  finalPrice = `${cur} ${total}`;
+                  finalPrice = `${cur} ${total.toLocaleString()}`;
                 }
               } else {
                 const hasCurrency = /^[A-Za-z\$\£\€\¥]/i.test(finalPrice) || finalPrice.includes("PKR") || finalPrice.includes("Rs.");
@@ -2605,7 +2610,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
               }
 
               const orderData = {
-                productName: qty > 1 ? `${qty}x ${args.product_name}` : args.product_name,
+                productName: productName,
                 size: args.size,
                 color: args.color,
                 deliveryAddress: deliveryAddr || "Address to be confirmed in chat",
