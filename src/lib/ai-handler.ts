@@ -351,7 +351,7 @@ async function transcribeAudioWithGroq(buffer: Buffer, apiKey: string, mimetype 
     throw new Error("Groq API key is missing.");
   }
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
   try {
     const cleanMime = (mimetype || "audio/ogg").split(';')[0].trim() || "audio/ogg";
     const extension = cleanMime.includes("mp4") ? "mp4" : cleanMime.includes("mpeg") ? "mp3" : "ogg";
@@ -359,8 +359,10 @@ async function transcribeAudioWithGroq(buffer: Buffer, apiKey: string, mimetype 
     const blob = new Blob([new Uint8Array(buffer)], { type: cleanMime });
     formData.append("file", blob, `voice_note.${extension}`);
     formData.append("model", "whisper-large-v3-turbo");
+    formData.append("prompt", "Pakistani WhatsApp voice note in Roman Urdu, Urdu, Pashto, or English. Transcribe items, quantities, pizza sizes, and address house/street numbers accurately into clean text.");
+    formData.append("language", "ur");
 
-    console.log(`[Groq STT] Transcribing ${buffer.length} bytes of audio via Groq Whisper...`);
+    console.log(`[Groq STT] Transcribing ${buffer.length} bytes of audio via Groq Whisper Large v3 Turbo...`);
     const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
       method: "POST",
       headers: {
@@ -393,27 +395,14 @@ export async function transcribeAudio(buffer: Buffer, mimetype = "audio/ogg", co
   const errors: Record<string, string> = {};
 
   // 1. Gather keys
-  const geminiKey = getEnvKey("GEMINI_API_KEY") || process.env.GEMINI_API_KEY || getEnvKey("GOOGLE_API_KEY") || process.env.GOOGLE_API_KEY || config?.geminiApiKey || "";
-  const openaiKey = getEnvKey("OPENAI_API_KEY") || process.env.OPENAI_API_KEY || config?.openaiApiKey || "";
   const groqKey = getEnvKey("GROQ_API_KEY") || process.env.GROQ_API_KEY || config?.groqApiKey || "";
+  const openaiKey = getEnvKey("OPENAI_API_KEY") || process.env.OPENAI_API_KEY || config?.openaiApiKey || "";
+  const geminiKey = getEnvKey("GEMINI_API_KEY") || process.env.GEMINI_API_KEY || getEnvKey("GOOGLE_API_KEY") || process.env.GOOGLE_API_KEY || config?.geminiApiKey || "";
   const { apiKey: deepgramKey } = await getDeepgramSettings(config || {});
   
   const generalKey = getEnvKey("API_KEY") || process.env.API_KEY || config?.apiKey || "";
 
-  // 2. Try Deepgram STT if Deepgram key available (Highly accurate for WhatsApp OGG Opus)
-  if (deepgramKey) {
-    try {
-      const transcript = await transcribeAudioWithDeepgram(buffer, deepgramKey, mimetype);
-      if (transcript && transcript.trim()) return transcript.trim();
-      errors["Deepgram"] = "Empty transcript returned";
-    } catch (err: any) {
-      errors["Deepgram"] = err.message || String(err);
-    }
-  } else {
-    errors["Deepgram"] = "No API key configured";
-  }
-
-  // 3. Try Groq Whisper STT if Groq key available
+  // 2. PRIORITY 1: Groq Whisper Large v3 Turbo (Highest accuracy for Roman Urdu / Pakistani Accents)
   const effectiveGroqKey = groqKey || (generalKey.startsWith("gsk_") ? generalKey : "");
   if (effectiveGroqKey) {
     try {
@@ -427,7 +416,7 @@ export async function transcribeAudio(buffer: Buffer, mimetype = "audio/ogg", co
     errors["Groq"] = "No API key configured";
   }
 
-  // 4. Try OpenAI Whisper STT if OpenAI key available
+  // 3. PRIORITY 2: OpenAI Whisper-1
   const effectiveOpenAIKey = openaiKey || ((generalKey.startsWith("sk-") || generalKey.startsWith("sk-proj-")) && !generalKey.startsWith("sk-ant-") && !generalKey.startsWith("sk-or-") ? generalKey : "");
   if (effectiveOpenAIKey) {
     try {
@@ -441,7 +430,20 @@ export async function transcribeAudio(buffer: Buffer, mimetype = "audio/ogg", co
     errors["OpenAI"] = "No API key configured";
   }
 
-  // 5. Try Gemini Flash STT if Gemini key available (Fallback: limited OGG Opus decoding)
+  // 4. PRIORITY 3: Deepgram STT
+  if (deepgramKey) {
+    try {
+      const transcript = await transcribeAudioWithDeepgram(buffer, deepgramKey, mimetype);
+      if (transcript && transcript.trim()) return transcript.trim();
+      errors["Deepgram"] = "Empty transcript returned";
+    } catch (err: any) {
+      errors["Deepgram"] = err.message || String(err);
+    }
+  } else {
+    errors["Deepgram"] = "No API key configured";
+  }
+
+  // 5. PRIORITY 4: Gemini Flash STT (Fallback)
   const effectiveGeminiKey = geminiKey || (generalKey.startsWith("AIza") ? generalKey : "");
   if (effectiveGeminiKey) {
     try {
