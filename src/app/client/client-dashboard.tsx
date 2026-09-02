@@ -5487,9 +5487,27 @@ export default function DashboardPage() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="text-[10px] text-[#7b7b78] uppercase font-bold tracking-wider">Delivery Destination</div>
-                          <div className="text-xs font-semibold text-[#111111] truncate mt-0.5" title={selectedOrderDetail.deliveryAddress || 'Pending Address'}>
-                            {selectedOrderDetail.deliveryAddress || 'Pending Address'}
-                          </div>
+                          {(() => {
+                            // Resolve best available delivery address
+                            const orderAddr = selectedOrderDetail.deliveryAddress;
+                            const isPlaceholder = !orderAddr || orderAddr.toLowerCase().includes("provided in chat") || orderAddr.toLowerCase().includes("to be confirmed");
+                            let resolvedAddr = isPlaceholder ? "" : orderAddr;
+                            if (!resolvedAddr) {
+                              // Try customer saved address from preferences JSON
+                              try {
+                                const prefs = JSON.parse(customers[selectedOrderDetail.phone]?.preferences || "{}");
+                                resolvedAddr = prefs.deliveryAddress || "";
+                              } catch (_) {}
+                            }
+                            if (!resolvedAddr) {
+                              resolvedAddr = customers[selectedOrderDetail.phone]?.address || "";
+                            }
+                            return (
+                              <div className="text-xs font-semibold text-[#111111] truncate mt-0.5" title={resolvedAddr || 'Pending Address'}>
+                                {resolvedAddr || 'Pending Address'}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
 

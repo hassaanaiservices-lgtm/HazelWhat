@@ -2941,29 +2941,54 @@ This customer is a revived dead lead who recently responded to our re-engagement
           if (!recentOrder) {
             console.warn(`[AI Handler Safeguard] Order confirmation detected in AI reply for ${from}, but no DB order record found! Auto-saving order to DB...`);
             
-            // Auto-extract item name from AI reply
+            // Auto-extract ALL item names from numbered list (e.g. "1. Arabic Chicken Roll — 501 PKR")
             let extractedProduct = "WhatsApp Order";
-            const productMatch = aiReply.match(/(?:🍗|🍔|🍕|🥟|🍣|🧃|📦|Order:?)\s*([^\n—–\-•,]+)/i) || 
-                                 aiReply.match(/(?:placed|confirmed|for)\!?\s*([^\n—–\-•,]+)/i);
-            if (productMatch && productMatch[1]) {
-              const candidate = productMatch[1].trim();
-              if (candidate.length < 50 && !candidate.toLowerCase().includes("confirm") && !candidate.toLowerCase().includes("contact")) {
-                extractedProduct = candidate;
+            const numberedItems: string[] = [];
+            const numberedListRegex = /^\s*\d+\.\s+([^\n]+)/gm;
+            let listMatch;
+            while ((listMatch = numberedListRegex.exec(aiReply)) !== null) {
+              // Strip trailing price portion (e.g. "— 501 PKR" or "– 3,779 PKR")
+              const itemName = listMatch[1].replace(/\s*[—–\-]\s*(?:Rs\.?|PKR|\$)?\s*[\d,]+\s*(?:PKR|Rs\.?)?\s*$/i, "").trim();
+              if (itemName && itemName.length < 120 && !itemName.toLowerCase().includes("total")) {
+                numberedItems.push(itemName);
+              }
+            }
+            if (numberedItems.length > 0) {
+              extractedProduct = numberedItems.join(", ");
+            } else {
+              // Fallback: try single product patterns
+              const productMatch = aiReply.match(/(?:🍗|🍔|🍕|🥟|🍣|🧃|📦|Order:?)\s*([^\n—–\-•,]+)/i) || 
+                                   aiReply.match(/(?:placed|confirmed|for)\!?\s*([^\n—–\-•,]+)/i);
+              if (productMatch && productMatch[1]) {
+                const candidate = productMatch[1].trim();
+                if (candidate.length < 80 && !candidate.toLowerCase().includes("confirm") && !candidate.toLowerCase().includes("contact")) {
+                  extractedProduct = candidate;
+                }
               }
             }
 
-            // Auto-extract price from AI reply
+            // Auto-extract TOTAL price (prioritise "Total: X,XXX PKR" pattern)
             let extractedPrice = "COD";
-            const priceMatch = aiReply.match(/(?:PKR|Rs\.?|\$)\s*\d+(?:,\d+)?/i) || aiReply.match(/\d+\s*(?:PKR|Rs\.?)/i);
-            if (priceMatch) {
-              extractedPrice = priceMatch[0].trim();
+            const totalPriceMatch = aiReply.match(/\*?Total[:\s]+(?:Rs\.?|PKR)?\s*([\d,]+)\s*(?:PKR|Rs\.)?\*?/i) ||
+                                    aiReply.match(/(?:Grand Total|Total Bill)[:\s]+(?:Rs\.?|PKR)?\s*([\d,]+)/i);
+            if (totalPriceMatch && totalPriceMatch[1]) {
+              const numStr = totalPriceMatch[1].replace(/,/g, "");
+              extractedPrice = `PKR ${parseInt(numStr).toLocaleString()}`;
+            } else {
+              const priceMatch = aiReply.match(/(?:PKR|Rs\.?|\$)\s*[\d,]+/i) || aiReply.match(/[\d,]+\s*(?:PKR|Rs\.?)/i);
+              if (priceMatch) {
+                extractedPrice = priceMatch[0].trim();
+              }
             }
 
-            // Auto-extract delivery address from AI reply
-            let extractedAddress = "Address provided in chat";
-            const addressMatch = aiReply.match(/(?:delivering to|address:?|location:?)\s*([^\n.!\n]+)/i);
+            // Auto-extract delivery address — fall back to savedCustomerAddress instead of placeholder
+            let extractedAddress = savedCustomerAddress || "Address to be confirmed in chat";
+            const addressMatch = aiReply.match(/(?:Address|deliver.*to|pata)[:\s]+([^\n.!]{5,100})/i);
             if (addressMatch && addressMatch[1]) {
-              extractedAddress = addressMatch[1].trim();
+              const candidate = addressMatch[1].trim();
+              if (candidate.length > 5 && !candidate.toLowerCase().includes("provided in chat")) {
+                extractedAddress = candidate;
+              }
             }
 
             await DB.addOrder(from, {
