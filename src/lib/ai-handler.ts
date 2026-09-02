@@ -402,7 +402,7 @@ export async function transcribeAudio(buffer: Buffer, mimetype = "audio/ogg", co
   
   const generalKey = getEnvKey("API_KEY") || process.env.API_KEY || config?.apiKey || "";
 
-  // 2. PRIORITY 1: Groq Whisper Large v3 Turbo (Highest accuracy for Roman Urdu / Pakistani Accents)
+  // 2. Groq Whisper (If Key Available)
   const effectiveGroqKey = groqKey || (generalKey.startsWith("gsk_") ? generalKey : "");
   if (effectiveGroqKey) {
     try {
@@ -412,11 +412,9 @@ export async function transcribeAudio(buffer: Buffer, mimetype = "audio/ogg", co
     } catch (err: any) {
       errors["Groq"] = err.message || String(err);
     }
-  } else {
-    errors["Groq"] = "No API key configured";
   }
 
-  // 3. PRIORITY 2: OpenAI Whisper-1
+  // 3. OpenAI Whisper (If Key Available)
   const effectiveOpenAIKey = openaiKey || ((generalKey.startsWith("sk-") || generalKey.startsWith("sk-proj-")) && !generalKey.startsWith("sk-ant-") && !generalKey.startsWith("sk-or-") ? generalKey : "");
   if (effectiveOpenAIKey) {
     try {
@@ -426,24 +424,9 @@ export async function transcribeAudio(buffer: Buffer, mimetype = "audio/ogg", co
     } catch (err: any) {
       errors["OpenAI"] = err.message || String(err);
     }
-  } else {
-    errors["OpenAI"] = "No API key configured";
   }
 
-  // 4. PRIORITY 3: Deepgram STT
-  if (deepgramKey) {
-    try {
-      const transcript = await transcribeAudioWithDeepgram(buffer, deepgramKey, mimetype);
-      if (transcript && transcript.trim()) return transcript.trim();
-      errors["Deepgram"] = "Empty transcript returned";
-    } catch (err: any) {
-      errors["Deepgram"] = err.message || String(err);
-    }
-  } else {
-    errors["Deepgram"] = "No API key configured";
-  }
-
-  // 5. PRIORITY 4: Gemini Flash STT (Fallback)
+  // 4. Gemini Flash STT (Primary active provider when GEMINI_API_KEY is present)
   const effectiveGeminiKey = geminiKey || (generalKey.startsWith("AIza") ? generalKey : "");
   if (effectiveGeminiKey) {
     try {
@@ -455,6 +438,17 @@ export async function transcribeAudio(buffer: Buffer, mimetype = "audio/ogg", co
     }
   } else {
     errors["Gemini"] = "No API key configured";
+  }
+
+  // 5. Deepgram STT (Fallback)
+  if (deepgramKey) {
+    try {
+      const transcript = await transcribeAudioWithDeepgram(buffer, deepgramKey, mimetype);
+      if (transcript && transcript.trim()) return transcript.trim();
+      errors["Deepgram"] = "Empty transcript returned";
+    } catch (err: any) {
+      errors["Deepgram"] = err.message || String(err);
+    }
   }
 
   console.warn("[STT Engine] All transcription attempts failed or returned empty. Error details:", errors);
