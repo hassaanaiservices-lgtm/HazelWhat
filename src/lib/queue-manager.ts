@@ -423,6 +423,46 @@ export function registerQueueWorker(processor: (payload: WhatsAppJobPayload) => 
         request_id: job.data.traceContext?.requestId,
       });
     });
+
+    // Catch unhandled worker-level errors (Redis disconnects, BullMQ internal crashes)
+    messageWorker.on("error", (err) => {
+      logger.error({ event: "worker_error", error: err.message });
+      console.error("[QueueManager] BullMQ Worker error:", err.message);
+    });
+
+    // ─── Worker Resurrection Watchdog ────────────────────────────────────────
+    // Checks every 60s if the BullMQ worker is still alive. If it has closed
+    // or crashed, it tears it down and re-registers a fresh worker.
+    // This is the permanent fix for "bot stops replying" after Redis blips.
+    const workerWatchdog = setInterval(async () => {
+      if (isShuttingDown) {
+        clearInterval(workerWatchdog);
+        return;
+      }
+      try {
+        const workerClosed = !messageWorker || (messageWorker as any).closing || (messageWorker as any).closed;
+        const redisOk = !!getRedisClient() && (getRedisClient()!.status === "ready" || getRedisClient()!.status === "connect");
+
+        if (workerClosed && redisOk && registeredProcessor) {
+          console.warn("[QueueManager] ⚠️ BullMQ Worker detected as dead. Resurrecting worker...");
+          try {
+            if (messageWorker) {
+              await messageWorker.close().catch(() => {});
+            }
+          } catch (_) {}
+          messageWorker = null;
+          // Re-register fresh worker
+          registerQueueWorker(registeredProcessor);
+          console.log("[QueueManager] ✅ BullMQ Worker resurrected successfully.");
+        } else if (!workerClosed) {
+          logger.debug({ event: "worker_health_ok", status: "alive" });
+        }
+      } catch (watchdogErr: any) {
+        console.error("[QueueManager] Worker watchdog error:", watchdogErr.message);
+      }
+    }, 60000);
+    // ─────────────────────────────────────────────────────────────────────────
+
   } else {
     triggerMemoryWorkers();
   }

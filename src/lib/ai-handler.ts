@@ -1320,7 +1320,10 @@ export class DistributedLock {
       const startTime = Date.now();
       let attempt = 0;
       let redisFailed = false;
-      while (Date.now() - startTime < ttlMs) {
+      // Use a shorter per-lock wait window (10s instead of full 30s ttlMs)
+      // so a stuck lock doesn't freeze the entire pipeline
+      const lockWaitMs = Math.min(ttlMs, 10000);
+      while (Date.now() - startTime < lockWaitMs) {
         const result = await RedisLockManager.acquire(lockKey, token, ttlMs);
         if (result.success) {
           let released = false;
@@ -1345,10 +1348,13 @@ export class DistributedLock {
       if (redisFailed) {
         console.warn(`[DistributedLock] Redis lock acquisition failed due to Redis outage. Falling back to in-memory lock for ${lockKey}.`);
       } else {
-        throw new Error(`Lock acquisition timed out for key ${lockKey}`);
+        // CHANGED: Log timeout but fall through to in-memory lock instead of throwing,
+        // so the message is still processed (prevents silent bot freeze on lock timeout)
+        console.warn(`[DistributedLock] Lock acquisition timed out (${lockWaitMs}ms) for ${lockKey}. Falling back to in-memory lock to avoid dropping message.`);
       }
     }
 
+    // In-memory fallback lock (runs when Redis is unavailable or timed out)
     const memKey = `${tenantId}:${customerId}`;
     let queue = this.inMemoryLocks.get(memKey);
     if (!queue) {
@@ -1364,7 +1370,11 @@ export class DistributedLock {
     });
     queue.promise = currentPromise;
 
-    await previousPromise;
+    // Add a safety timeout on the in-memory lock queue too (prevents deadlocks)
+    await Promise.race([
+      previousPromise,
+      new Promise<void>(resolve => setTimeout(resolve, 12000)) // 12s fallback unlock
+    ]);
 
     let released = false;
     return {
@@ -1857,6 +1867,12 @@ async function processWhatsAppWorkerJob(payload: WhatsAppJobPayload) {
 
   let lockHandle: { release: () => Promise<void> } | undefined;
 
+  // Per-job heartbeat so we can see stuck jobs in logs
+  const jobStart = Date.now();
+  const heartbeatId = setInterval(() => {
+    console.warn(`[AI Handler] ⏳ Job still processing for customer ${customerId} (tenant ${tenantId}) — elapsed ${Math.round((Date.now() - jobStart) / 1000)}s`);
+  }, 5000);
+
   try {
     // Call the correct inline DistributedLock.acquire(tenantId, customerId, ttlMs)
     lockHandle = await DistributedLock.acquire(tenantId, customerId, 30000);
@@ -1871,6 +1887,7 @@ async function processWhatsAppWorkerJob(payload: WhatsAppJobPayload) {
     // Rethrow to let the queue manager know the job failed and should be retried or sent to DLQ
     throw error;
   } finally {
+    clearInterval(heartbeatId);
     if (lockHandle) {
       await lockHandle.release().catch((releaseErr: any) => {
         console.warn(`[AI Handler] Failed to release lock for customer ${customerId}:`, releaseErr.message || releaseErr);
