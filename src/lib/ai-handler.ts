@@ -162,7 +162,7 @@ async function transcribeAudioWithDeepgram(buffer: Buffer, apiKey: string, mimet
   try {
     const cleanMime = (mimetype || "audio/ogg").split(';')[0].trim() || "audio/ogg";
     console.log(`[Deepgram STT] Transcribing ${buffer.length} bytes of audio (${cleanMime})...`);
-    
+
     // Primary attempt: model=nova-2 with detect_language=true & smart_format=true & punctuate=true
     let res = await fetch("https://api.deepgram.com/v1/listen?model=nova-2&detect_language=true&smart_format=true&punctuate=true", {
       method: "POST",
@@ -178,7 +178,7 @@ async function transcribeAudioWithDeepgram(buffer: Buffer, apiKey: string, mimet
     if (!res.ok) {
       const errText = await res.text();
       console.warn(`[Deepgram STT] First attempt error (${res.status}):`, errText);
-      
+
       const fallbackController = new AbortController();
       const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 10000);
       try {
@@ -263,7 +263,7 @@ async function transcribeAudioWithGemini(buffer: Buffer, apiKey: string, mimetyp
   try {
     const cleanMime = (mimetype || "audio/ogg").split(';')[0].trim() || "audio/ogg";
     const base64Audio = buffer.toString("base64");
-    
+
     console.log(`[Gemini STT] Transcribing ${buffer.length} bytes of audio via Gemini 3.6 Flash...`);
     let res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey.trim()}`, {
       method: "POST",
@@ -399,7 +399,7 @@ export async function transcribeAudio(buffer: Buffer, mimetype = "audio/ogg", co
   const openaiKey = getEnvKey("OPENAI_API_KEY") || process.env.OPENAI_API_KEY || config?.openaiApiKey || "";
   const geminiKey = getEnvKey("GEMINI_API_KEY") || process.env.GEMINI_API_KEY || getEnvKey("GOOGLE_API_KEY") || process.env.GOOGLE_API_KEY || config?.geminiApiKey || "";
   const { apiKey: deepgramKey } = await getDeepgramSettings(config || {});
-  
+
   const generalKey = getEnvKey("API_KEY") || process.env.API_KEY || config?.apiKey || "";
 
   // 2. Groq Whisper (If Key Available)
@@ -461,7 +461,7 @@ export async function transcribeAudio(buffer: Buffer, mimetype = "audio/ogg", co
     tenantId,
     severity: 'medium',
     metadata: { errors, mimetype, bufferSize: buffer.length }
-  }).catch(() => {});
+  }).catch(() => { });
 
   return "";
 }
@@ -885,17 +885,17 @@ export async function callLLMWithFallback(
 
   try {
     const candidateKeys: { key: string; name: string }[] = [];
-    
+
     if (config?.apiKey) candidateKeys.push({ key: config.apiKey, name: "tenant_primary" });
     if (config?.openRouterApiKey) candidateKeys.push({ key: config.openRouterApiKey, name: "tenant_openrouter" });
     if (config?.anthropicApiKey) candidateKeys.push({ key: config.anthropicApiKey, name: "tenant_anthropic" });
-    
+
     const sysDeepSeek = process.env.DEEPSEEK_API_KEY || getEnvKey("DEEPSEEK_API_KEY");
     if (sysDeepSeek) candidateKeys.push({ key: sysDeepSeek, name: "system_deepseek" });
-    
+
     const sysOpenRouter = process.env.OPENROUTER_API_KEY;
     if (sysOpenRouter) candidateKeys.push({ key: sysOpenRouter, name: "system_openrouter" });
-    
+
     const sysAnthropic = process.env.ANTHROPIC_API_KEY;
     if (sysAnthropic) candidateKeys.push({ key: sysAnthropic, name: "system_anthropic" });
 
@@ -1007,7 +1007,7 @@ async function callLLM(
     const openAiMessages = convertAnthropicMessagesToOpenAi(messages, systemPrompt);
     const openAiTools = convertAnthropicToolsToOpenAi(tools);
 
-    const hasImage = messages.some(msg => 
+    const hasImage = messages.some(msg =>
       Array.isArray(msg.content) && msg.content.some((block: any) => block.type === "image")
     );
 
@@ -1080,7 +1080,7 @@ async function callLLM(
           lastError = new Error(msg);
           if (res.status === 401 || res.status === 402) {
             console.warn(`[callLLM] OpenRouter Auth/Billing error (${res.status}). Stopping model loop.`);
-            break; 
+            break;
           }
           continue;
         }
@@ -1098,7 +1098,7 @@ async function callLLM(
         if (assistantMsg.tool_calls) {
           for (const tc of assistantMsg.tool_calls) {
             let input = {};
-            try { input = JSON.parse(tc.function.arguments || "{}"); } catch (e) {}
+            try { input = JSON.parse(tc.function.arguments || "{}"); } catch (e) { }
             anthropicContent.push({
               type: "tool_use",
               id: tc.id || `call_${Math.random().toString(36).substr(2, 9)}`,
@@ -1154,7 +1154,7 @@ async function callLLM(
     for (let attempt = 1; attempt <= attempts; attempt++) {
       try {
         console.log(`[callLLM] DeepSeek API attempt ${attempt} of ${attempts}...`);
-        
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 25000);
 
@@ -1182,7 +1182,7 @@ async function callLLM(
           try {
             const parsed = JSON.parse(errText);
             jsonMsg = parsed?.error?.message || parsed?.message || errText;
-          } catch (e) {}
+          } catch (e) { }
           throw new ProviderError(`DeepSeek API Error (${res.status}): ${jsonMsg}`, res.status, "deepseek", errText);
         }
         break;
@@ -1359,7 +1359,7 @@ export class DistributedLock {
     }
     queue.pendingCount++;
     const previousPromise = queue.promise;
-    
+
     let resolveLock: () => void;
     const currentPromise = new Promise<void>((resolve) => {
       resolveLock = resolve;
@@ -1475,22 +1475,22 @@ interface HybridMatchResult {
 function isKeywordMatch(query: string, target: string): boolean {
   const cleanQuery = query.toLowerCase().trim();
   const cleanTarget = target.toLowerCase().trim();
-  
+
   if (cleanQuery.includes(cleanTarget) || cleanTarget.includes(cleanQuery)) {
     return true;
   }
-  
+
   const queryWords = cleanQuery.split(/[\s,.-]+/);
   const targetWords = cleanTarget.split(/[\s,.-]+/);
-  
+
   for (const qw of queryWords) {
     if (qw.length < 3) continue;
     const qwStem = qw.endsWith('s') ? qw.slice(0, -1) : qw;
-    
+
     for (const tw of targetWords) {
       if (tw.length < 3) continue;
       const twStem = tw.endsWith('s') ? tw.slice(0, -1) : tw;
-      
+
       if (qwStem === twStem || qwStem.includes(twStem) || twStem.includes(qwStem)) {
         return true;
       }
@@ -1526,16 +1526,16 @@ export async function processHybridEngine(
   // 1. FAST-PATH: Category & Instant Catalog / Menu Generator with Multi-Image Album Burst (0 Tokens)
   if (products.length > 0) {
     const isMenuRequest = ["menu", "show menu", "send menu", "deikhao menu", "dikhao menu", "menu bhajo", "menu do", "menu bhej do", "catalog", "rate list", "list", "card", "website", "products", "services", "deals", "deal", "special deal", "deal dikhao", "deals dikhao", "kya khane ko hai", "khane ko kya hai", "kya kya hai"].some(w => lowerContent === w || lowerContent.includes(w));
-    
+
     const isValidImage = (img: any): boolean => {
-      return img && typeof img === 'string' && 
-             (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:image/'));
+      return img && typeof img === 'string' &&
+        (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:image/'));
     };
 
     // FAST-PATH: If they ask for the menu, search for products named "Menu" / "menu." or in the "Menu" category (which represent the board images).
     if (isMenuRequest) {
-      const menuBoardProducts = products.filter(p => 
-        (p.title && /^menu\.?$/i.test(p.title.trim())) || 
+      const menuBoardProducts = products.filter(p =>
+        (p.title && /^menu\.?$/i.test(p.title.trim())) ||
         (p.category && /^menu\.?$/i.test(p.category.trim()))
       );
 
@@ -1618,7 +1618,7 @@ export async function processHybridEngine(
         const cleanTitle = p.title ? p.title.toLowerCase().trim() : "";
         const queryWords = lowerContent.split(/[\s,.-]+/);
         const titleWords = cleanTitle.split(/[\s,.-]+/);
-        
+
         // Exact title match or query contains word stem
         const titleMatch = titleWords.some((tw: string) => {
           if (tw.length < 3) return false;
@@ -1637,7 +1637,7 @@ export async function processHybridEngine(
         if (cleanTitle.includes("water") && ["water", "paani", "pani"].some(w => lowerContent.includes(w))) {
           specificMatch = true;
         }
-        
+
         return titleMatch || specificMatch || lowerContent.includes(cleanTitle) || cleanTitle.includes(lowerContent);
       });
     } else {
@@ -1648,7 +1648,7 @@ export async function processHybridEngine(
 
         const queryWords = lowerContent.split(/[\s,.-]+/);
         const titleWords = cleanTitle.split(/[\s,.-]+/);
-        
+
         const titleMatch = titleWords.some((tw: string) => {
           if (tw.length < 3) return false;
           const twStem = tw.endsWith('s') ? tw.slice(0, -1) : tw;
@@ -1663,39 +1663,24 @@ export async function processHybridEngine(
       });
     }
 
-    // A. Specific Item Request matched
+    // A. Specific Item Request matched — TEXT ONLY (no product images / no cross-sell / no upsell)
     if (matchedProducts.length > 0 && !isMenuRequest) {
       const uniqueMatched = matchedProducts.filter((v, i, a) => a.findIndex(t => t.title === v.title) === i);
-      
-      let replyText = `📜 *${activeTenant?.businessName || config.businessName || "Pizza Box"} Menu* 🍕🍔\n\n`;
-      const albumImages: string[] = [];
-      
+
+      let replyText = `📜 *${activeTenant?.businessName || config.businessName || "Pizza Box"}* 🍕🍔\n\n`;
+
       uniqueMatched.forEach(p => {
         const cleanPrice = p.price ? p.price.replace(new RegExp(currency, 'gi'), '').trim() : "";
         const priceDisplay = cleanPrice && cleanPrice !== "0" && cleanPrice !== "N/A" ? `${currency} ${cleanPrice}` : "N/A";
         replyText += `• *${p.title}* — ${priceDisplay}\n`;
-        
-        if (isValidImage(p.image)) {
-          if (!albumImages.includes(p.image.trim())) albumImages.push(p.image.trim());
-        }
-        if (isValidImage(p.imageUrl)) {
-          if (!albumImages.includes(p.imageUrl.trim())) albumImages.push(p.imageUrl.trim());
-        }
-        if (p.images && Array.isArray(p.images)) {
-          p.images.forEach((img: string) => {
-            if (isValidImage(img) && !albumImages.includes(img.trim())) {
-              albumImages.push(img.trim());
-            }
-          });
-        }
       });
-      
+
       replyText += `\nKaunsa order karna hai aur kitne pieces/quantity?`;
-      
+
+      // NOTE: No images returned intentionally — product pictures are disabled for individual item lookups.
       return {
         matched: true,
         reply: replyText,
-        images: albumImages.length > 0 ? albumImages.slice(0, 15) : undefined,
         source: "product_catalog"
       };
     }
@@ -1712,13 +1697,13 @@ export async function processHybridEngine(
 
       let menuText = `📜 *${activeTenant?.businessName || config.businessName || "Pizza Box"} Menu* 🍕🍔\n\n`;
       const grouped: Record<string, any[]> = {};
-      
+
       displayProducts.forEach(p => {
         const cat = p.category || "Menu Items";
         if (!grouped[cat]) grouped[cat] = [];
         grouped[cat].push(p);
       });
-      
+
       const albumImages: string[] = [];
       let itemCount = 0;
       for (const [cat, items] of Object.entries(grouped)) {
@@ -1728,7 +1713,7 @@ export async function processHybridEngine(
           const cleanPrice = p.price ? p.price.replace(new RegExp(currency, 'gi'), '').trim() : "";
           const priceDisplay = cleanPrice && cleanPrice !== "0" && cleanPrice !== "N/A" ? `${currency} ${cleanPrice}` : "";
           menuText += `• *${p.title}*${priceDisplay ? ` — ${priceDisplay}` : ""}\n`;
-          
+
           if (isValidImage(p.image)) {
             if (!albumImages.includes(p.image.trim())) albumImages.push(p.image.trim());
           }
@@ -1738,7 +1723,7 @@ export async function processHybridEngine(
         });
         menuText += `\n`;
       }
-      
+
       if (itemCount > 0) {
         menuText += `Order karne ke liye item ka naam aur quantity bata dein! 😊`;
         return {
@@ -1752,7 +1737,7 @@ export async function processHybridEngine(
   }
 
   // 2. SAFETY GUARD: Bypass rule engine for complex inquiries
-  const isComplex = lowerContent.length > 130 || 
+  const isComplex = lowerContent.length > 130 ||
     (lowerContent.match(/\?/g) || []).length > 1 ||
     ["discount", "bargain", "complaint", "broken", "wrong", "cancel", "return my money", "faulty", "different"].some(w => lowerContent.includes(w));
 
@@ -1761,7 +1746,7 @@ export async function processHybridEngine(
   }
 
   // 3. LAYER 1A: Manual Keyword Rules
-  const manualMatch = config.keywordReplies?.find((k: any) => 
+  const manualMatch = config.keywordReplies?.find((k: any) =>
     k.keyword.trim() !== "" && lowerContent.includes(k.keyword.toLowerCase())
   );
   if (manualMatch) {
@@ -1790,7 +1775,7 @@ export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
       debugLog(`Duplicate message ignored: ${msgId}`);
       return;
     }
-    
+
     let from = msg.key.remoteJid;
     if (from?.includes("@lid")) {
       if (msg.key.remoteJidAlt) {
@@ -1813,7 +1798,7 @@ export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
     const queueLength = await getQueueLength();
     if (queueLength >= 1000) {
       console.warn(`[AI Handler] System Backpressure Exceeded (Queue Length: ${queueLength}). Dropping message from ${from}.`);
-      
+
       await logAppError({
         service: 'queue-manager',
         operation: 'enqueue',
@@ -1838,7 +1823,7 @@ export async function handleWhatsAppMessage(msg: any, inputTenantId?: string) {
     const allowed = await IngressRateLimiter.isAllowed(tenantId, limit);
     if (!allowed) {
       console.warn(`[AI Handler] Ingress Rate Limit Exceeded for tenant ${tenantId} (Limit: ${limit}/min). Dropping message from ${from}.`);
-      
+
       await logAppError({
         service: 'ingest-api',
         operation: 'receive',
@@ -1872,9 +1857,9 @@ async function processWhatsAppWorkerJob(payload: WhatsAppJobPayload) {
   try {
     // Call the correct inline DistributedLock.acquire(tenantId, customerId, ttlMs)
     lockHandle = await DistributedLock.acquire(tenantId, customerId, 30000);
-    
+
     const processPromise = processWhatsAppMessage(msg, customerId, tenantId);
-    const timeoutPromise = new Promise<void>((_, reject) => 
+    const timeoutPromise = new Promise<void>((_, reject) =>
       setTimeout(() => reject(new Error("Message processing timed out (35s)")), 35000)
     );
     await Promise.race([processPromise, timeoutPromise]);
@@ -1900,7 +1885,7 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
   try {
     const interactiveResponse = msg.message?.interactiveResponseMessage;
     let content = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || "";
-    
+
     // Resolve Tenant ID early!
     resolvedTenantId = inputTenantId || WhatsAppManager.getActiveTenantId() || undefined;
     if (!resolvedTenantId) {
@@ -1924,11 +1909,11 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
           const parts = params.id.split("_");
           const encodedLink = parts.slice(2).join("_");
           const link = encodedLink ? Buffer.from(encodedLink, 'base64').toString('utf-8') : "https://cutecoodle.com";
-          
+
           console.log(`[AI Handler] View Product button clicked for ${link} by ${from}`);
           const reply = `Here is the direct link to view this product on our website: \n${link}`;
           await WhatsAppManager.sendMessage(from, reply);
-          
+
           await DB.addChatMessage(from, { role: "user", content: `[Clicked View Product]` }, resolvedTenantId);
           await DB.addChatMessage(from, { role: "assistant", content: reply }, resolvedTenantId);
           return;
@@ -1936,24 +1921,24 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
         else if (params.id && params.id.startsWith("order_")) {
           const parts = params.id.split("_");
           const productName = parts.slice(2).join("_") || "Product";
-          
+
           console.log(`[AI Handler] Order button clicked for ${productName} by ${from}`);
-          
+
           const reply = `Great choice! To place an order for *${productName}*, I just need a few details:\n\n1. What size/color would you like?\n2. What is your delivery address?\n3. Please provide a contact phone number.\n\nYou can type your answers below!`;
           await WhatsAppManager.sendMessage(from, reply);
-          
+
           await DB.addChatMessage(from, { role: "user", content: `[I want to order: ${productName}]` }, resolvedTenantId);
           await DB.addChatMessage(from, { role: "assistant", content: reply }, resolvedTenantId);
-          return; 
+          return;
         }
       } catch (e) {
         console.error("[AI Handler] Error parsing interactive response:", e);
       }
     }
-    
+
     const hasImage = !!msg.message?.imageMessage;
     const hasAudio = !!msg.message?.audioMessage;
-    
+
     if (!from || (!content && !hasImage && !hasAudio)) return;
 
     console.log(`[AI Handler] Received message from ${from}: ${content} (HasImage: ${hasImage}, HasAudio: ${hasAudio})`);
@@ -1987,7 +1972,7 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     if (hasAudio && audioBuffer) {
       console.log(`[AI Handler] Voice note detected. Audio buffer size: ${audioBuffer.length} bytes. Mime: ${audioMime}`);
       voiceTranscript = await transcribeAudio(audioBuffer, audioMime, config, resolvedTenantId);
-      
+
       if (voiceTranscript) {
         // Run regex digit extraction for address validation (STT Safeguard)
         const digits = voiceTranscript.match(/\b(?:\d+|#\s*\d+|house\s*#?\s*\d+|street\s*#?\s*\d+|flat\s*#?\s*\d+)\b/gi) || [];
@@ -2013,21 +1998,21 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     if (hasAudio) {
       const displayContent = voiceTranscript || content || "Hi! I sent a voice note inquiring about your products, pricing, and availability.";
       const userDisplay = `🎤 [Voice Note]: "${displayContent}"`;
-      await DB.addChatMessage(from, { 
-        role: "user", 
+      await DB.addChatMessage(from, {
+        role: "user",
         content: userDisplay,
         mediaUrl: base64Audio ? `data:${audioMime};base64,${base64Audio}` : undefined,
         mediaType: audioMime
       }, resolvedTenantId);
     } else {
-      await DB.addChatMessage(from, { 
-        role: "user", 
+      await DB.addChatMessage(from, {
+        role: "user",
         content: hasImage ? `[Image] ${content}` : content,
         mediaUrl: base64Image ? `data:image/jpeg;base64,${base64Image}` : undefined,
         mediaType: hasImage ? "image/jpeg" : undefined
       }, resolvedTenantId);
     }
-    
+
     let existingCustomer = await DB.getCustomer(from, resolvedTenantId);
 
     // Heuristic Auto-Complaint Detection (word-boundary aware, false-positive resistant)
@@ -2051,7 +2036,7 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
 
     const hasOrderPositiveContext = orderPositiveTerms.some(t => lowerContent.includes(t));
     const strongSignalMatch = strongComplaintSignals.some(w => lowerContent.includes(w));
-    
+
     // Count weak signals using word-boundary check
     const contentWords = lowerContent.split(/\s+/);
     const weakSignalCount = weakComplaintSignals.filter(w => {
@@ -2073,7 +2058,7 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
           currentPrefs = { notes: existingCustomer.preferences };
         }
       }
-      
+
       if (!currentPrefs.hasComplaint) {
         currentPrefs.hasComplaint = true;
         currentPrefs.complaintSummary = content.substring(0, 100) + (content.length > 100 ? "..." : "");
@@ -2084,11 +2069,11 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     }
 
     const currentStage = existingCustomer?.pipelineStage || "new";
-    
+
     let updatedTags = existingCustomer?.tags || [];
-    let nextStage: "cold" | "new" | "qualified" | "warm" | "completed" | undefined = 
+    let nextStage: "cold" | "new" | "qualified" | "warm" | "completed" | undefined =
       (currentStage === "completed" || existingCustomer?.leadStatus === "cold") ? "warm" : currentStage;
-    
+
     const activeCampaign = await DB.getActiveCampaign(resolvedTenantId);
     if (updatedTags.includes("revival-sent") || (activeCampaign && activeCampaign.targetPhones?.includes(from))) {
       updatedTags = updatedTags.filter(t => t !== "revival-sent");
@@ -2110,7 +2095,7 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
       }
     }
 
-    await DB.updateCustomer(from, { 
+    await DB.updateCustomer(from, {
       isLead: true,
       leadCreatedAt: existingCustomer?.leadCreatedAt || new Date().toISOString(),
       followUpLevel: 0,
@@ -2175,12 +2160,12 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     }
 
     let aiReply = "I'm sorry, I didn't quite catch that. Could you rephrase?";
-    
+
     if (!activeTenant) {
       console.error(`[AI Handler] No tenant record found for resolvedTenantId: ${resolvedTenantId}. Dropping message.`);
       return;
     }
-    
+
     const activeSystemPrompt = config.systemPrompt || activeTenant?.systemPrompt || "";
     const activeProducts = (config.products && config.products.length > 0) ? config.products : (activeTenant?.products || []);
     const activeCurrency = activeTenant?.currency || config.storeCurrency || "PKR";
@@ -2297,11 +2282,11 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
      * price: Total calculated bill (e.g. "3680")
      * deliveryAddress: The saved address ("${savedCustomerAddress || ""}") or user's provided address.
 
-3. Call the send_product_card function ONLY ONCE when FIRST recommending or introducing a product to the customer.
-4. NEVER call send_product_card again if you have ALREADY shown the product card in recent chat history, or if the customer is already in the process of placing an order. Just ask for their order details directly in text!
+3. NEVER call send_product_card — this tool is DISABLED. Do NOT send product images or product cards when a customer asks for a specific product. Respond with TEXT ONLY (product name + price from the catalog).
+4. Do NOT cross-sell or upsell by sending extra product images or cards. Keep the conversation focused on what the customer asked for.
 5. You must NEVER write raw image links or URLs in the text message!
 6. If a product has SIZE VARIATIONS (Small, Medium, Large) with different prices:
-   a. First call send_product_card with price set to "Hidden"
+   a. List the sizes and prices in plain text.
    b. Ask the customer: "Konsa size chahiye? Small / Medium / Large?" and state prices.
    c. Confirm the exact price from the catalog after choice.
 7. BE CONVERSATIONAL AND NATURAL. You are a real team member for ${activeBusinessName}, not a robotic template machine.
@@ -2360,7 +2345,7 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
 
     if (config.enabledFeatures && config.enabledFeatures.length > 0) {
       fullSystemPrompt += "\n\n=== ADVANCED FEATURES ENABLED ===\n";
-      
+
       if (config.enabledFeatures.includes("Multi-language Support")) {
         fullSystemPrompt += "- MULTI-LANGUAGE SUPPORT: Detect the user's language automatically and reply in their exact language.\n";
       }
@@ -2418,7 +2403,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
       .map((m: any) => {
         let textContent = m.content || "";
         if (m.role === 'assistant' && (
-          textContent.includes("not able to listen to voice notes") || 
+          textContent.includes("not able to listen to voice notes") ||
           textContent.includes("cannot listen to voice notes") ||
           textContent.includes("listen to them on my end") ||
           textContent.includes("unable to listen")
@@ -2483,21 +2468,9 @@ This customer is a revived dead lead who recently responded to our re-engagement
           required: ["date", "time"]
         }
       },
-      {
-        name: "send_product_card",
-        description: "Sends a beautiful interactive product card to the user. Use this ALWAYS when recommending or showing a product.",
-        input_schema: {
-          type: "object",
-          properties: {
-            product_name: { type: "string", description: "Product name" },
-            price: { type: "string", description: "Product price with currency symbol. If you need to hide the price to ask for size first (due to variations), pass exactly 'Hidden'." },
-            image_url: { type: "string", description: "Direct URL to product image" },
-            product_page_url: { type: "string", description: "Direct URL to product page. Omit this field if there is no URL or link in the catalog for this product." },
-            description: { type: "string", description: "A short, engaging description of the product" }
-          },
-          required: ["product_name", "price", "image_url", "description"]
-        }
-      },
+      // send_product_card tool REMOVED — product image sending is disabled.
+      // Customers asking for a specific product receive TEXT-ONLY replies.
+      // Menu images are still served via the Hybrid Engine fast-path when the customer explicitly asks for the menu.
       {
         name: "place_order",
         description: "Finalizes and places an order for the user after all details (size, color, delivery address, contact number, payment method) have been collected.",
@@ -2590,16 +2563,16 @@ This customer is a revived dead lead who recently responded to our re-engagement
       aiReply = textContent || aiReply;
 
       const toolUses = res.content.filter((block: any) => block.type === 'tool_use');
-      
+
       if (toolUses.length > 0) {
         console.log("[AI Handler] AI requested tool calls:", JSON.stringify(toolUses));
-        
+
         // Push the assistant's message to the history
         recentHistory.push({
           role: "assistant",
           content: res.content
         } as any);
-        
+
         const toolResults = [];
 
         for (const _toolCall of toolUses) {
@@ -2613,7 +2586,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
             const allHours = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
             const available = allHours.filter(h => !bookedTimes.includes(h));
             toolResult = JSON.stringify({ availableTimes: available });
-          } 
+          }
           else if (toolCall.name === "bookAppointment") {
             const userName = args.name || customer?.name || from;
             const success = await DB.bookAppointment(from, userName, args.service, args.date, args.time, args.notes, resolvedTenantId);
@@ -2647,12 +2620,12 @@ This customer is a revived dead lead who recently responded to our re-engagement
               // --- ORDER GUARDRAIL VALIDATION ---
               const rawProduct = (args.product_name || "").trim();
               const isInvalidProduct = !rawProduct || rawProduct.length > 80 || rawProduct.toLowerCase().includes("confirm karne") || rawProduct.toLowerCase().includes("bata dein");
-              
+
               if (isInvalidProduct) {
                 console.warn(`[AI Handler Guardrail] Blocked place_order tool call due to invalid product name: "${rawProduct}"`);
-                toolResult = JSON.stringify({ 
-                  success: false, 
-                  message: "Order Guardrail Validation Failed: Invalid product name. Please specify an actual product from our menu." 
+                toolResult = JSON.stringify({
+                  success: false,
+                  message: "Order Guardrail Validation Failed: Invalid product name. Please specify an actual product from our menu."
                 });
                 toolResults.push({ type: "tool_result", tool_use_id: toolCall.id, content: toolResult });
                 continue;
@@ -2660,7 +2633,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
 
               const qty = Math.max(1, parseInt(args.quantity) || 1);
               let finalPrice = args.price || "";
-              
+
               const numericPrice = parseFloat(finalPrice.replace(/[^\d.]/g, ""));
               if (!isNaN(numericPrice)) {
                 const total = numericPrice * qty;
@@ -2672,7 +2645,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
                 } else if (finalPrice.includes("$")) {
                   cur = "$";
                 }
-                
+
                 if (cur === "$") {
                   finalPrice = `$${total}`;
                 } else {
@@ -2771,7 +2744,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
               if (args.complaint_summary !== undefined) currentPrefs.complaintSummary = args.complaint_summary;
               if (args.notes !== undefined) currentPrefs.notes = args.notes;
 
-              const updates: any = { 
+              const updates: any = {
                 tags: newTags,
                 preferences: JSON.stringify(currentPrefs)
               };
@@ -2846,17 +2819,17 @@ This customer is a revived dead lead who recently responded to our re-engagement
         }
         aiReply = textContent || aiReply;
       }
-      
+
       debugLog(`SUCCESS: Unified LLM generated reply: "${aiReply.substring(0, 60)}..."`);
       console.log(`[AI Handler] Unified LLM generated reply successfully. Provider used: ${usedProvider}`);
     } catch (apiErr: any) {
       const errorDetail = apiErr.message || JSON.stringify(apiErr);
       console.error(`[AI Handler] Unified LLM API ERROR CAUGHT:`, errorDetail);
       debugLog(`FAILURE: Unified LLM API call failed. Error: ${errorDetail}`);
-      
+
       const isQuota = errorDetail.toLowerCase().includes("quota") || errorDetail.toLowerCase().includes("balance") || errorDetail.includes("402") || errorDetail.toLowerCase().includes("insufficient");
       const isAuth = errorDetail.includes("401") || errorDetail.toLowerCase().includes("unauthorized") || errorDetail.toLowerCase().includes("invalid api key");
-      
+
       const alertType = isQuota ? 'quota_exceeded' : isAuth ? 'invalid_key' : 'error';
       const alertMsg = isQuota ? 'Conversational LLM Quota Exceeded / Out of Balance.' : isAuth ? 'Conversational LLM API Key is Invalid or Unauthorized.' : `LLM API Error: ${errorDetail}`;
       await DB.recordApiAlert('Conversational LLM', alertType, alertMsg);
@@ -2881,7 +2854,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
     while ((match = mediaRegex.exec(aiReply)) !== null) {
       extractedMedia.push(match[1]);
     }
-    
+
     aiReply = aiReply.replace(mediaRegex, '').trim();
 
     for (const mediaUrl of extractedMedia) {
@@ -2929,10 +2902,10 @@ This customer is a revived dead lead who recently responded to our re-engagement
       // BUT no order was recorded in DB for this phone in the last 15 minutes, AUTO-SAVE IT IMMEDIATELY!
       try {
         const lowerAiReply = (aiReply || "").toLowerCase();
-        const isQuestionOrPrompt = lowerAiReply.includes("?") || 
-          lowerAiReply.includes("bata dein") || 
-          lowerAiReply.includes("bataaein") || 
-          lowerAiReply.includes("karne ke liye") || 
+        const isQuestionOrPrompt = lowerAiReply.includes("?") ||
+          lowerAiReply.includes("bata dein") ||
+          lowerAiReply.includes("bataaein") ||
+          lowerAiReply.includes("karne ke liye") ||
           lowerAiReply.includes("bhej dein") ||
           lowerAiReply.includes("provide") ||
           lowerAiReply.includes("detail");
@@ -2950,10 +2923,10 @@ This customer is a revived dead lead who recently responded to our re-engagement
           const existingOrders = await DB.getOrders(resolvedTenantId);
           const thirtyMinutesAgo = new Date(Date.now() - 1800 * 1000).toISOString();
           const recentOrder = existingOrders.find(o => o.phone === from && (o.timestamp || (o as any).createdAt) >= thirtyMinutesAgo);
-          
+
           if (!recentOrder) {
             console.warn(`[AI Handler Safeguard] Order confirmation detected in AI reply for ${from}, but no DB order record found! Auto-saving order to DB...`);
-            
+
             // Auto-extract ALL item names and individual prices from bullet/numbered lists (e.g. "· 2x Large Crown Crust = 3,180" or "1. Large Crown Crust — 501 PKR")
             let extractedProduct = "WhatsApp Order";
             const itemEntries: string[] = [];
@@ -2962,14 +2935,14 @@ This customer is a revived dead lead who recently responded to our re-engagement
             while ((listMatch = listRegex.exec(aiReply)) !== null) {
               const line = listMatch[1].trim();
               if (line.toLowerCase().includes("total") || line.toLowerCase().includes("delivery address")) continue;
-              
+
               // Match "2x Large Crown Crust = 3,180" or "1x Item - 500 PKR"
               const priceExtractMatch = line.match(/^(?:(\d+x?\s+))?([^=\-—–]+)(?:[=\-—–]\s*(?:Rs\.?|PKR|\$)?\s*([\d,]+)\s*(?:PKR|Rs\.?)?)?/i);
               if (priceExtractMatch) {
                 const qtyPrefix = priceExtractMatch[1] ? priceExtractMatch[1].trim() + " " : "";
                 const nameStr = priceExtractMatch[2].trim();
                 const itemPriceStr = priceExtractMatch[3] ? priceExtractMatch[3].replace(/,/g, "").trim() : "";
-                
+
                 if (nameStr && nameStr.length < 100) {
                   let formattedEntry = `${qtyPrefix}${nameStr}`;
                   if (itemPriceStr) {
@@ -2983,8 +2956,8 @@ This customer is a revived dead lead who recently responded to our re-engagement
               extractedProduct = itemEntries.join(", ");
             } else {
               // Fallback: try single product patterns
-              const productMatch = aiReply.match(/(?:🍗|🍔|🍕|🥟|🍣|🧃|📦|Order:?)\s*([^\n—–\-•,]+)/i) || 
-                                   aiReply.match(/(?:placed|confirmed|for)\!?\s*([^\n—–\-•,]+)/i);
+              const productMatch = aiReply.match(/(?:🍗|🍔|🍕|🥟|🍣|🧃|📦|Order:?)\s*([^\n—–\-•,]+)/i) ||
+                aiReply.match(/(?:placed|confirmed|for)\!?\s*([^\n—–\-•,]+)/i);
               if (productMatch && productMatch[1]) {
                 const candidate = productMatch[1].trim();
                 if (candidate.length < 80 && !candidate.toLowerCase().includes("confirm") && !candidate.toLowerCase().includes("contact")) {
@@ -2996,7 +2969,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
             // Auto-extract TOTAL price (prioritise "Total: X,XXX PKR" pattern)
             let extractedPrice = "COD";
             const totalPriceMatch = aiReply.match(/\*?Total[:\s]+(?:Rs\.?|PKR)?\s*([\d,]+)\s*(?:PKR|Rs\.)?\*?/i) ||
-                                    aiReply.match(/(?:Grand Total|Total Bill)[:\s]+(?:Rs\.?|PKR)?\s*([\d,]+)/i);
+              aiReply.match(/(?:Grand Total|Total Bill)[:\s]+(?:Rs\.?|PKR)?\s*([\d,]+)/i);
             if (totalPriceMatch && totalPriceMatch[1]) {
               const numStr = totalPriceMatch[1].replace(/,/g, "");
               extractedPrice = `PKR ${parseInt(numStr).toLocaleString()}`;
@@ -3039,7 +3012,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
       // BUT no appointment was recorded in DB for this phone in the last 15 minutes, AUTO-SAVE IT IMMEDIATELY!
       try {
         const lowerAiReply = (aiReply || "").toLowerCase();
-        const isAppointmentConfirmationReply = 
+        const isAppointmentConfirmationReply =
           lowerAiReply.includes("appointment confirm") ||
           lowerAiReply.includes("appointment book") ||
           lowerAiReply.includes("confirm the appointment") ||
@@ -3071,7 +3044,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
             // Auto-extract time
             let extractedTime = "12:00 PM";
             const timeMatch = aiReply.match(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)\b/) ||
-                              recentHistory.map((h: any) => typeof h.content === 'string' ? h.content : '').join(" ").match(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)\b/);
+              recentHistory.map((h: any) => typeof h.content === 'string' ? h.content : '').join(" ").match(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)\b/);
             if (timeMatch) {
               extractedTime = timeMatch[0].toUpperCase();
             }
@@ -3080,7 +3053,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
             let extractedDate = new Date(Date.now() + 86400000).toISOString().split('T')[0]; // Default to tomorrow
             const dateRegex = /\b\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\b/i;
             const dateMatch = aiReply.match(dateRegex) ||
-                              recentHistory.map((h: any) => typeof h.content === 'string' ? h.content : '').join(" ").match(dateRegex);
+              recentHistory.map((h: any) => typeof h.content === 'string' ? h.content : '').join(" ").match(dateRegex);
             if (dateMatch) {
               try {
                 const year = new Date().getFullYear();
@@ -3088,7 +3061,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
                 if (!isNaN(parsedDate.getTime())) {
                   extractedDate = parsedDate.toISOString().split('T')[0];
                 }
-              } catch (e) {}
+              } catch (e) { }
             } else if (textToSearch.includes("parso")) {
               const d = new Date();
               d.setDate(d.getDate() + 2);
@@ -3111,7 +3084,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
               "Auto-captured by Fail-Safe Appointment Interceptor",
               resolvedTenantId
             );
-            
+
             if (success) {
               await DB.updateCustomer(from, { pipelineStage: "completed", name: userName }, resolvedTenantId);
               console.log(`[AI Handler Safeguard] Successfully auto-saved fallback appointment for ${from}!`);
@@ -3126,7 +3099,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
       console.log(`[AI Handler] Replied to ${from}: ${aiReply}`);
       await DB.addChatMessage(from, { id: "ai_" + (sentMsg?.key?.id || ""), role: "assistant", content: aiReply || "[Media Sent]" }, resolvedTenantId);
     }
-    
+
   } catch (error: any) {
     console.error("[AI Handler] processWhatsAppMessage error:", error);
     await logAppError({
@@ -3136,7 +3109,7 @@ This customer is a revived dead lead who recently responded to our re-engagement
       tenantId: resolvedTenantId,
       severity: 'high',
       metadata: { customerPhone: from, messageId: msg?.key?.id }
-    }).catch(() => {});
+    }).catch(() => { });
     throw error;
   }
 }
@@ -3213,7 +3186,7 @@ export async function generateContextualFollowUp(phone: string, followUpPrompt?:
   const recentHistory = history.filter((m: any) => m.role === 'user' || m.role === 'assistant').slice(-6).map((m: any) => ({ role: m.role, content: m.content }));
 
   let systemPrompt = `You are an expert Booking and Sales AI Assistant for ${config.businessName || 'our business'}.\nYour goal is to politely re-engage the customer based on their recent chat history. Keep it natural, friendly, and concise (1-3 sentences).`;
-  
+
   if (followUpPrompt && followUpPrompt.trim() !== "") {
     systemPrompt += `\n\nAdditional direction: "${followUpPrompt}". Use this as inspiration and re-write it to directly reference what you and the user were last talking about in the chat history. Make it highly contextual and personalized.`;
   } else {
