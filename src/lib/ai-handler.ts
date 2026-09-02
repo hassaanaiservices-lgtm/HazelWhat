@@ -279,14 +279,14 @@ async function transcribeAudioWithGemini(buffer: Buffer, apiKey: string, mimetyp
                 }
               },
               {
-                text: "Transcribe this voice note audio accurately. The spoken language may be Pashto, Urdu, Roman Urdu, or English. This may contain a Pakistani home address — extract house/flat/street numbers carefully; digits are often spoken digit-by-digit (e.g. 'one-two-three' or 'teen-do-ek') or as compound numbers. Write down numbers as clean digits (e.g. House #123, Street #5) where applicable. Return ONLY the transcribed text. Do not add any introduction, explanations, or quotes. If the audio is silent or completely unintelligible, return an empty string."
+                text: "You are a professional audio transcriber for a Pakistani food/e-commerce store. Listen carefully to this WhatsApp voice note and transcribe it EXACTLY as spoken in natural Roman Urdu (or English/Urdu if spoken). Pay extreme attention to product names, quantities, sizes (small/medium/large), prices, and home address digits (house/flat/street numbers). Write house/street numbers as clear numeric digits (e.g., House #12, Street #4). Output ONLY the final transcript string. Do not add quotes, explanations, or introductory text."
               }
             ]
           }
         ],
         generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 500
+          temperature: 0.0,
+          maxOutputTokens: 600
         }
       }),
       signal: controller.signal
