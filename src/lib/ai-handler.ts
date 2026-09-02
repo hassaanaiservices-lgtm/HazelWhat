@@ -1527,6 +1527,20 @@ export async function processHybridEngine(
   if (products.length > 0) {
     const isMenuRequest = ["menu", "show menu", "send menu", "deikhao menu", "dikhao menu", "menu bhajo", "menu do", "menu bhej do", "catalog", "rate list", "list", "card", "website", "products", "services", "deals", "deal", "special deal", "deal dikhao", "deals dikhao", "kya khane ko hai", "khane ko kya hai", "kya kya hai"].some(w => lowerContent === w || lowerContent.includes(w));
 
+    // GUARD: Bypass Hybrid Engine for explicit order placement, buying intent, size/quantity specifications, or address details.
+    // Let LLM handle ordering, pricing details, and place_order tool execution!
+    const isOrderingOrCustomizationIntent = [
+      "kardo", "kar do", "order", "place order", "chahiye", "bhej do", "bhejo", "manga do", "mangwa do",
+      "deliver", "delivery", "le aao", "packing", "parcel", "confirm", "final", "send kar do", "send kardo",
+      "large", "medium", "small", "regular", "half", "full", "slice", "piece", "pieces", "pc",
+      "house", "street", "gali", "sector", "phase", "flat", "block", "town", "colony", "address"
+    ].some(w => lowerContent.includes(w));
+
+    if (!isMenuRequest && isOrderingOrCustomizationIntent) {
+      console.log(`[AI Handler] Bypassing Hybrid Engine for ordering/customization intent: "${content}" -> LLM takes control.`);
+      return { matched: false };
+    }
+
     const isValidImage = (img: any): boolean => {
       return img && typeof img === 'string' &&
         (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:image/'));
@@ -1606,83 +1620,9 @@ export async function processHybridEngine(
       return { matched: false };
     }
 
-    let matchedProducts: any[] = [];
-    if (matchedCategories.size > 0) {
-      const activeCats = Array.from(matchedCategories).map(c => c.toLowerCase().trim());
-      matchedProducts = products.filter(p => {
-        if (!p.category) return false;
-        const pCatLower = p.category.toLowerCase().trim();
-        const isCatMatch = activeCats.includes(pCatLower);
-        if (!isCatMatch) return false;
-
-        const cleanTitle = p.title ? p.title.toLowerCase().trim() : "";
-        const queryWords = lowerContent.split(/[\s,.-]+/);
-        const titleWords = cleanTitle.split(/[\s,.-]+/);
-
-        // Exact title match or query contains word stem
-        const titleMatch = titleWords.some((tw: string) => {
-          if (tw.length < 3) return false;
-          const twStem = tw.endsWith('s') ? tw.slice(0, -1) : tw;
-          return queryWords.some((qw: string) => {
-            if (qw.length < 3) return false;
-            const qwStem = qw.endsWith('s') ? qw.slice(0, -1) : qw;
-            return qwStem === twStem;
-          });
-        });
-
-        let specificMatch = false;
-        if (cleanTitle.includes("soft drink") && ["coke", "sprite", "7up", "pepsi", "fanta", "dew", "drink", "bottle", "botol"].some(w => lowerContent.includes(w))) {
-          specificMatch = true;
-        }
-        if (cleanTitle.includes("water") && ["water", "paani", "pani"].some(w => lowerContent.includes(w))) {
-          specificMatch = true;
-        }
-
-        return titleMatch || specificMatch || lowerContent.includes(cleanTitle) || cleanTitle.includes(lowerContent);
-      });
-    } else {
-      matchedProducts = products.filter(p => {
-        if (!p.title) return false;
-        const cleanTitle = p.title.toLowerCase().trim();
-        if (/^menu\.?$/i.test(cleanTitle) || (p.category && /^menu\.?$/i.test(p.category.trim()))) return false;
-
-        const queryWords = lowerContent.split(/[\s,.-]+/);
-        const titleWords = cleanTitle.split(/[\s,.-]+/);
-
-        const titleMatch = titleWords.some((tw: string) => {
-          if (tw.length < 3) return false;
-          const twStem = tw.endsWith('s') ? tw.slice(0, -1) : tw;
-          return queryWords.some((qw: string) => {
-            if (qw.length < 3) return false;
-            const qwStem = qw.endsWith('s') ? qw.slice(0, -1) : qw;
-            return qwStem === twStem;
-          });
-        });
-
-        return titleMatch || lowerContent.includes(cleanTitle) || cleanTitle.includes(lowerContent);
-      });
-    }
-
-    // A. Specific Item Request matched — TEXT ONLY (no product images / no cross-sell / no upsell)
-    if (matchedProducts.length > 0 && !isMenuRequest) {
-      const uniqueMatched = matchedProducts.filter((v, i, a) => a.findIndex(t => t.title === v.title) === i);
-
-      let replyText = `📜 *${activeTenant?.businessName || config.businessName || "Pizza Box"}* 🍕🍔\n\n`;
-
-      uniqueMatched.forEach(p => {
-        const cleanPrice = p.price ? p.price.replace(new RegExp(currency, 'gi'), '').trim() : "";
-        const priceDisplay = cleanPrice && cleanPrice !== "0" && cleanPrice !== "N/A" ? `${currency} ${cleanPrice}` : "N/A";
-        replyText += `• *${p.title}* — ${priceDisplay}\n`;
-      });
-
-      replyText += `\nKaunsa order karna hai aur kitne pieces/quantity?`;
-
-      // NOTE: No images returned intentionally — product pictures are disabled for individual item lookups.
-      return {
-        matched: true,
-        reply: replyText,
-        source: "product_catalog"
-      };
+    // For specific product item lookups, bypass Hybrid Engine so LLM can engage naturally with exact prices & options
+    if (!isMenuRequest) {
+      return { matched: false };
     }
 
     // B. Full Menu/Catalog Request matched
