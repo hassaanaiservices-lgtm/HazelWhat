@@ -5586,10 +5586,19 @@ export default function DashboardPage() {
                                 const rawItems = (selectedOrderDetail.productName || "General Order").split(/,|\n/).map((s: string) => s.trim()).filter(Boolean);
                                 
                                 return rawItems.map((itemStr: string, idx: number) => {
+                                  // Extract embedded price if present: e.g. "Large Crown Crust (PKR 3,180)"
+                                  let embeddedPrice = "";
+                                  let cleanItemStr = itemStr;
+                                  const embeddedPriceMatch = itemStr.match(/\((?:PKR|Rs\.?|\$)\s*([\d,]+)\)$/i);
+                                  if (embeddedPriceMatch) {
+                                    embeddedPrice = `PKR ${parseInt(embeddedPriceMatch[1].replace(/,/g, "")).toLocaleString()}`;
+                                    cleanItemStr = itemStr.replace(/\s*\((?:PKR|Rs\.?|\$)\s*[\d,]+\)$/i, "").trim();
+                                  }
+
                                   // Extract quantity if formatted as "2x item" or "item (x2)"
                                   let qty = 1;
-                                  let itemName = itemStr;
-                                  const qtyMatch = itemStr.match(/^(\d+)\s*x\s*(.+)$/i) || itemStr.match(/^(.+)\s*\(x?(\d+)\)$/i);
+                                  let itemName = cleanItemStr;
+                                  const qtyMatch = cleanItemStr.match(/^(\d+)\s*x\s*(.+)$/i) || cleanItemStr.match(/^(.+)\s*\(x?(\d+)\)$/i);
                                   if (qtyMatch) {
                                     if (/^\d+$/.test(qtyMatch[1])) {
                                       qty = parseInt(qtyMatch[1]);
@@ -5600,13 +5609,17 @@ export default function DashboardPage() {
                                     }
                                   }
 
-                                  // Match against store product catalog items
-                                  const matchedCat = (config.products || []).find((p: any) => 
-                                    p.title && (itemName.toLowerCase().includes(p.title.toLowerCase().trim()) || p.title.toLowerCase().trim().includes(itemName.toLowerCase()))
-                                  );
+                                  // Match against store product catalog items (flexible matching for titles/images)
+                                  const matchedCat = (config.products || []).find((p: any) => {
+                                    if (!p.title) return false;
+                                    const pTitle = p.title.toLowerCase().trim();
+                                    const iTitle = itemName.toLowerCase().trim();
+                                    return iTitle.includes(pTitle) || pTitle.includes(iTitle) || 
+                                           pTitle.split(' ').some(w => w.length > 3 && iTitle.includes(w));
+                                  });
 
-                                  const imgUrl = matchedCat?.image || selectedOrderDetail.productImageUrl;
-                                  const displayPrice = matchedCat?.price || selectedOrderDetail.price || "COD";
+                                  const imgUrl = matchedCat?.image || matchedCat?.imageUrl || (matchedCat?.images && matchedCat.images[0]) || selectedOrderDetail.productImageUrl;
+                                  const displayPrice = embeddedPrice || (matchedCat?.price ? (matchedCat.price.includes("PKR") || matchedCat.price.includes("Rs.") ? matchedCat.price : `PKR ${matchedCat.price}`) : (rawItems.length === 1 ? selectedOrderDetail.price : "—"));
 
                                   return (
                                     <div key={idx} className="py-4 first:pt-0 last:pb-0 flex items-center justify-between gap-4 flex-wrap hover:bg-[#f5f1ec]/40 p-2 rounded-xl transition-all">

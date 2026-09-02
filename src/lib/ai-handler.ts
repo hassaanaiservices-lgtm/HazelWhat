@@ -2941,20 +2941,33 @@ This customer is a revived dead lead who recently responded to our re-engagement
           if (!recentOrder) {
             console.warn(`[AI Handler Safeguard] Order confirmation detected in AI reply for ${from}, but no DB order record found! Auto-saving order to DB...`);
             
-            // Auto-extract ALL item names from numbered list (e.g. "1. Arabic Chicken Roll — 501 PKR")
+            // Auto-extract ALL item names and individual prices from bullet/numbered lists (e.g. "· 2x Large Crown Crust = 3,180" or "1. Large Crown Crust — 501 PKR")
             let extractedProduct = "WhatsApp Order";
-            const numberedItems: string[] = [];
-            const numberedListRegex = /^\s*\d+\.\s+([^\n]+)/gm;
+            const itemEntries: string[] = [];
+            const listRegex = /^\s*(?:[•·\-\*]|\d+\.)\s*([^\n]+)/gm;
             let listMatch;
-            while ((listMatch = numberedListRegex.exec(aiReply)) !== null) {
-              // Strip trailing price portion (e.g. "— 501 PKR" or "– 3,779 PKR")
-              const itemName = listMatch[1].replace(/\s*[—–\-]\s*(?:Rs\.?|PKR|\$)?\s*[\d,]+\s*(?:PKR|Rs\.?)?\s*$/i, "").trim();
-              if (itemName && itemName.length < 120 && !itemName.toLowerCase().includes("total")) {
-                numberedItems.push(itemName);
+            while ((listMatch = listRegex.exec(aiReply)) !== null) {
+              const line = listMatch[1].trim();
+              if (line.toLowerCase().includes("total") || line.toLowerCase().includes("delivery address")) continue;
+              
+              // Match "2x Large Crown Crust = 3,180" or "1x Item - 500 PKR"
+              const priceExtractMatch = line.match(/^(?:(\d+x?\s+))?([^=\-—–]+)(?:[=\-—–]\s*(?:Rs\.?|PKR|\$)?\s*([\d,]+)\s*(?:PKR|Rs\.?)?)?/i);
+              if (priceExtractMatch) {
+                const qtyPrefix = priceExtractMatch[1] ? priceExtractMatch[1].trim() + " " : "";
+                const nameStr = priceExtractMatch[2].trim();
+                const itemPriceStr = priceExtractMatch[3] ? priceExtractMatch[3].replace(/,/g, "").trim() : "";
+                
+                if (nameStr && nameStr.length < 100) {
+                  let formattedEntry = `${qtyPrefix}${nameStr}`;
+                  if (itemPriceStr) {
+                    formattedEntry += ` (PKR ${parseInt(itemPriceStr).toLocaleString()})`;
+                  }
+                  itemEntries.push(formattedEntry);
+                }
               }
             }
-            if (numberedItems.length > 0) {
-              extractedProduct = numberedItems.join(", ");
+            if (itemEntries.length > 0) {
+              extractedProduct = itemEntries.join(", ");
             } else {
               // Fallback: try single product patterns
               const productMatch = aiReply.match(/(?:🍗|🍔|🍕|🥟|🍣|🧃|📦|Order:?)\s*([^\n—–\-•,]+)/i) || 
