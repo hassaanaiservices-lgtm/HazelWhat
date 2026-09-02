@@ -968,41 +968,59 @@ export class DB {
 
     if (supabase) {
       try {
-        const fifteenMinutesAgo = new Date(Date.now() - 900 * 1000).toISOString();
+        const thirtyMinutesAgo = new Date(Date.now() - 1800 * 1000).toISOString();
         const { data: existingOrders } = await supabase
           .from('orders')
           .select('*')
           .eq('phone', phone)
           .eq('tenant_id', tenantId)
-          .gte('created_at', fifteenMinutesAgo);
+          .gte('created_at', thirtyMinutesAgo)
+          .order('created_at', { ascending: false });
 
         if (existingOrders && existingOrders.length > 0) {
-          const duplicate = existingOrders.find(match => {
-            const nameA = (match.product_name || "").toLowerCase().trim();
-            const nameB = (data.productName || "").toLowerCase().trim();
-            return nameA === nameB || nameA.includes(nameB) || nameB.includes(nameA) || match.status === 'pending';
-          });
+          const recentOrder = existingOrders[0];
+          console.warn(`[DB] Existing order found for ${phone} within 30 minutes (ID: ${recentOrder.id}). Updating order details instead of creating a duplicate row.`);
 
-          if (duplicate) {
-            console.warn(`[DB] Duplicate order detected for ${phone} within 15 minutes. Skipping creation. Match: ${duplicate.product_name}`);
-            return {
-              id: duplicate.id,
-              tenantId: duplicate.tenant_id,
-              phone: duplicate.phone,
-              customerName: duplicate.customer_name,
-              productName: duplicate.product_name,
-              productImageUrl: duplicate.product_image_url,
-              size: duplicate.size,
-              color: duplicate.color,
-              deliveryAddress: duplicate.delivery_address,
-              contactNumber: duplicate.contact_number,
-              paymentMethod: duplicate.payment_method,
-              price: duplicate.price,
-              timestamp: duplicate.created_at,
-              status: duplicate.status,
-              notes: duplicate.notes
-            };
-          }
+          // Determine if new order data has meaningful product name vs existing
+          const isExistingGarbage = (recentOrder.product_name || "").toLowerCase().includes("confirm karne") || (recentOrder.product_name || "").length > 60;
+          const updatedProductName = (!isExistingGarbage && recentOrder.product_name && data.productName.toLowerCase().includes(recentOrder.product_name.toLowerCase()))
+            ? recentOrder.product_name 
+            : data.productName || recentOrder.product_name;
+
+          const updatedPayload: any = {
+            product_name: updatedProductName,
+            price: (data.price && data.price !== 'COD') ? data.price : (recentOrder.price || data.price),
+            delivery_address: (data.deliveryAddress && !data.deliveryAddress.includes("provided in chat")) ? data.deliveryAddress : (recentOrder.delivery_address || data.deliveryAddress),
+            contact_number: data.contactNumber || recentOrder.contact_number || phone,
+            customer_name: data.customerName || recentOrder.customer_name || phone,
+            notes: data.notes || recentOrder.notes,
+            status: "new_order"
+          };
+
+          if (data.productImageUrl) updatedPayload.product_image_url = data.productImageUrl;
+          if (data.size) updatedPayload.size = data.size;
+          if (data.color) updatedPayload.color = data.color;
+          if (data.paymentMethod) updatedPayload.payment_method = data.paymentMethod;
+
+          await supabase.from('orders').update(updatedPayload).eq('id', recentOrder.id).eq('tenant_id', tenantId);
+
+          return {
+            id: recentOrder.id,
+            tenantId: recentOrder.tenant_id,
+            phone: recentOrder.phone,
+            customerName: updatedPayload.customer_name,
+            productName: updatedPayload.product_name,
+            productImageUrl: updatedPayload.product_image_url || recentOrder.product_image_url,
+            size: updatedPayload.size || recentOrder.size,
+            color: updatedPayload.color || recentOrder.color,
+            deliveryAddress: updatedPayload.delivery_address,
+            contactNumber: updatedPayload.contact_number,
+            paymentMethod: updatedPayload.payment_method || recentOrder.payment_method,
+            price: updatedPayload.price,
+            timestamp: recentOrder.created_at,
+            status: updatedPayload.status,
+            notes: updatedPayload.notes
+          };
         }
       } catch (checkErr) {
         console.error('[DB/Supabase] Error checking for duplicate order:', checkErr);
@@ -1064,7 +1082,7 @@ export class DB {
     try {
       const payload: any = {};
       if (updates.status) payload.status = updates.status;
-      if (updates.deliveredAt !== undefined || updates.status === 'delivered' || updates.status === 'completed') {
+      if (updates.deliveredAt !== undefined || updates.status === 'delivered' || (updates.status as string) === 'completed') {
         payload.delivered_at = updates.deliveredAt || new Date().toISOString();
       }
       if (updates.notes !== undefined) payload.notes = updates.notes;

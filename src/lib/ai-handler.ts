@@ -1995,43 +1995,7 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
         console.log(`[AI Handler] STT yielded empty transcript — using polite clarification instruction for AI.`);
       }
     }
-
-    const lowerContent = content.toLowerCase().trim();
-    const optOutKeywords = ["stop", "unsubscribe", "optout", "opt out", "hatao", "mat bhejo", "cancel", "remove me", "donotdisturb"];
-    const isOptOut = optOutKeywords.some(kw => lowerContent === kw || lowerContent.startsWith(kw + " "));
-
-    if (isOptOut) {
-      console.log(`[Opt-Out] Customer ${from} requested opt-out with text: "${content}"`);
-      const existingCustomer = await DB.getCustomer(from, resolvedTenantId);
-      const existingTags = existingCustomer?.tags || [];
-      const updatedTags = Array.from(new Set([...existingTags.filter(t => t !== "revival-sent"), "opted-out"]));
-
-      await DB.updateCustomer(from, {
-        isOptedOut: true,
-        optedOutAt: new Date().toISOString(),
-        aiEnabled: false,
-        tags: updatedTags
-      }, resolvedTenantId);
-
-      // Update active campaign if lead was part of it
-      const activeCampaign = await DB.getActiveCampaign(resolvedTenantId);
-      if (activeCampaign) {
-        const optedOutList = Array.from(new Set([...(activeCampaign.optedOutPhones || []), from]));
-        const progressMap = activeCampaign.leadProgress || {};
-        if (progressMap[from]) {
-          progressMap[from].status = "opted_out";
-        }
-        await DB.updateRevivalCampaign(activeCampaign.id, {
-          optedOutPhones: optedOutList,
-          leadProgress: progressMap
-        }, resolvedTenantId);
-      }
-
-      await DB.addChatMessage(from, { role: "user", content }, resolvedTenantId);
-      await WhatsAppManager.sendMessage(from, "You have been unsubscribed from promotional updates. Reply START to opt back in.");
-      await DB.addChatMessage(from, { role: "assistant", content: "You have been unsubscribed from promotional updates. Reply START to opt back in." }, resolvedTenantId);
-      return;
-    }
+    const lowerContent = (content || "").toLowerCase().trim();
 
     if (hasAudio) {
       const displayContent = voiceTranscript || content || "Hi! I sent a voice note inquiring about your products, pricing, and availability.";
@@ -2374,7 +2338,12 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
      Example: "Area samajh aa gaya hai! Khas taur par House # / Flat # please *text message* mein write karke bhej dein taake delivery mein galti na ho."
    - ALWAYS SHOW FULL TRANSCRIBED ADDRESS BACK BEFORE PLACING ORDER:
      Before executing place_order or finalizing the transaction, ALWAYS display the full transcribed address back to the customer:
-     Example: "Confirming delivery to: 📍 *[Full Transcribed Address]*\nReply 'yes' to confirm or send correct address."`;
+     Example: "Confirming delivery to: 📍 *[Full Transcribed Address]*\nReply 'yes' to confirm or send correct address."
+17. CART MODIFICATION & ITEM REMOVAL RULE:
+   - When a customer asks to remove, cancel, or modify an item from their order (e.g. "soft drink hata dein", "cancel drink", "remove fries"):
+   - DO NOT print the menu or catalog again!
+   - Immediately calculate the updated item list without the removed item, recalculate the new Total Bill, and call place_order tool with the UPDATED items and price.
+   - Confirm the removed item and updated bill back to the customer in 1-2 friendly sentences!`;
 
     if (config.enabledFeatures && config.enabledFeatures.length > 0) {
       fullSystemPrompt += "\n\n=== ADVANCED FEATURES ENABLED ===\n";
@@ -2662,6 +2631,20 @@ This customer is a revived dead lead who recently responded to our re-engagement
           }
           else if (toolCall.name === "place_order") {
             try {
+              // --- ORDER GUARDRAIL VALIDATION ---
+              const rawProduct = (args.product_name || "").trim();
+              const isInvalidProduct = !rawProduct || rawProduct.length > 80 || rawProduct.toLowerCase().includes("confirm karne") || rawProduct.toLowerCase().includes("bata dein");
+              
+              if (isInvalidProduct) {
+                console.warn(`[AI Handler Guardrail] Blocked place_order tool call due to invalid product name: "${rawProduct}"`);
+                toolResult = JSON.stringify({ 
+                  success: false, 
+                  message: "Order Guardrail Validation Failed: Invalid product name. Please specify an actual product from our menu." 
+                });
+                toolResults.push({ type: "tool_result", tool_use_id: toolCall.id, content: toolResult });
+                continue;
+              }
+
               const qty = Math.max(1, parseInt(args.quantity) || 1);
               let finalPrice = args.price || "";
               
@@ -2689,14 +2672,20 @@ This customer is a revived dead lead who recently responded to our re-engagement
                 }
               }
 
+              // Address check fallback to customer saved address
+              let deliveryAddr = (args.address || "").trim();
+              if (!deliveryAddr || deliveryAddr.length < 5 || deliveryAddr.toLowerCase().includes("provided in chat") || deliveryAddr.toLowerCase().includes("note kar liya")) {
+                deliveryAddr = savedCustomerAddress || deliveryAddr;
+              }
+
               const orderData = {
                 productName: qty > 1 ? `${qty}x ${args.product_name}` : args.product_name,
                 size: args.size,
                 color: args.color,
-                deliveryAddress: args.address,
+                deliveryAddress: deliveryAddr || "Address to be confirmed in chat",
                 contactNumber: args.contact_number || from,
-                paymentMethod: args.payment_method,
-                price: finalPrice,
+                paymentMethod: args.payment_method || "Cash on Delivery",
+                price: finalPrice || "COD",
                 productImageUrl: args.image_url,
                 customerName: customer?.name || from,
                 notes: args.notes
@@ -2927,17 +2916,27 @@ This customer is a revived dead lead who recently responded to our re-engagement
       // BUT no order was recorded in DB for this phone in the last 15 minutes, AUTO-SAVE IT IMMEDIATELY!
       try {
         const lowerAiReply = (aiReply || "").toLowerCase();
-        const isOrderConfirmationReply = 
+        const isQuestionOrPrompt = lowerAiReply.includes("?") || 
+          lowerAiReply.includes("bata dein") || 
+          lowerAiReply.includes("bataaein") || 
+          lowerAiReply.includes("karne ke liye") || 
+          lowerAiReply.includes("bhej dein") ||
+          lowerAiReply.includes("provide") ||
+          lowerAiReply.includes("detail");
+
+        const isOrderConfirmationReply = !isQuestionOrPrompt && (
           lowerAiReply.includes("order has been placed") ||
           lowerAiReply.includes("order is placed") ||
-          lowerAiReply.includes("order confirmed") ||
-          lowerAiReply.includes("order confirm kar") ||
-          lowerAiReply.includes("order note kar");
+          lowerAiReply.includes("order confirm ho gaya") ||
+          lowerAiReply.includes("order confirm kar diya") ||
+          lowerAiReply.includes("order note kar liya") ||
+          (lowerAiReply.includes("order confirmed") && !lowerAiReply.includes("confirming"))
+        );
 
         if (isOrderConfirmationReply) {
           const existingOrders = await DB.getOrders(resolvedTenantId);
-          const fifteenMinutesAgo = new Date(Date.now() - 900 * 1000).toISOString();
-          const recentOrder = existingOrders.find(o => o.phone === from && (o.timestamp || (o as any).createdAt) >= fifteenMinutesAgo);
+          const thirtyMinutesAgo = new Date(Date.now() - 1800 * 1000).toISOString();
+          const recentOrder = existingOrders.find(o => o.phone === from && (o.timestamp || (o as any).createdAt) >= thirtyMinutesAgo);
           
           if (!recentOrder) {
             console.warn(`[AI Handler Safeguard] Order confirmation detected in AI reply for ${from}, but no DB order record found! Auto-saving order to DB...`);
@@ -2947,7 +2946,10 @@ This customer is a revived dead lead who recently responded to our re-engagement
             const productMatch = aiReply.match(/(?:🍗|🍔|🍕|🥟|🍣|🧃|📦|Order:?)\s*([^\n—–\-•,]+)/i) || 
                                  aiReply.match(/(?:placed|confirmed|for)\!?\s*([^\n—–\-•,]+)/i);
             if (productMatch && productMatch[1]) {
-              extractedProduct = productMatch[1].trim();
+              const candidate = productMatch[1].trim();
+              if (candidate.length < 50 && !candidate.toLowerCase().includes("confirm") && !candidate.toLowerCase().includes("contact")) {
+                extractedProduct = candidate;
+              }
             }
 
             // Auto-extract price from AI reply
