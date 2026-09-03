@@ -67,27 +67,42 @@ export const PATCH = withObservability(async (req: NextRequest) => {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  updateTraceContext({ tenantId: session.tenantId });
-
   const { id, status, notes, customerName, deliveredAt } = await req.json();
   if (!id) {
     return NextResponse.json({ error: 'Missing id' }, { status: 400 });
   }
 
-  let orders;
+  // Resilient multi-tenant lookup: search session tenant first, then active socket tenant, then all tenants
   let targetTenantId = session.tenantId;
-  if (session.role === 'admin') {
-    orders = await DB.getOrdersAdminAllTenants();
-    const match = orders.find(o => o.id === id);
-    if (match?.tenantId) targetTenantId = match.tenantId;
-  } else {
-    orders = await DB.getOrders(session.tenantId);
+  let orders = await DB.getOrders(session.tenantId);
+  let order = orders.find(o => o.id === id);
+
+  if (!order) {
+    const activeFromSock = await WhatsAppManager.resolveActiveTenantFromSocket();
+    if (activeFromSock && activeFromSock !== session.tenantId) {
+      const sockOrders = await DB.getOrders(activeFromSock);
+      const sockMatch = sockOrders.find(o => o.id === id);
+      if (sockMatch) {
+        order = sockMatch;
+        targetTenantId = activeFromSock;
+      }
+    }
   }
 
-  const order = orders.find(o => o.id === id);
+  if (!order) {
+    const allOrders = await DB.getOrdersAdminAllTenants();
+    const adminMatch = allOrders.find(o => o.id === id);
+    if (adminMatch) {
+      order = adminMatch;
+      targetTenantId = adminMatch.tenantId || session.tenantId;
+    }
+  }
+
   if (!order) {
     return NextResponse.json({ error: 'Order not found' }, { status: 404 });
   }
+
+  updateTraceContext({ tenantId: targetTenantId });
 
   const updates: any = {};
   if (status) {
@@ -103,11 +118,14 @@ export const PATCH = withObservability(async (req: NextRequest) => {
   await DB.updateOrder(id, updates, targetTenantId);
 
   if (status && status !== order.status) {
-    if (status === 'confirmed') {
-      const msg = `Your order/booking for *${order.productName}* has been confirmed! We'll begin processing it now.`;
+    if (status === 'confirmed' || status === 'under_baking') {
+      const msg = `Your order/booking for *${order.productName}* has been confirmed and is under preparation! 🍕`;
       await WhatsAppManager.sendMessage(order.phone, msg);
     } else if (status === 'cancelled') {
       const msg = `We're sorry, your order/booking for *${order.productName}* could not be processed. Please contact us for more details.`;
+      await WhatsAppManager.sendMessage(order.phone, msg);
+    } else if (status === 'delivered') {
+      const msg = `Your order for *${order.productName}* has been delivered! Thank you for ordering with us. Enjoy your meal! 🎉`;
       await WhatsAppManager.sendMessage(order.phone, msg);
     }
   }

@@ -5667,12 +5667,12 @@ export default function DashboardPage() {
                                 }
 
                                 // Match against store product catalog items (flexible matching for titles/images)
-                                const matchedCat = (config.products || []).find((p: any) => {
+                                 const matchedCat = (config.products || []).find((p: any) => {
                                   if (!p.title) return false;
                                   const pTitle = p.title.toLowerCase().trim();
                                   const iTitle = itemName.toLowerCase().trim();
                                   return iTitle.includes(pTitle) || pTitle.includes(iTitle) ||
-                                    pTitle.split(' ').some(w => w.length > 3 && iTitle.includes(w));
+                                    pTitle.split(' ').some((w: string) => w.length > 3 && iTitle.includes(w));
                                 });
 
                                 const imgUrl = matchedCat?.image || matchedCat?.imageUrl || (matchedCat?.images && matchedCat.images[0]) || selectedOrderDetail.productImageUrl;
