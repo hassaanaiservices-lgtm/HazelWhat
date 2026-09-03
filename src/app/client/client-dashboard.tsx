@@ -68,9 +68,9 @@ export default function DashboardPage() {
     productInfo: "",
     keywordReplies: [],
     enabledFeatures: [],
-    globalAiEnabled: true 
+    globalAiEnabled: true
   });
-  
+
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => {
     setIsMounted(true);
@@ -129,7 +129,7 @@ export default function DashboardPage() {
     setEditingProduct(prod);
     setProdTitle(prod.title || "");
     setProdPrice(prod.price || "");
-    
+
     // Combine image, imageUrl, images, and imageUrls
     const allImgs: string[] = [];
     if (prod.image) allImgs.push(prod.image);
@@ -145,7 +145,7 @@ export default function DashboardPage() {
       });
     }
     setProdImage(allImgs.join("\n"));
-    
+
     setProdLink(prod.link || "");
     setProdCategory(prod.category || "");
     setProdDesc(prod.description || "");
@@ -197,8 +197,8 @@ export default function DashboardPage() {
 
   const saveProductsAndConfig = (updatedProducts: any[], customProductInfo?: string) => {
     const formattedCatalog = formatProductsText(updatedProducts, scrapeCurrency || "$");
-    const updatedCatalogInfo = customProductInfo !== undefined 
-      ? customProductInfo 
+    const updatedCatalogInfo = customProductInfo !== undefined
+      ? customProductInfo
       : (updatedProducts.length === 0 ? "" : (formattedCatalog || config.productInfo));
 
     const updatedConfig = {
@@ -232,9 +232,9 @@ export default function DashboardPage() {
 
     const parsedVariations = prodVariations.trim()
       ? prodVariations.split(",").map((v) => {
-          const parts = v.split(":");
-          return { title: parts[0]?.trim() || "Option", price: parts[1]?.trim() || prodPrice };
-        })
+        const parts = v.split(":");
+        return { title: parts[0]?.trim() || "Option", price: parts[1]?.trim() || prodPrice };
+      })
       : undefined;
 
     const urls = prodImage.split("\n").map(u => u.trim()).filter(Boolean);
@@ -353,7 +353,7 @@ export default function DashboardPage() {
   const [p2Message1, setP2Message1] = useState("Hey {Name}! Just checking in to see if you had a chance to review our previous message?");
   const [p2Message2, setP2Message2] = useState("Hi {Name}, we've got a quick update regarding your request. Would love to help out!");
   const [p2Message3, setP2Message3] = useState("Final check-in! Let us know if you're still interested or if we should stop sending updates.");
-  
+
   const [p2MediaBase64, setP2MediaBase64] = useState<string | null>(null);
   const [p2MediaMimetype, setP2MediaMimetype] = useState<string | null>(null);
   const [p2MediaName, setP2MediaName] = useState<string | null>(null);
@@ -371,7 +371,7 @@ export default function DashboardPage() {
   const [p2RecordTimer, setP2RecordTimer] = useState(0);
   const p2RecorderRef = useRef<MediaRecorder | null>(null);
   const p2TimerRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   const voiceFileInputRef = useRef<HTMLInputElement>(null);
   const p2FileInputRef = useRef<HTMLInputElement>(null);
   const p2VoiceFileInputRef = useRef<HTMLInputElement>(null);
@@ -582,6 +582,34 @@ export default function DashboardPage() {
   const [leadFilter, setLeadFilter] = useState<'all' | 'hot' | 'cold'>('all');
   const [analytics, setAnalytics] = useState<any>(null);
 
+  // Computed Real-Time Order Counters
+  const newOrdersCount = orders ? orders.filter((o: any) => {
+    const s = (o.status || '').toLowerCase();
+    return s === 'new_order' || s === 'new' || s === 'pending' || s === 'new order' || s === 'created';
+  }).length : 0;
+
+  const underBakingOrdersCount = orders ? orders.filter((o: any) => {
+    const s = (o.status || '').toLowerCase();
+    return s === 'under_baking' || s === 'under baking' || s === 'under_booking' || s === 'baking' || s === 'confirmed' || s === 'processing' || s === 'in_progress';
+  }).length : 0;
+
+  const deliveredOrdersCount = orders ? orders.filter((o: any) => {
+    const s = (o.status || '').toLowerCase();
+    const isDelivered = s === 'delivered' || s === 'deliver' || s === 'completed' || s === 'shipped';
+    if (isDelivered) {
+      const deliveredTime = o.deliveredAt ? new Date(o.deliveredAt).getTime() : (o.timestamp ? new Date(o.timestamp).getTime() : null);
+      if (deliveredTime && (Date.now() - deliveredTime > 5 * 60 * 1000)) {
+        return false;
+      }
+    }
+    return isDelivered;
+  }).length : 0;
+
+  const cancelledOrdersCount = orders ? orders.filter((o: any) => {
+    const s = (o.status || '').toLowerCase();
+    return s === 'cancelled' || s === 'canceled' || s === 'rejected';
+  }).length : 0;
+
   // Sound Alert for Received Orders
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [newOrderBanner, setNewOrderBanner] = useState<{ id: string; phone?: string; customerName: string; productName: string; amount?: string; time: string } | null>(null);
@@ -628,7 +656,7 @@ export default function DashboardPage() {
             ctx.resume();
           }
         }
-      } catch (e) {}
+      } catch (e) { }
       window.removeEventListener("click", unlockAudio);
       window.removeEventListener("keydown", unlockAudio);
     };
@@ -689,11 +717,11 @@ export default function DashboardPage() {
         const gain1 = ctx.createGain();
         osc1.type = "sine";
         osc1.frequency.setValueAtTime(freq, startTime);
-        
+
         gain1.gain.setValueAtTime(0.0001, startTime);
         gain1.gain.exponentialRampToValueAtTime(0.65, startTime + 0.015);
         gain1.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-        
+
         osc1.connect(gain1);
         gain1.connect(masterGain);
         osc1.start(startTime);
@@ -704,11 +732,11 @@ export default function DashboardPage() {
         const gain2 = ctx.createGain();
         osc2.type = "triangle";
         osc2.frequency.setValueAtTime(freq * 2, startTime);
-        
+
         gain2.gain.setValueAtTime(0.0001, startTime);
         gain2.gain.exponentialRampToValueAtTime(0.22, startTime + 0.01);
         gain2.gain.exponentialRampToValueAtTime(0.0001, startTime + (duration * 0.7));
-        
+
         osc2.connect(gain2);
         gain2.connect(masterGain);
         osc2.start(startTime);
@@ -756,11 +784,11 @@ export default function DashboardPage() {
         const gain1 = ctx.createGain();
         osc1.type = "sawtooth";
         osc1.frequency.setValueAtTime(freq, startTime);
-        
+
         gain1.gain.setValueAtTime(0.0001, startTime);
         gain1.gain.linearRampToValueAtTime(0.18, startTime + 0.02);
         gain1.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-        
+
         osc1.connect(gain1);
         gain1.connect(masterGain);
         osc1.start(startTime);
@@ -770,11 +798,11 @@ export default function DashboardPage() {
         const gain2 = ctx.createGain();
         osc2.type = "sine";
         osc2.frequency.setValueAtTime(freq, startTime);
-        
+
         gain2.gain.setValueAtTime(0.0001, startTime);
         gain2.gain.exponentialRampToValueAtTime(0.40, startTime + 0.015);
         gain2.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-        
+
         osc2.connect(gain2);
         gain2.connect(masterGain);
         osc2.start(startTime);
@@ -858,7 +886,7 @@ export default function DashboardPage() {
 
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -986,7 +1014,7 @@ export default function DashboardPage() {
       if (data.success && data.session) {
         setSessionData(data.session);
         const currentStatus = data.session.status;
-        
+
         if (currentStatus !== lastLoggedStatusRef.current) {
           lastLoggedStatusRef.current = currentStatus;
           if (currentStatus === "connected") {
@@ -1085,7 +1113,7 @@ export default function DashboardPage() {
         return; // Preserve existing chats in state! DO NOT clear state on HTTP error.
       }
       const data = await res.json();
-      
+
       if (data.success && data.chats) {
         const mergedChats = { ...data.chats };
         const customersMap: Record<string, any> = {};
@@ -1101,7 +1129,7 @@ export default function DashboardPage() {
               try {
                 const p = JSON.parse(c.preferences || "{}");
                 return p.hasComplaint === true;
-              } catch(e) {
+              } catch (e) {
                 return false;
               }
             })();
@@ -1124,7 +1152,7 @@ export default function DashboardPage() {
             }
           }
         }
-        
+
         // Non-destructive update: Only update if mergedChats has data or if current state is empty
         setChats(prev => {
           if (Object.keys(mergedChats).length > 0 || Object.keys(prev).length === 0) {
@@ -1139,7 +1167,7 @@ export default function DashboardPage() {
           return prev;
         });
       } else {
-         console.warn("[Client] fetchChats returned success: false or invalid chats payload", data);
+        console.warn("[Client] fetchChats returned success: false or invalid chats payload", data);
       }
     } catch (e) {
       console.error("[Client] fetchChats error:", e);
@@ -1202,7 +1230,7 @@ export default function DashboardPage() {
           if (data.success && data.session) {
             setSessionData(data.session);
             const currentStatus = data.session.status;
-            
+
             if (currentStatus === "connected") {
               setStatus("connected");
               clearInterval(pollInterval);
@@ -1273,7 +1301,7 @@ export default function DashboardPage() {
         body: JSON.stringify({ fresh: true }),
       });
       const data = await res.json();
-      
+
       if (!res.ok) {
         throw new Error(data.error || "Failed to start WhatsApp session");
       }
@@ -1354,7 +1382,7 @@ export default function DashboardPage() {
 
   const sendManualMessage = async () => {
     if (!selectedChat || !messageInput.trim()) return;
-    
+
     const content = messageInput.trim();
     setMessageInput("");
 
@@ -1396,8 +1424,8 @@ export default function DashboardPage() {
         await fetch("/api/whatsapp/send", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            to: selectedChat, 
+          body: JSON.stringify({
+            to: selectedChat,
             mediaBase64: base64,
             mimetype: file.type,
             fileName: file.name
@@ -1441,8 +1469,8 @@ export default function DashboardPage() {
             await fetch("/api/whatsapp/send", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ 
-                to: selectedChat, 
+              body: JSON.stringify({
+                to: selectedChat,
                 mediaBase64: base64,
                 mimetype: 'audio/webm',
                 isVoiceNote: true
@@ -1453,14 +1481,14 @@ export default function DashboardPage() {
           }
         };
         reader.readAsDataURL(audioBlob);
-        
+
         stream.getTracks().forEach(track => track.stop());
       };
 
       mediaRecorder.start();
       setIsRecording(true);
       setRecordingDuration(0);
-      
+
       recordingIntervalRef.current = setInterval(() => {
         setRecordingDuration(prev => prev + 1);
       }, 1000);
@@ -1919,8 +1947,8 @@ export default function DashboardPage() {
       const res = await fetch("/api/whatsapp/promotions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          message: promoMessage, 
+        body: JSON.stringify({
+          message: promoMessage,
           audience: promoAudience,
           mediaBase64: promoMediaBase64,
           mimetype: promoMediaMime,
@@ -1973,7 +2001,7 @@ export default function DashboardPage() {
 
   return (
     <div className="h-screen w-full flex bg-[#f5f6f8] font-sans overflow-hidden text-slate-800 relative">
-      
+
       {/* Floating Continuous Loud Order Alert Banner */}
       {newOrderBanner && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-pulse bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white p-4 sm:p-5 rounded-2xl shadow-2xl border-2 border-yellow-300 flex items-center gap-5 max-w-xl w-[92%] sm:w-full">
@@ -1989,7 +2017,7 @@ export default function DashboardPage() {
             <p className="text-xs text-rose-100 truncate">Customer: <span className="font-extrabold text-white">{newOrderBanner.customerName}</span> {newOrderBanner.amount && `• ${newOrderBanner.amount}`}</p>
           </div>
           <div className="flex flex-col gap-2 flex-shrink-0">
-            <button 
+            <button
               onClick={() => {
                 stopOrderAlarm();
                 if (newOrderBanner.phone) {
@@ -1997,13 +2025,13 @@ export default function DashboardPage() {
                 } else {
                   setActiveTab('orders');
                 }
-              }} 
+              }}
               className="px-3.5 py-1.5 bg-yellow-400 hover:bg-yellow-300 text-slate-900 text-xs font-black rounded-xl transition-all shadow-lg active:scale-95 cursor-pointer flex items-center gap-1.5 justify-center"
             >
               <MessageSquare className="w-4 h-4" /> Chat & View
             </button>
-            <button 
-              onClick={stopOrderAlarm} 
+            <button
+              onClick={stopOrderAlarm}
               className="px-3.5 py-1 bg-white/20 hover:bg-white/30 text-white text-[11px] font-extrabold rounded-xl transition-all text-center cursor-pointer flex items-center justify-center gap-1"
             >
               <CheckCircle2 className="w-3.5 h-3.5" /> Accept & Stop
@@ -2014,7 +2042,7 @@ export default function DashboardPage() {
 
       {/* 1. Left Sidebar - Intercom Editorial Style */}
       <div className="w-[260px] flex-shrink-0 bg-[#f5f1ec] border-r border-[#d3cec6] flex flex-col py-6 overflow-y-auto z-20 custom-scrollbar">
-        
+
         {/* Brand Header */}
         <div className="px-6 mb-6">
           <div className="flex items-center gap-3 font-semibold text-lg text-[#111111] tracking-tight">
@@ -2044,9 +2072,9 @@ export default function DashboardPage() {
               <ShoppingCart className={`h-4 w-4 ${activeTab === 'orders' ? 'text-[#ff5600]' : 'text-[#7b7b78]'}`} />
               <span>Orders</span>
             </div>
-            {orders && orders.filter((o: any) => o.status === 'pending').length > 0 && (
-              <span key={orders.filter((o: any) => o.status === 'pending').length} className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#ff5600] px-1.5 text-[10px] font-bold text-white shadow-xs animate-pop-in">
-                {orders.filter((o: any) => o.status === 'pending').length}
+            {newOrdersCount > 0 && (
+              <span key={newOrdersCount} className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#ff5600] px-1.5 text-[10px] font-bold text-white shadow-xs animate-pop-in" title="Active New Incoming Orders">
+                {newOrdersCount}
               </span>
             )}
           </button>
@@ -2083,7 +2111,7 @@ export default function DashboardPage() {
           <button onClick={() => setActiveTab('settings')} className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${activeTab === 'settings' ? 'bg-[#111111] text-white shadow-xs' : 'text-[#626260] hover:bg-[#ebe7e1] hover:text-[#111111]'}`}>
             <Settings className={`h-4 w-4 ${activeTab === 'settings' ? 'text-[#ff5600]' : 'text-[#7b7b78]'}`} /> Settings
           </button>
-          <button 
+          <button
             onClick={async () => {
               try {
                 await fetch('/api/auth/logout', {
@@ -2095,7 +2123,7 @@ export default function DashboardPage() {
                 console.error("Logout error:", e);
               }
               window.location.href = '/';
-            }} 
+            }}
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer text-rose-700 hover:bg-rose-50/80"
           >
             <LogOut className="h-4 w-4 text-rose-600" /> Sign Out
@@ -2114,7 +2142,7 @@ export default function DashboardPage() {
               <p className="text-[10px] text-[#626260] capitalize font-medium">{sessionData?.role || 'Client Account'}</p>
             </div>
           </div>
-          <button 
+          <button
             onClick={async () => {
               try {
                 await fetch('/api/auth/logout', {
@@ -2126,7 +2154,7 @@ export default function DashboardPage() {
                 console.error("Logout error:", e);
               }
               window.location.href = '/';
-            }} 
+            }}
             className="p-2 text-[#626260] hover:text-[#111111] hover:bg-[#ebe7e1] rounded-lg transition-colors cursor-pointer"
             title="Sign Out"
           >
@@ -2139,39 +2167,36 @@ export default function DashboardPage() {
       {activeTab === 'dashboard' && (
         <div className="flex-1 h-full overflow-y-auto bg-[#f5f1ec]">
           <div className="p-8 max-w-[1300px] mx-auto w-full space-y-6">
-            
+
             {/* Header with Period Filter */}
             <div className="flex justify-between items-center mb-2">
               <h2 className="text-2xl font-semibold text-[#111111] tracking-tight">Overview</h2>
               <div className="flex items-center gap-4">
                 <div className="bg-[#ebe7e1] p-1 rounded-lg flex items-center text-xs font-medium border border-[#d3cec6]">
-                  <button 
+                  <button
                     onClick={() => setPeriodFilter('weekly')}
-                    className={`px-4 py-1.5 rounded-md transition-all cursor-pointer ${
-                      periodFilter === 'weekly' ? 'bg-[#111111] text-white shadow-xs font-medium' : 'text-[#626260] hover:text-[#111111]'
-                    }`}
+                    className={`px-4 py-1.5 rounded-md transition-all cursor-pointer ${periodFilter === 'weekly' ? 'bg-[#111111] text-white shadow-xs font-medium' : 'text-[#626260] hover:text-[#111111]'
+                      }`}
                   >
                     Weekly
                   </button>
-                  <button 
+                  <button
                     onClick={() => setPeriodFilter('monthly')}
-                    className={`px-4 py-1.5 rounded-md transition-all cursor-pointer ${
-                      periodFilter === 'monthly' ? 'bg-[#111111] text-white shadow-xs font-medium' : 'text-[#626260] hover:text-[#111111]'
-                    }`}
+                    className={`px-4 py-1.5 rounded-md transition-all cursor-pointer ${periodFilter === 'monthly' ? 'bg-[#111111] text-white shadow-xs font-medium' : 'text-[#626260] hover:text-[#111111]'
+                      }`}
                   >
                     Monthly
                   </button>
-                  <button 
+                  <button
                     onClick={() => setPeriodFilter('yearly')}
-                    className={`px-4 py-1.5 rounded-md transition-all cursor-pointer ${
-                      periodFilter === 'yearly' ? 'bg-[#111111] text-white shadow-xs font-medium' : 'text-[#626260] hover:text-[#111111]'
-                    }`}
+                    className={`px-4 py-1.5 rounded-md transition-all cursor-pointer ${periodFilter === 'yearly' ? 'bg-[#111111] text-white shadow-xs font-medium' : 'text-[#626260] hover:text-[#111111]'
+                      }`}
                   >
                     Yearly
                   </button>
                 </div>
                 <button className="flex items-center gap-2 bg-white border border-[#d3cec6] px-4 py-1.5 rounded-lg text-xs font-medium text-[#111111] hover:bg-[#ebe7e1] shadow-xs cursor-pointer">
-                  <svg className="w-4 h-4 text-[#ff5600]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+                  <svg className="w-4 h-4 text-[#ff5600]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h7" /></svg>
                   Filter
                 </button>
               </div>
@@ -2186,11 +2211,10 @@ export default function DashboardPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-base font-semibold tracking-tight text-white">WhatsApp Lead Revival CRM</h3>
-                    <span className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full uppercase ${
-                      activeRevivalCampaign?.status === 'active' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 animate-pulse' :
-                      activeRevivalCampaign?.status === 'paused' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
-                      'bg-[#313130] text-[#9c9fa5]'
-                    }`}>
+                    <span className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full uppercase ${activeRevivalCampaign?.status === 'active' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 animate-pulse' :
+                        activeRevivalCampaign?.status === 'paused' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                          'bg-[#313130] text-[#9c9fa5]'
+                      }`}>
                       {activeRevivalCampaign ? `Campaign ${activeRevivalCampaign.status}` : 'Idle'}
                     </span>
                   </div>
@@ -2231,7 +2255,7 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
-            
+
             {/* Top Metric Cards - Floating White Tiles */}
             <div className="dash-card p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 md:gap-0">
               <div className="flex-1 md:border-r border-[#ebe7e1] md:pr-6">
@@ -2245,7 +2269,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex-1 md:border-r border-[#ebe7e1] md:px-6">
                 <div className="text-[#7b7b78] font-semibold text-[11px] uppercase tracking-wider mb-2">Active Users / Contacts</div>
                 <div className="flex items-end gap-3">
@@ -2257,7 +2281,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex-1 md:border-r border-[#ebe7e1] md:px-6">
                 <div className="text-[#7b7b78] font-semibold text-[11px] uppercase tracking-wider mb-2">Customer Lifetime Value</div>
                 <div className="flex items-end gap-3">
@@ -2269,7 +2293,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex-1 md:pl-6">
                 <div className="text-[#7b7b78] font-semibold text-[11px] uppercase tracking-wider mb-2">Total Orders Placed</div>
                 <div className="flex items-end gap-3">
@@ -2282,11 +2306,11 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
-            
+
             {/* Middle Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 h-fit">
-                
+
                 {/* Churn Rate */}
                 <div className="dash-card p-6 flex flex-col justify-between h-[180px]">
                   <div>
@@ -2302,7 +2326,7 @@ export default function DashboardPage() {
                       <div className="text-[11px] font-normal text-[#626260] mt-1"><span className="text-emerald-700 font-semibold">0.00%</span> churn rate</div>
                     </div>
                     <div className="w-24 h-12 flex items-end">
-                      <svg viewBox="0 0 100 40" className="w-full h-full stroke-emerald-600 fill-emerald-500/10" strokeWidth="2"><path d="M0 35 Q 25 35, 50 35 T 100 35 L 100 40 L 0 40 Z"/></svg>
+                      <svg viewBox="0 0 100 40" className="w-full h-full stroke-emerald-600 fill-emerald-500/10" strokeWidth="2"><path d="M0 35 Q 25 35, 50 35 T 100 35 L 100 40 L 0 40 Z" /></svg>
                     </div>
                   </div>
                 </div>
@@ -2322,7 +2346,7 @@ export default function DashboardPage() {
                       <div className="text-[11px] font-normal text-[#626260] mt-1"><span className="text-[#ff5600] font-semibold">{totalOrdersCount}</span> orders received</div>
                     </div>
                     <div className="w-24 h-12 flex items-end">
-                      <svg viewBox="0 0 100 40" className="w-full h-full stroke-[#ff5600] fill-[#ff5600]/10" strokeWidth="2"><path d="M0 35 Q 25 30, 50 25 T 100 15 L 100 40 L 0 40 Z"/></svg>
+                      <svg viewBox="0 0 100 40" className="w-full h-full stroke-[#ff5600] fill-[#ff5600]/10" strokeWidth="2"><path d="M0 35 Q 25 30, 50 25 T 100 15 L 100 40 L 0 40 Z" /></svg>
                     </div>
                   </div>
                 </div>
@@ -2339,7 +2363,7 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-[#65b5ff]"></div> Revival Campaigns ({revivalCampaigns.length})</div>
                     <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-[#0bdf50]"></div> Orders Placed ({totalOrdersCount})</div>
                   </div>
-                  
+
                   <div className="flex items-end justify-between h-40 pt-4 gap-2 md:gap-4 pb-2 border-l border-b border-[#ebe7e1] px-4 relative ml-4">
                     <div className="absolute left-[-24px] top-0 text-[10px] text-[#7b7b78] h-full flex flex-col justify-between pb-2 font-medium">
                       <span>100</span><span>75</span><span>50</span><span>25</span><span>0</span>
@@ -2351,10 +2375,10 @@ export default function DashboardPage() {
                       [activeUsersCount ? 70 : 5, chats ? 55 : 5, revivalCampaigns.length ? 35 : 5, totalOrdersCount ? 60 : 5]
                     ].map((heights, i) => (
                       <div key={i} className="flex-1 flex flex-col justify-end w-6 md:w-12 max-w-[48px] rounded-t overflow-hidden gap-[1px]">
-                        <div className="w-full bg-[#0bdf50] rounded-t-sm" style={{height: `${heights[3]}%`}}></div>
-                        <div className="w-full bg-[#65b5ff]" style={{height: `${heights[2]}%`}}></div>
-                        <div className="w-full bg-[#ff5600]" style={{height: `${heights[1]}%`}}></div>
-                        <div className="w-full bg-[#111111] rounded-b-sm" style={{height: `${heights[0]}%`}}></div>
+                        <div className="w-full bg-[#0bdf50] rounded-t-sm" style={{ height: `${heights[3]}%` }}></div>
+                        <div className="w-full bg-[#65b5ff]" style={{ height: `${heights[2]}%` }}></div>
+                        <div className="w-full bg-[#ff5600]" style={{ height: `${heights[1]}%` }}></div>
+                        <div className="w-full bg-[#111111] rounded-b-sm" style={{ height: `${heights[0]}%` }}></div>
                       </div>
                     ))}
                   </div>
@@ -2367,7 +2391,7 @@ export default function DashboardPage() {
                   <h3 className="font-semibold text-[#111111] text-sm">Product Sales Performance</h3>
                   <MoreVertical className="w-4 h-4 text-[#7b7b78]" />
                 </div>
-                
+
                 <div className="bg-[#ebe7e1] p-1 rounded-lg flex items-center text-xs font-medium mb-6 border border-[#d3cec6]">
                   <button className="flex-1 py-1.5 bg-white text-[#111111] shadow-xs rounded font-medium cursor-pointer">Live Orders</button>
                   <button className="flex-1 py-1.5 text-[#626260] hover:text-[#111111] cursor-pointer">Top Items</button>
@@ -2402,15 +2426,15 @@ export default function DashboardPage() {
 
                 <div className="mt-auto h-40 flex items-end justify-between gap-1 md:gap-2 border-b border-l border-[#ebe7e1] px-2 pt-2 relative ml-4">
                   <div className="absolute left-[-22px] top-0 text-[10px] text-[#7b7b78] h-full flex flex-col justify-between pb-2 font-medium">
-                      <span>100</span><span>75</span><span>50</span><span>25</span><span>0</span>
+                    <span>100</span><span>75</span><span>50</span><span>25</span><span>0</span>
                   </div>
                   {totalOrdersCount === 0 ? (
                     [5, 5, 5, 5, 5, 5, 5].map((h, i) => (
-                      <div key={i} className="flex-1 bg-[#ebe7e1] rounded-t-sm" style={{height: `${h}%`}}></div>
+                      <div key={i} className="flex-1 bg-[#ebe7e1] rounded-t-sm" style={{ height: `${h}%` }}></div>
                     ))
                   ) : (
                     [20, 40, 65, 80, 50, 70, 90].map((h, i) => (
-                      <div key={i} className="flex-1 bg-[#111111] hover:bg-[#ff5600] transition-colors rounded-t-sm" style={{height: `${h}%`}}></div>
+                      <div key={i} className="flex-1 bg-[#111111] hover:bg-[#ff5600] transition-colors rounded-t-sm" style={{ height: `${h}%` }}></div>
                     ))
                   )}
                 </div>
@@ -2427,35 +2451,35 @@ export default function DashboardPage() {
             <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
               <Settings className="h-7 w-7 text-purple-600" /> Account Settings
             </h2>
-            
+
             <div className="dash-card p-8 space-y-6">
               <div className="grid gap-6">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">Business Name</label>
-                  <input 
-                    type="text" 
-                    value={config.businessName || ''} 
-                    onChange={e => setConfig({...config, businessName: e.target.value})}
+                  <input
+                    type="text"
+                    value={config.businessName || ''}
+                    onChange={e => setConfig({ ...config, businessName: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200/80 rounded-xl px-4 py-3 text-slate-900 font-semibold focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 text-sm transition-all"
                     placeholder="e.g. DashMark Corp"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">Timezone</label>
-                  <input 
-                    type="text" 
-                    value={config.timezone || ''} 
-                    onChange={e => setConfig({...config, timezone: e.target.value})}
+                  <input
+                    type="text"
+                    value={config.timezone || ''}
+                    onChange={e => setConfig({ ...config, timezone: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200/80 rounded-xl px-4 py-3 text-slate-900 font-semibold focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 text-sm transition-all"
                     placeholder="e.g. UTC, America/New_York"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">Working Hours</label>
-                  <input 
-                    type="text" 
-                    value={config.workingHours || ''} 
-                    onChange={e => setConfig({...config, workingHours: e.target.value})}
+                  <input
+                    type="text"
+                    value={config.workingHours || ''}
+                    onChange={e => setConfig({ ...config, workingHours: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200/80 rounded-xl px-4 py-3 text-slate-900 font-semibold focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 text-sm transition-all"
                     placeholder="e.g. 9:00 AM - 5:00 PM"
                   />
@@ -2464,10 +2488,10 @@ export default function DashboardPage() {
                   <label className="block text-xs font-bold text-purple-700 mb-2 uppercase tracking-wider flex items-center gap-1.5">
                     <Phone className="w-3.5 h-3.5 text-purple-600" /> Kitchen / Manager WhatsApp Alert Number
                   </label>
-                  <input 
-                    type="text" 
-                    value={config.managerPhone || ''} 
-                    onChange={e => setConfig({...config, managerPhone: e.target.value})}
+                  <input
+                    type="text"
+                    value={config.managerPhone || ''}
+                    onChange={e => setConfig({ ...config, managerPhone: e.target.value })}
                     className="w-full bg-purple-50/50 border border-purple-200 rounded-xl px-4 py-3 text-slate-900 font-semibold focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 text-sm transition-all"
                     placeholder="e.g. 923001234567 (Receive instant WhatsApp notifications for every new order!)"
                   />
@@ -2475,31 +2499,31 @@ export default function DashboardPage() {
               </div>
 
 
-            
-            <div className="mt-8 border-t border-slate-100 pt-6 flex justify-end">
-              <button 
-                onClick={saveConfig}
-                disabled={savingConfig}
-                className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold py-3 px-8 rounded-xl transition-all shadow-md shadow-purple-500/20 flex items-center gap-2 cursor-pointer"
-              >
-                {savingConfig ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                Save Settings
-              </button>
+
+              <div className="mt-8 border-t border-slate-100 pt-6 flex justify-end">
+                <button
+                  onClick={saveConfig}
+                  disabled={savingConfig}
+                  className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold py-3 px-8 rounded-xl transition-all shadow-md shadow-purple-500/20 flex items-center gap-2 cursor-pointer"
+                >
+                  {savingConfig ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                  Save Settings
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
       )}
 
       {/* 1. Left Conversation Sidebar - Intercom Editorial Theme */}
       {activeTab === 'inbox' && (
         <div className="w-[360px] flex-shrink-0 bg-white border-r border-[#d3cec6] flex flex-col relative z-10">
-          
+
           {/* Connection Status Banner */}
           {status !== 'connected' && (
             <div className="bg-amber-50 px-4 py-2.5 border-b border-amber-200 flex items-center justify-between">
               <div className="flex items-center gap-2 text-amber-800 text-xs font-medium">
-                <div className="bg-[#ff5600] p-1 rounded-full"><MessageCircle className="h-3 w-3 text-white" /></div> 
+                <div className="bg-[#ff5600] p-1 rounded-full"><MessageCircle className="h-3 w-3 text-white" /></div>
                 WhatsApp Disconnected
               </div>
               <button onClick={() => setActiveTab('channels')} className="text-[#ff5600] text-xs font-semibold hover:underline cursor-pointer">Reconnect</button>
@@ -2520,11 +2544,10 @@ export default function DashboardPage() {
             <button
               onClick={toggleGlobalAiAutopilot}
               disabled={isAutopilotSaving}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 ${
-                config.globalAiEnabled !== false
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 ${config.globalAiEnabled !== false
                   ? 'bg-[#ff5600] hover:bg-[#e04c00] text-white'
                   : 'bg-[#ebe7e1] text-[#626260] hover:text-[#111111]'
-              }`}
+                }`}
               title={config.globalAiEnabled !== false ? "Click to Disable Global AI Autopilot" : "Click to Enable Global AI Autopilot"}
             >
               {isAutopilotSaving ? (
@@ -2540,16 +2563,16 @@ export default function DashboardPage() {
           <div className="p-4 pb-2">
             <div className="bg-[#f5f1ec] border border-[#d3cec6] rounded-lg flex items-center px-3.5 py-2 gap-2.5 focus-within:ring-1 focus-within:ring-[#ff5600] focus-within:border-[#ff5600] transition-all relative">
               <Search className="h-4 w-4 text-[#7b7b78]" />
-              <input 
-                type="text" 
-                placeholder="Search chats..." 
+              <input
+                type="text"
+                placeholder="Search chats..."
                 value={inboxSearch}
                 onChange={(e) => setInboxSearch(e.target.value)}
-                className="bg-transparent border-none outline-none text-xs w-full placeholder:text-[#9c9fa5] text-[#111111] font-medium pr-6" 
+                className="bg-transparent border-none outline-none text-xs w-full placeholder:text-[#9c9fa5] text-[#111111] font-medium pr-6"
               />
               {inboxSearch && (
-                <button 
-                  onClick={() => setInboxSearch("")} 
+                <button
+                  onClick={() => setInboxSearch("")}
                   className="absolute right-3 text-[#7b7b78] hover:text-[#111111] focus:outline-none cursor-pointer"
                 >
                   <X className="w-4 h-4" />
@@ -2560,64 +2583,59 @@ export default function DashboardPage() {
 
           {/* Inbox Segmentation Tabs */}
           <div className="flex gap-1.5 px-4 pb-3 border-b border-[#d3cec6] mt-1 overflow-x-auto">
-            <button 
+            <button
               onClick={() => setInboxFilter("all")}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${
-                inboxFilter === "all" ? "bg-[#111111] text-white shadow-xs" : "bg-[#ebe7e1] text-[#626260] hover:text-[#111111]"
-              }`}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${inboxFilter === "all" ? "bg-[#111111] text-white shadow-xs" : "bg-[#ebe7e1] text-[#626260] hover:text-[#111111]"
+                }`}
             >
               All
             </button>
-            <button 
+            <button
               onClick={() => setInboxFilter("normal")}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${
-                inboxFilter === "normal" ? "bg-[#111111] text-white shadow-xs" : "bg-[#ebe7e1] text-[#626260] hover:text-[#111111]"
-              }`}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${inboxFilter === "normal" ? "bg-[#111111] text-white shadow-xs" : "bg-[#ebe7e1] text-[#626260] hover:text-[#111111]"
+                }`}
             >
               Conversations
             </button>
-            <button 
+            <button
               onClick={() => setInboxFilter("groups")}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${
-                inboxFilter === "groups" ? "bg-[#111111] text-white shadow-xs" : "bg-[#ebe7e1] text-[#626260] hover:text-[#111111]"
-              }`}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${inboxFilter === "groups" ? "bg-[#111111] text-white shadow-xs" : "bg-[#ebe7e1] text-[#626260] hover:text-[#111111]"
+                }`}
             >
               Groups
             </button>
-             <button 
+            <button
               onClick={() => setInboxFilter("revival")}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${
-                inboxFilter === "revival" ? "bg-[#ff5600] text-white shadow-xs" : "bg-[#ebe7e1] text-[#626260] hover:text-[#111111]"
-              }`}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${inboxFilter === "revival" ? "bg-[#ff5600] text-white shadow-xs" : "bg-[#ebe7e1] text-[#626260] hover:text-[#111111]"
+                }`}
             >
               Leads Revival
             </button>
-            <button 
+            <button
               onClick={() => setInboxFilter("complaints")}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
-                inboxFilter === "complaints" ? "bg-rose-600 text-white shadow-xs" : "bg-rose-50 text-rose-700 border border-rose-200/50 hover:bg-rose-100"
-              }`}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5 ${inboxFilter === "complaints" ? "bg-rose-600 text-white shadow-xs" : "bg-rose-50 text-rose-700 border border-rose-200/50 hover:bg-rose-100"
+                }`}
             >
               <span>Complaints</span>
               {Object.values(customers).filter(c => {
                 try {
                   const p = JSON.parse(c.preferences || "{}");
                   return p.hasComplaint === true;
-                } catch(e) {
+                } catch (e) {
                   return false;
                 }
               }).length > 0 && (
-                <span className="px-1.5 py-0.2 text-[9px] font-bold rounded-full bg-rose-200 text-rose-800 animate-pulse">
-                  {Object.values(customers).filter(c => {
-                    try {
-                      const p = JSON.parse(c.preferences || "{}");
-                      return p.hasComplaint === true;
-                    } catch(e) {
-                      return false;
-                    }
-                  }).length}
-                </span>
-              )}
+                  <span className="px-1.5 py-0.2 text-[9px] font-bold rounded-full bg-rose-200 text-rose-800 animate-pulse">
+                    {Object.values(customers).filter(c => {
+                      try {
+                        const p = JSON.parse(c.preferences || "{}");
+                        return p.hasComplaint === true;
+                      } catch (e) {
+                        return false;
+                      }
+                    }).length}
+                  </span>
+                )}
             </button>
           </div>
 
@@ -2642,7 +2660,7 @@ export default function DashboardPage() {
                     try {
                       const p = JSON.parse(customer?.preferences || "{}");
                       return p.hasComplaint === true;
-                    } catch(e) {
+                    } catch (e) {
                       return false;
                     }
                   })();
@@ -2659,7 +2677,7 @@ export default function DashboardPage() {
                     try {
                       const p = JSON.parse(customers[a[0]]?.preferences || "{}");
                       return p.hasComplaint === true;
-                    } catch(e) {
+                    } catch (e) {
                       return false;
                     }
                   })();
@@ -2667,7 +2685,7 @@ export default function DashboardPage() {
                     try {
                       const p = JSON.parse(customers[b[0]]?.preferences || "{}");
                       return p.hasComplaint === true;
-                    } catch(e) {
+                    } catch (e) {
                       return false;
                     }
                   })();
@@ -2701,71 +2719,71 @@ export default function DashboardPage() {
                   return `+${id}`;
                 };
                 const displayName = formatContactName(phone);
-                 const isSelected = selectedChat === phone;
-                 const isChatAiEnabled = customers[phone]?.aiEnabled !== undefined ? customers[phone].aiEnabled : (config.globalAiEnabled !== false);
-                 const hasComplaint = (() => {
-                   try {
-                     const p = JSON.parse(customers[phone]?.preferences || "{}");
-                     return p.hasComplaint === true;
-                   } catch(e) {
-                     return false;
-                   }
-                 })();
-                 const timeStr = (() => {
-                   if (!lastMessage?.timestamp) return "";
-                   const d = new Date(lastMessage.timestamp);
-                   return isNaN(d.getTime()) ? "" : d.toLocaleDateString([], { month: '2-digit', day: '2-digit' });
-                 })();
-                 
-                 const percents = [40, 12, 20, 80, 100];
-                 const ringPercent = percents[i % percents.length];
+                const isSelected = selectedChat === phone;
+                const isChatAiEnabled = customers[phone]?.aiEnabled !== undefined ? customers[phone].aiEnabled : (config.globalAiEnabled !== false);
+                const hasComplaint = (() => {
+                  try {
+                    const p = JSON.parse(customers[phone]?.preferences || "{}");
+                    return p.hasComplaint === true;
+                  } catch (e) {
+                    return false;
+                  }
+                })();
+                const timeStr = (() => {
+                  if (!lastMessage?.timestamp) return "";
+                  const d = new Date(lastMessage.timestamp);
+                  return isNaN(d.getTime()) ? "" : d.toLocaleDateString([], { month: '2-digit', day: '2-digit' });
+                })();
 
-                 return (
-                   <div 
-                     key={phone} 
-                     onClick={() => {
-                       setSelectedChat(phone);
-                       markChatAsRead(phone);
-                     }}
-                     className={`cursor-pointer px-4 py-3 flex items-start gap-3 transition-all border-b border-[#ebe7e1] relative ${isSelected ? 'bg-[#f5f1ec] before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:bg-[#ff5600]' : 'hover:bg-[#f5f1ec]/60'}`}
-                   >
-                     <div className="relative flex-shrink-0 mt-0.5">
-                       <div className={`h-10 w-10 rounded-full border ${hasComplaint ? 'border-rose-500 bg-rose-50 shadow-[0_0_8px_rgba(244,63,94,0.35)]' : isChatAiEnabled ? 'border-[#ff5600]' : 'border-[#d3cec6]'} p-0.5 relative flex items-center justify-center bg-white shadow-xs`}>
-                         <div className={`h-full w-full ${hasComplaint ? 'bg-rose-600' : 'bg-[#111111]'} text-white rounded-full flex items-center justify-center overflow-hidden`}>
-                           <User className="h-4 w-4 text-white" />
-                         </div>
-                         {hasComplaint && (
-                           <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-600 border border-white"></span>
-                           </span>
-                         )}
-                       </div>
-                       <div className={`absolute -bottom-1 -left-1 bg-[#111111] text-white text-[8px] font-medium px-1.5 rounded-full border border-white`}>
-                         {ringPercent}%
-                       </div>
-                     </div>
-                     
-                     <div className="flex-1 min-w-0">
-                       <div className="flex justify-between items-baseline mb-0.5">
-                         <h4 className={`text-xs font-semibold truncate flex items-center gap-1.5 ${hasComplaint ? 'text-rose-700 font-bold' : 'text-[#111111]'}`}>
-                           <span>{displayName}</span>
-                           {hasComplaint && (
-                             <span className="text-[8px] bg-rose-100 text-rose-800 font-bold px-1 rounded-sm border border-rose-200">
-                               COMPLAINT
-                             </span>
-                           )}
-                         </h4>
-                         <span className="text-[10px] font-medium text-[#7b7b78]">{isMounted ? timeStr : ""}</span>
-                       </div>
-                       <div className="flex items-center gap-1.5 text-xs text-[#626260] font-normal">
-                         {lastMessage?.role === 'assistant' && <CheckCheck className="h-3.5 w-3.5 text-[#ff5600] flex-shrink-0" />}
-                         <span className="truncate">{lastMessage?.content}</span>
-                       </div>
-                     </div>
-                   </div>
-                 );
-               });
+                const percents = [40, 12, 20, 80, 100];
+                const ringPercent = percents[i % percents.length];
+
+                return (
+                  <div
+                    key={phone}
+                    onClick={() => {
+                      setSelectedChat(phone);
+                      markChatAsRead(phone);
+                    }}
+                    className={`cursor-pointer px-4 py-3 flex items-start gap-3 transition-all border-b border-[#ebe7e1] relative ${isSelected ? 'bg-[#f5f1ec] before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:bg-[#ff5600]' : 'hover:bg-[#f5f1ec]/60'}`}
+                  >
+                    <div className="relative flex-shrink-0 mt-0.5">
+                      <div className={`h-10 w-10 rounded-full border ${hasComplaint ? 'border-rose-500 bg-rose-50 shadow-[0_0_8px_rgba(244,63,94,0.35)]' : isChatAiEnabled ? 'border-[#ff5600]' : 'border-[#d3cec6]'} p-0.5 relative flex items-center justify-center bg-white shadow-xs`}>
+                        <div className={`h-full w-full ${hasComplaint ? 'bg-rose-600' : 'bg-[#111111]'} text-white rounded-full flex items-center justify-center overflow-hidden`}>
+                          <User className="h-4 w-4 text-white" />
+                        </div>
+                        {hasComplaint && (
+                          <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-600 border border-white"></span>
+                          </span>
+                        )}
+                      </div>
+                      <div className={`absolute -bottom-1 -left-1 bg-[#111111] text-white text-[8px] font-medium px-1.5 rounded-full border border-white`}>
+                        {ringPercent}%
+                      </div>
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-baseline mb-0.5">
+                        <h4 className={`text-xs font-semibold truncate flex items-center gap-1.5 ${hasComplaint ? 'text-rose-700 font-bold' : 'text-[#111111]'}`}>
+                          <span>{displayName}</span>
+                          {hasComplaint && (
+                            <span className="text-[8px] bg-rose-100 text-rose-800 font-bold px-1 rounded-sm border border-rose-200">
+                              COMPLAINT
+                            </span>
+                          )}
+                        </h4>
+                        <span className="text-[10px] font-medium text-[#7b7b78]">{isMounted ? timeStr : ""}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-[#626260] font-normal">
+                        {lastMessage?.role === 'assistant' && <CheckCheck className="h-3.5 w-3.5 text-[#ff5600] flex-shrink-0" />}
+                        <span className="truncate">{lastMessage?.content}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              });
             })()}
           </div>
         </div>
@@ -2845,20 +2863,20 @@ export default function DashboardPage() {
                           <span className="text-[11px] text-[#7b7b78] font-normal">({selectedChat.split('@')[0]}) | Active Contact</span>
                         </div>
                       </div>
-                      
+
                       {/* Autopilot Toggle */}
                       <div className="flex items-center bg-[#ebe7e1] border border-[#d3cec6] rounded-lg p-1">
                         {(() => {
                           const isAiEnabled = activeCustomer?.aiEnabled !== undefined ? activeCustomer.aiEnabled : (config.globalAiEnabled !== false);
                           return (
                             <>
-                              <button 
+                              <button
                                 onClick={() => toggleChatAi(true, resolvedCustomerKey || selectedChat)}
                                 className={`${isAiEnabled ? 'bg-[#111111] text-white shadow-xs' : 'text-[#626260] hover:text-[#111111]'} text-xs font-medium px-3.5 py-1 rounded-md transition cursor-pointer`}
                               >
                                 Autopilot
                               </button>
-                              <button 
+                              <button
                                 onClick={() => toggleChatAi(false, resolvedCustomerKey || selectedChat)}
                                 className={`${!isAiEnabled ? 'bg-[#111111] text-white shadow-xs' : 'text-[#626260] hover:text-[#111111]'} text-xs font-medium px-3.5 py-1 rounded-md transition cursor-pointer`}
                               >
@@ -2869,7 +2887,7 @@ export default function DashboardPage() {
                         })()}
                       </div>
                     </div>
-                    
+
                     {/* Complaint Summary Box */}
                     {(() => {
                       let hasComplaint = false;
@@ -2878,7 +2896,7 @@ export default function DashboardPage() {
                         const p = JSON.parse(activeCustomer?.preferences || "{}");
                         hasComplaint = p.hasComplaint === true;
                         complaintSummary = p.complaintSummary || "";
-                      } catch(e) {}
+                      } catch (e) { }
 
                       if (!hasComplaint) return null;
 
@@ -2898,18 +2916,18 @@ export default function DashboardPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-                            <button 
+                            <button
                               onClick={async () => {
                                 let currentPrefs: any = {};
                                 try {
                                   if (activeCustomer?.preferences) {
                                     currentPrefs = JSON.parse(activeCustomer.preferences);
                                   }
-                                } catch(e) {}
-                                
+                                } catch (e) { }
+
                                 currentPrefs.hasComplaint = false;
                                 currentPrefs.complaintSummary = "";
-                                
+
                                 await updateCustomerField(resolvedCustomerKey || selectedChat, { preferences: JSON.stringify(currentPrefs) });
                               }}
                               className="bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold px-3 py-1.5 rounded transition cursor-pointer flex items-center gap-1 shadow-xs"
@@ -2923,168 +2941,167 @@ export default function DashboardPage() {
                     })()}
 
                     {/* Chat Messages */}
-                    <div 
+                    <div
                       ref={chatContainerRef}
                       onScroll={handleChatScroll}
                       className="flex-1 overflow-y-auto px-[8%] py-6 flex flex-col space-y-3 z-10 custom-scrollbar"
                     >
                       {activeMessages.map((m, i) => {
-                  const isSent = m.role === 'assistant';
-                  const isDataUri = m.content?.startsWith('data:image/');
-                  const isImageUrl = m.content?.match(/^https?:\/\/.*\.(png|jpg|jpeg|gif|webp)(\?.*)?$/i);
-                  const displayMediaUrl = m.mediaUrl || (isDataUri ? m.content : isImageUrl ? m.content : null);
-                  const isSticker = m.content?.includes('[Sticker]') || m.mediaType === 'image/webp';
-                  const isAI = m.id && (m.id.startsWith('ai_') || m.id.startsWith('system_') || m.id === 'ai_temp');
+                        const isSent = m.role === 'assistant';
+                        const isDataUri = m.content?.startsWith('data:image/');
+                        const isImageUrl = m.content?.match(/^https?:\/\/.*\.(png|jpg|jpeg|gif|webp)(\?.*)?$/i);
+                        const displayMediaUrl = m.mediaUrl || (isDataUri ? m.content : isImageUrl ? m.content : null);
+                        const isSticker = m.content?.includes('[Sticker]') || m.mediaType === 'image/webp';
+                        const isAI = m.id && (m.id.startsWith('ai_') || m.id.startsWith('system_') || m.id === 'ai_temp');
 
-                  return (
-                    <div key={i} className={`flex w-full ${isSent ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`relative max-w-[65%] rounded-xl px-4 py-2.5 text-xs font-normal leading-relaxed shadow-xs ${
-                        isSent 
-                          ? 'bg-[#111111] text-white rounded-tr-xs' 
-                          : 'bg-white text-[#111111] rounded-tl-xs border border-[#d3cec6]'
-                      }`}>
-                        {displayMediaUrl && (
-                          <div className="mb-2 rounded-lg overflow-hidden border border-[#d3cec6] bg-slate-50 flex items-center justify-center p-1">
-                            {isSticker || m.mediaType?.startsWith('image/') || isDataUri || isImageUrl ? (
-                              <img src={displayMediaUrl} alt="Media Preview" className="max-w-[260px] max-h-[260px] object-contain rounded border border-[#d3cec6]" />
-                            ) : m.mediaType?.startsWith('video/') ? (
-                              <video src={displayMediaUrl} controls className="max-w-full max-h-[300px] object-cover rounded" />
-                            ) : m.mediaType?.startsWith('audio/') ? (
-                              <audio src={displayMediaUrl} controls className="max-w-full rounded-full" />
-                            ) : (
-                              <a href={displayMediaUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-3 text-[#ff5600] hover:bg-[#ebe7e1] transition rounded-lg">
-                                <Paperclip className="h-5 w-5" />
-                                <span className="font-semibold underline text-xs truncate">Document Attachment</span>
-                              </a>
-                            )}
+                        return (
+                          <div key={i} className={`flex w-full ${isSent ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`relative max-w-[65%] rounded-xl px-4 py-2.5 text-xs font-normal leading-relaxed shadow-xs ${isSent
+                                ? 'bg-[#111111] text-white rounded-tr-xs'
+                                : 'bg-white text-[#111111] rounded-tl-xs border border-[#d3cec6]'
+                              }`}>
+                              {displayMediaUrl && (
+                                <div className="mb-2 rounded-lg overflow-hidden border border-[#d3cec6] bg-slate-50 flex items-center justify-center p-1">
+                                  {isSticker || m.mediaType?.startsWith('image/') || isDataUri || isImageUrl ? (
+                                    <img src={displayMediaUrl} alt="Media Preview" className="max-w-[260px] max-h-[260px] object-contain rounded border border-[#d3cec6]" />
+                                  ) : m.mediaType?.startsWith('video/') ? (
+                                    <video src={displayMediaUrl} controls className="max-w-full max-h-[300px] object-cover rounded" />
+                                  ) : m.mediaType?.startsWith('audio/') ? (
+                                    <audio src={displayMediaUrl} controls className="max-w-full rounded-full" />
+                                  ) : (
+                                    <a href={displayMediaUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-3 text-[#ff5600] hover:bg-[#ebe7e1] transition rounded-lg">
+                                      <Paperclip className="h-5 w-5" />
+                                      <span className="font-semibold underline text-xs truncate">Document Attachment</span>
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+                              {m.content && !isDataUri && !isImageUrl && (
+                                <span className="pr-14 block whitespace-pre-wrap">
+                                  {isSent && (
+                                    <span className="inline-block text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[#ff5600] text-white mr-1.5 align-middle select-none">
+                                      {isAI ? 'Fin AI' : 'Agent'}
+                                    </span>
+                                  )}
+                                  {m.content}
+                                </span>
+                              )}
+                              <div className={`absolute bottom-1 right-3 flex items-center gap-1 text-[10px] font-medium ${isSent ? 'text-white/70' : 'text-[#7b7b78]'}`}>
+                                <span>{isMounted && m.timestamp ? (() => {
+                                  const d = new Date(m.timestamp);
+                                  return isNaN(d.getTime()) ? "" : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+                                })() : ""}</span>
+                                {isSent && (
+                                  m.status === 4 ? <CheckCheck className="h-3.5 w-3.5 text-[#ff5600]" /> :
+                                    m.status === 3 ? <CheckCheck className="h-3.5 w-3.5 text-white/70" /> :
+                                      <Check className="h-3.5 w-3.5 text-white/70" />
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div ref={messagesEndRef} />
+                    </div>
+
+                    {/* Status warning if disconnected in input area */}
+                    {status !== 'connected' ? (
+                      <div className="h-[76px] bg-white border-t border-[#d3cec6] px-6 flex items-center justify-center z-10 flex-shrink-0 shadow-xs">
+                        <div className="flex flex-col items-center">
+                          <p className="text-[#626260] text-xs font-medium mb-2">WhatsApp is disconnected</p>
+                          <button onClick={() => setActiveTab('channels')} className="bg-[#ff5600] hover:bg-[#e04c00] text-white font-medium text-xs px-5 py-2 rounded-lg transition shadow-xs flex items-center gap-2 cursor-pointer">
+                            <Zap className="h-4 w-4" /> Reconnect
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Chat Input Bar - Intercom Styling */
+                      <div className="h-[76px] bg-white border-t border-[#d3cec6] px-6 flex items-center gap-4 z-10 flex-shrink-0 relative shadow-xs">
+
+                        {showEmojiPicker && (
+                          <div className="absolute bottom-[86px] left-6 z-50 shadow-xl rounded-2xl">
+                            <EmojiPicker
+                              onEmojiClick={(emojiData) => {
+                                setMessageInput(prev => prev + emojiData.emoji);
+                              }}
+                            />
                           </div>
                         )}
-                        {m.content && !isDataUri && !isImageUrl && (
-                          <span className="pr-14 block whitespace-pre-wrap">
-                            {isSent && (
-                              <span className="inline-block text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[#ff5600] text-white mr-1.5 align-middle select-none">
-                                {isAI ? 'Fin AI' : 'Agent'}
+
+                        <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileAttach} />
+
+                        {isRecording ? (
+                          <div className="flex-1 flex items-center gap-4 animate-in fade-in duration-300">
+                            <div className="flex items-center gap-2 text-rose-600 font-medium text-xs">
+                              <span className="relative flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
                               </span>
+                              Recording... {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+                            </div>
+                            <div className="flex-1"></div>
+                            <button onClick={() => {
+                              if (mediaRecorderRef.current && isRecording) {
+                                mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+                                setIsRecording(false);
+                                if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+                              }
+                            }} className="text-[#626260] hover:text-[#111111] text-xs font-medium cursor-pointer">
+                              Cancel
+                            </button>
+                            <button onClick={stopRecording} className="bg-rose-600 text-white rounded-lg p-2 hover:bg-rose-700 transition shadow-xs cursor-pointer">
+                              <Send className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-3 text-[#7b7b78]">
+                              <Smile onClick={() => setShowEmojiPicker(!showEmojiPicker)} className={`h-5 w-5 cursor-pointer transition-colors ${showEmojiPicker ? 'text-[#ff5600]' : 'hover:text-[#111111]'}`} />
+                              <Paperclip onClick={() => fileInputRef.current?.click()} className="h-5 w-5 cursor-pointer hover:text-[#111111] transition-colors" />
+                            </div>
+
+                            <div className="flex-1">
+                              <input
+                                type="text"
+                                placeholder="Type a message..."
+                                value={messageInput}
+                                onChange={(e) => setMessageInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    sendManualMessage();
+                                    setShowEmojiPicker(false);
+                                  }
+                                }}
+                                className="w-full bg-[#f5f1ec] border border-[#d3cec6] rounded-lg px-4 py-2 text-xs font-medium text-[#111111] placeholder:text-[#9c9fa5] focus:outline-none focus:ring-1 focus:ring-[#ff5600] focus:border-[#ff5600] transition-all"
+                              />
+                            </div>
+
+                            {messageInput.trim() ? (
+                              <div onClick={() => { sendManualMessage(); setShowEmojiPicker(false); }} className="bg-gradient-to-r from-purple-600 to-indigo-600 h-10 w-10 rounded-full flex items-center justify-center cursor-pointer hover:from-purple-700 hover:to-indigo-700 shadow-md shadow-purple-500/25 transition-all">
+                                <Send className="h-4 w-4 text-white ml-0.5" />
+                              </div>
+                            ) : (
+                              <Mic onClick={startRecording} className="h-6 w-6 text-slate-400 cursor-pointer hover:text-purple-600 transition-colors" />
                             )}
-                            {m.content}
-                          </span>
+                          </>
                         )}
-                        <div className={`absolute bottom-1 right-3 flex items-center gap-1 text-[10px] font-medium ${isSent ? 'text-white/70' : 'text-[#7b7b78]'}`}>
-                          <span>{isMounted && m.timestamp ? (() => {
-                            const d = new Date(m.timestamp);
-                            return isNaN(d.getTime()) ? "" : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
-                          })() : ""}</span>
-                          {isSent && (
-                            m.status === 4 ? <CheckCheck className="h-3.5 w-3.5 text-[#ff5600]" /> :
-                            m.status === 3 ? <CheckCheck className="h-3.5 w-3.5 text-white/70" /> :
-                            <Check className="h-3.5 w-3.5 text-white/70" />
-                          )}
-                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-                <div ref={messagesEndRef} />
-              </div>
-              
-              {/* Status warning if disconnected in input area */}
-              {status !== 'connected' ? (
-                <div className="h-[76px] bg-white border-t border-[#d3cec6] px-6 flex items-center justify-center z-10 flex-shrink-0 shadow-xs">
-                  <div className="flex flex-col items-center">
-                    <p className="text-[#626260] text-xs font-medium mb-2">WhatsApp is disconnected</p>
-                    <button onClick={() => setActiveTab('channels')} className="bg-[#ff5600] hover:bg-[#e04c00] text-white font-medium text-xs px-5 py-2 rounded-lg transition shadow-xs flex items-center gap-2 cursor-pointer">
-                      <Zap className="h-4 w-4" /> Reconnect
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                /* Chat Input Bar - Intercom Styling */
-                <div className="h-[76px] bg-white border-t border-[#d3cec6] px-6 flex items-center gap-4 z-10 flex-shrink-0 relative shadow-xs">
-                  
-                  {showEmojiPicker && (
-                    <div className="absolute bottom-[86px] left-6 z-50 shadow-xl rounded-2xl">
-                      <EmojiPicker 
-                        onEmojiClick={(emojiData) => {
-                          setMessageInput(prev => prev + emojiData.emoji);
-                        }}
-                      />
-                    </div>
-                  )}
-
-                  <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileAttach} />
-
-                  {isRecording ? (
-                    <div className="flex-1 flex items-center gap-4 animate-in fade-in duration-300">
-                      <div className="flex items-center gap-2 text-rose-600 font-medium text-xs">
-                        <span className="relative flex h-3 w-3">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
-                        </span>
-                        Recording... {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
-                      </div>
-                      <div className="flex-1"></div>
-                      <button onClick={() => {
-                        if (mediaRecorderRef.current && isRecording) {
-                          mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
-                          setIsRecording(false);
-                          if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
-                        }
-                      }} className="text-[#626260] hover:text-[#111111] text-xs font-medium cursor-pointer">
-                        Cancel
-                      </button>
-                      <button onClick={stopRecording} className="bg-rose-600 text-white rounded-lg p-2 hover:bg-rose-700 transition shadow-xs cursor-pointer">
-                        <Send className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-center gap-3 text-[#7b7b78]">
-                        <Smile onClick={() => setShowEmojiPicker(!showEmojiPicker)} className={`h-5 w-5 cursor-pointer transition-colors ${showEmojiPicker ? 'text-[#ff5600]' : 'hover:text-[#111111]'}`} />
-                        <Paperclip onClick={() => fileInputRef.current?.click()} className="h-5 w-5 cursor-pointer hover:text-[#111111] transition-colors" />
-                      </div>
-                      
-                      <div className="flex-1">
-                        <input 
-                          type="text"
-                          placeholder="Type a message..."
-                          value={messageInput}
-                          onChange={(e) => setMessageInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              sendManualMessage();
-                              setShowEmojiPicker(false);
-                            }
-                          }}
-                          className="w-full bg-[#f5f1ec] border border-[#d3cec6] rounded-lg px-4 py-2 text-xs font-medium text-[#111111] placeholder:text-[#9c9fa5] focus:outline-none focus:ring-1 focus:ring-[#ff5600] focus:border-[#ff5600] transition-all"
-                        />
-                      </div>
-                      
-                      {messageInput.trim() ? (
-                        <div onClick={() => { sendManualMessage(); setShowEmojiPicker(false); }} className="bg-gradient-to-r from-purple-600 to-indigo-600 h-10 w-10 rounded-full flex items-center justify-center cursor-pointer hover:from-purple-700 hover:to-indigo-700 shadow-md shadow-purple-500/25 transition-all">
-                          <Send className="h-4 w-4 text-white ml-0.5" />
-                        </div>
-                      ) : (
-                        <Mic onClick={startRecording} className="h-6 w-6 text-slate-400 cursor-pointer hover:text-purple-600 transition-colors" />
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
+                    )}
+                  </>
+                );
+              })()}
             </>
-          );
-        })()}
-      </>
-    )}
-  </div>
-)}
+          )}
+        </div>
+      )}
 
-        {/* Channels Tab (QR Connection) */}
-        {activeTab === 'channels' && (
-          <div className="flex-1 h-full overflow-y-auto bg-[#f5f1ec]">
-            <div className="p-10 max-w-4xl mx-auto w-full space-y-8">
+      {/* Channels Tab (QR Connection) */}
+      {activeTab === 'channels' && (
+        <div className="flex-1 h-full overflow-y-auto bg-[#f5f1ec]">
+          <div className="p-10 max-w-4xl mx-auto w-full space-y-8">
             <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">WhatsApp Integration</h2>
             <div className="dash-card p-8 flex flex-col items-center">
-              
+
               {status === "idle" && waConnectMode === "qr" && (
                 <div className="text-center space-y-6 w-full max-w-sm">
                   <div className="mx-auto bg-purple-50 p-6 rounded-full w-max border border-purple-100">
@@ -3111,8 +3128,8 @@ export default function DashboardPage() {
                 <div className="flex flex-col items-center justify-center space-y-6 py-10 w-full max-w-sm">
                   <Loader2 className="h-10 w-10 text-purple-600 animate-spin" />
                   <p className="text-slate-500 font-bold text-xs">Initializing Secure Connection...</p>
-                  <button 
-                    onClick={disconnectSession} 
+                  <button
+                    onClick={disconnectSession}
                     className="text-xs font-bold text-rose-500 bg-rose-50 hover:bg-rose-100 px-4 py-2 rounded-xl transition-colors mt-2"
                   >
                     Reset & Generate New QR Code
@@ -3126,11 +3143,10 @@ export default function DashboardPage() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={qrCode} alt="QR" className="w-64 h-64 rounded-xl object-contain" />
                     {/* Freshness badge */}
-                    <div className={`absolute -top-3 -right-3 text-xs font-bold px-2.5 py-1 rounded-full shadow ${
-                      qrSecondsLeft > 30 ? 'bg-emerald-500 text-white' :
-                      qrSecondsLeft > 10 ? 'bg-amber-400 text-white' :
-                                           'bg-rose-500 text-white'
-                    }`}>
+                    <div className={`absolute -top-3 -right-3 text-xs font-bold px-2.5 py-1 rounded-full shadow ${qrSecondsLeft > 30 ? 'bg-emerald-500 text-white' :
+                        qrSecondsLeft > 10 ? 'bg-amber-400 text-white' :
+                          'bg-rose-500 text-white'
+                      }`}>
                       {qrSecondsLeft > 0 ? `${qrSecondsLeft}s` : 'New QR loading...'}
                     </div>
                   </div>
@@ -3168,12 +3184,12 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="w-full space-y-3 pt-2">
-                    <button 
+                    <button
                       onClick={() => {
                         setStatus("idle");
                         setWaConnectMode("qr");
                         startSession();
-                      }} 
+                      }}
                       className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold h-12 rounded-xl transition-all shadow-md shadow-purple-500/20 text-xs cursor-pointer"
                     >
                       Generate New QR Code
@@ -3202,7 +3218,7 @@ export default function DashboardPage() {
                     <p className="text-xs text-slate-500">Enter your full phone number with country code to receive an 8-digit pairing code.</p>
                   </div>
 
-                  <form 
+                  <form
                     onSubmit={async (e) => {
                       e.preventDefault();
                       if (!waPairingPhone.trim()) return;
@@ -3226,7 +3242,7 @@ export default function DashboardPage() {
                       } finally {
                         setIsGeneratingPairingCode(false);
                       }
-                    }} 
+                    }}
                     className="space-y-4"
                   >
                     <div>
@@ -3322,141 +3338,135 @@ export default function DashboardPage() {
         </div>
       )}
 
-        {/* Agents Tab - Tabbed Intercom Editorial Style */}
-        {activeTab === 'agents' && (
-                <div className="flex-1 h-full overflow-y-auto bg-[#f5f1ec]">
-                  <div className="p-8 md:p-10 max-w-[1400px] mx-auto w-full space-y-6">
-                    
-                    {/* Header */}
-                    <div className="flex items-center justify-between flex-wrap gap-4">
-                      <div>
-                        <h2 className="text-2xl font-semibold text-[#111111] flex items-center gap-3 tracking-tight">
-                          <Bot className="h-6 w-6 text-[#ff5600]" /> Bot Configuration & Knowledge Base
-                        </h2>
-                        <p className="text-xs text-[#626260] font-normal mt-1">
-                          Manage AI system prompt, food catalog, store FAQs, instant keyword replies, and autopilot settings.
-                        </p>
-                      </div>
-                    </div>
+      {/* Agents Tab - Tabbed Intercom Editorial Style */}
+      {activeTab === 'agents' && (
+        <div className="flex-1 h-full overflow-y-auto bg-[#f5f1ec]">
+          <div className="p-8 md:p-10 max-w-[1400px] mx-auto w-full space-y-6">
 
-                    {/* Sub-Tab Navigation Bar */}
-                    <div className="flex items-center gap-2 p-1.5 bg-white border border-[#d3cec6] rounded-xl shadow-xs overflow-x-auto">
-                      <button
-                        type="button"
-                        onClick={() => setKbSubTab("prompt")}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                          kbSubTab === "prompt"
-                            ? "bg-[#111111] text-white shadow-xs"
-                            : "text-[#626260] hover:text-[#111111] hover:bg-[#f5f1ec]"
-                        }`}
-                      >
-                        <Sparkles className="w-4 h-4 text-[#ff5600]" />
-                        <span>AI System Prompt</span>
-                      </button>
+            {/* Header */}
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <h2 className="text-2xl font-semibold text-[#111111] flex items-center gap-3 tracking-tight">
+                  <Bot className="h-6 w-6 text-[#ff5600]" /> Bot Configuration & Knowledge Base
+                </h2>
+                <p className="text-xs text-[#626260] font-normal mt-1">
+                  Manage AI system prompt, food catalog, store FAQs, instant keyword replies, and autopilot settings.
+                </p>
+              </div>
+            </div>
 
-                      <button
-                        type="button"
-                        onClick={() => setKbSubTab("products")}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                          kbSubTab === "products"
-                            ? "bg-[#111111] text-white shadow-xs"
-                            : "text-[#626260] hover:text-[#111111] hover:bg-[#f5f1ec]"
-                        }`}
-                      >
-                        <Package className="w-4 h-4 text-[#ff5600]" />
-                        <span>Product Catalog ({(config.products || []).length})</span>
-                      </button>
+            {/* Sub-Tab Navigation Bar */}
+            <div className="flex items-center gap-2 p-1.5 bg-white border border-[#d3cec6] rounded-xl shadow-xs overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setKbSubTab("prompt")}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${kbSubTab === "prompt"
+                    ? "bg-[#111111] text-white shadow-xs"
+                    : "text-[#626260] hover:text-[#111111] hover:bg-[#f5f1ec]"
+                  }`}
+              >
+                <Sparkles className="w-4 h-4 text-[#ff5600]" />
+                <span>AI System Prompt</span>
+              </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setKbSubTab("kb")}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                          kbSubTab === "kb"
-                            ? "bg-[#111111] text-white shadow-xs"
-                            : "text-[#626260] hover:text-[#111111] hover:bg-[#f5f1ec]"
-                        }`}
-                      >
-                        <BookOpen className="w-4 h-4 text-[#ff5600]" />
-                        <span>Business Knowledge Base & FAQs</span>
-                      </button>
+              <button
+                type="button"
+                onClick={() => setKbSubTab("products")}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${kbSubTab === "products"
+                    ? "bg-[#111111] text-white shadow-xs"
+                    : "text-[#626260] hover:text-[#111111] hover:bg-[#f5f1ec]"
+                  }`}
+              >
+                <Package className="w-4 h-4 text-[#ff5600]" />
+                <span>Product Catalog ({(config.products || []).length})</span>
+              </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setKbSubTab("keywords")}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                          kbSubTab === "keywords"
-                            ? "bg-[#111111] text-white shadow-xs"
-                            : "text-[#626260] hover:text-[#111111] hover:bg-[#f5f1ec]"
-                        }`}
-                      >
-                        <Zap className="w-4 h-4 text-[#ff5600]" />
-                        <span>Keyword Replies ({(config.keywordReplies || []).length})</span>
-                      </button>
+              <button
+                type="button"
+                onClick={() => setKbSubTab("kb")}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${kbSubTab === "kb"
+                    ? "bg-[#111111] text-white shadow-xs"
+                    : "text-[#626260] hover:text-[#111111] hover:bg-[#f5f1ec]"
+                  }`}
+              >
+                <BookOpen className="w-4 h-4 text-[#ff5600]" />
+                <span>Business Knowledge Base & FAQs</span>
+              </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setKbSubTab("settings")}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                          kbSubTab === "settings"
-                            ? "bg-[#111111] text-white shadow-xs"
-                            : "text-[#626260] hover:text-[#111111] hover:bg-[#f5f1ec]"
-                        }`}
-                      >
-                        <Settings className="w-4 h-4 text-[#ff5600]" />
-                        <span>AI Autopilot & Settings</span>
-                      </button>
-                    </div>
+              <button
+                type="button"
+                onClick={() => setKbSubTab("keywords")}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${kbSubTab === "keywords"
+                    ? "bg-[#111111] text-white shadow-xs"
+                    : "text-[#626260] hover:text-[#111111] hover:bg-[#f5f1ec]"
+                  }`}
+              >
+                <Zap className="w-4 h-4 text-[#ff5600]" />
+                <span>Keyword Replies ({(config.keywordReplies || []).length})</span>
+              </button>
 
-                    {/* SUB-TAB 1: AI SYSTEM PROMPT */}
-                    {kbSubTab === "prompt" && (
-                      <div className="bg-white p-6 rounded-xl border border-[#d3cec6] shadow-xs space-y-6">
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ebe7e1] pb-4">
-                          <div>
-                            <h3 className="text-base font-semibold text-[#111111] flex items-center gap-2">
-                              <Sparkles className="w-5 h-5 text-[#ff5600]" />
-                              <span>AI System Prompt & Voice Persona</span>
-                            </h3>
-                            <p className="text-xs text-[#626260] font-normal mt-0.5">
-                              Define the AI assistant&apos;s personality, rules, Roman Urdu voice tone, and order-taking guidelines.
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={saveKnowledgeBase}
-                            disabled={savingKB}
-                            className={`px-5 py-2.5 rounded-lg font-medium text-xs flex items-center gap-2 transition-all cursor-pointer shadow-xs active:scale-95 ${
-                              kbSaveSuccess
-                                ? "bg-emerald-600 text-white"
-                                : "bg-[#111111] hover:bg-black text-white"
-                            }`}
-                          >
-                            {savingKB ? (
-                              <>
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                <span>Saving...</span>
-                              </>
-                            ) : kbSaveSuccess ? (
-                              <>
-                                <CheckCircle2 className="h-3.5 w-3.5 text-white" />
-                                <span>Saved!</span>
-                              </>
-                            ) : (
-                              <>
-                                <Save className="h-3.5 w-3.5" />
-                                <span>Save System Prompt</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
+              <button
+                type="button"
+                onClick={() => setKbSubTab("settings")}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${kbSubTab === "settings"
+                    ? "bg-[#111111] text-white shadow-xs"
+                    : "text-[#626260] hover:text-[#111111] hover:bg-[#f5f1ec]"
+                  }`}
+              >
+                <Settings className="w-4 h-4 text-[#ff5600]" />
+                <span>AI Autopilot & Settings</span>
+              </button>
+            </div>
 
-                        {/* Preset Quick Templates */}
-                        <div className="space-y-2">
-                          <label className="text-xs font-semibold text-[#111111] uppercase tracking-wider">Quick Preset Persona Templates</label>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const foodPrompt = `You are the official food ordering assistant for Atomix Gourmet Kitchen & Food Hub.
+            {/* SUB-TAB 1: AI SYSTEM PROMPT */}
+            {kbSubTab === "prompt" && (
+              <div className="bg-white p-6 rounded-xl border border-[#d3cec6] shadow-xs space-y-6">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ebe7e1] pb-4">
+                  <div>
+                    <h3 className="text-base font-semibold text-[#111111] flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-[#ff5600]" />
+                      <span>AI System Prompt & Voice Persona</span>
+                    </h3>
+                    <p className="text-xs text-[#626260] font-normal mt-0.5">
+                      Define the AI assistant&apos;s personality, rules, Roman Urdu voice tone, and order-taking guidelines.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={saveKnowledgeBase}
+                    disabled={savingKB}
+                    className={`px-5 py-2.5 rounded-lg font-medium text-xs flex items-center gap-2 transition-all cursor-pointer shadow-xs active:scale-95 ${kbSaveSuccess
+                        ? "bg-emerald-600 text-white"
+                        : "bg-[#111111] hover:bg-black text-white"
+                      }`}
+                  >
+                    {savingKB ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : kbSaveSuccess ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                        <span>Saved!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-3.5 w-3.5" />
+                        <span>Save System Prompt</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Preset Quick Templates */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-[#111111] uppercase tracking-wider">Quick Preset Persona Templates</label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const foodPrompt = `You are the official food ordering assistant for Atomix Gourmet Kitchen & Food Hub.
 
 === CRITICAL FOOD ORDERING & CUSTOMER RULES ===
 1. ADDRESS PERSISTENCE:
@@ -3467,907 +3477,899 @@ export default function DashboardPage() {
    - Default to "Cash on Delivery" (COD). Never ask payment options unless requested.
 4. ROMAN URDU PERSONA:
    - Speak in natural, friendly Roman Urdu for all order taking and food inquiries!`;
-                                setConfig({ ...config, systemPrompt: foodPrompt });
-                              }}
-                              className="px-3 py-1.5 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-lg text-xs font-medium transition cursor-pointer"
-                            >
-                              🍔 Food & Gourmet Restaurant
-                            </button>
+                        setConfig({ ...config, systemPrompt: foodPrompt });
+                      }}
+                      className="px-3 py-1.5 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-lg text-xs font-medium transition cursor-pointer"
+                    >
+                      🍔 Food & Gourmet Restaurant
+                    </button>
 
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const ecommercePrompt = `You are the sales consultant for our online store. Answer customer questions politely, quote catalog prices, and help customers place orders. Default to Cash on Delivery.`;
-                                setConfig({ ...config, systemPrompt: ecommercePrompt });
-                              }}
-                              className="px-3 py-1.5 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-lg text-xs font-medium transition cursor-pointer"
-                            >
-                              🛍️ E-Commerce Store
-                            </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const ecommercePrompt = `You are the sales consultant for our online store. Answer customer questions politely, quote catalog prices, and help customers place orders. Default to Cash on Delivery.`;
+                        setConfig({ ...config, systemPrompt: ecommercePrompt });
+                      }}
+                      className="px-3 py-1.5 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-lg text-xs font-medium transition cursor-pointer"
+                    >
+                      🛍️ E-Commerce Store
+                    </button>
 
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const techPrompt = `You are the senior sales consultant for a top digital software agency. Be professional, direct, polite, and assist clients with custom quotes.`;
-                                setConfig({ ...config, systemPrompt: techPrompt });
-                              }}
-                              className="px-3 py-1.5 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-lg text-xs font-medium transition cursor-pointer"
-                            >
-                              💻 Software & Tech Agency
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* System Prompt Textarea */}
-                        <div className="space-y-2">
-                          <label className="text-xs font-semibold text-[#111111] uppercase tracking-wider">System Prompt Instructions</label>
-                          <textarea
-                            rows={10}
-                            value={config.systemPrompt || ""}
-                            onChange={(e) => setConfig({ ...config, systemPrompt: e.target.value })}
-                            className="w-full p-4 text-xs bg-[#f5f1ec] border border-[#d3cec6] rounded-lg focus:ring-2 focus:ring-[#111111]/20 focus:border-[#111111] outline-none transition font-medium text-[#111111] leading-relaxed placeholder:text-[#9c9fa5]"
-                            placeholder="Write system prompt instructions for your AI bot..."
-                          />
-                        </div>
-
-                        {/* Bot Mode & Store Details */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-[#ebe7e1]">
-                          <div>
-                            <label className="text-xs font-semibold text-[#111111] uppercase tracking-wider block mb-1">Bot Purpose / Mode</label>
-                            <select
-                              value={config.botMode || "both"}
-                              onChange={(e) => setConfig({ ...config, botMode: e.target.value })}
-                              className="w-full p-2.5 text-xs bg-[#f5f1ec] border border-[#d3cec6] rounded-lg font-medium text-[#111111] outline-none"
-                            >
-                              <option value="orders">Orders & E-Commerce Only</option>
-                              <option value="appointments">Appointments & Calls Only</option>
-                              <option value="both">Both (Orders & Appointments)</option>
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="text-xs font-semibold text-[#111111] uppercase tracking-wider block mb-1">Business Name</label>
-                            <input
-                              type="text"
-                              value={config.businessName || ""}
-                              onChange={(e) => setConfig({ ...config, businessName: e.target.value })}
-                              placeholder="Atomix Food Hub"
-                              className="w-full p-2.5 text-xs bg-[#f5f1ec] border border-[#d3cec6] rounded-lg font-medium text-[#111111] outline-none"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="text-xs font-semibold text-[#111111] uppercase tracking-wider block mb-1">Store Currency</label>
-                            <input
-                              type="text"
-                              value={config.storeCurrency || "PKR"}
-                              onChange={(e) => setConfig({ ...config, storeCurrency: e.target.value })}
-                              placeholder="PKR"
-                              className="w-full p-2.5 text-xs bg-[#f5f1ec] border border-[#d3cec6] rounded-lg font-medium text-[#111111] outline-none"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* SUB-TAB 2: PRODUCT CATALOG */}
-                    {kbSubTab === "products" && (
-                      <div className="bg-white p-6 rounded-xl border border-[#d3cec6] shadow-xs space-y-6">
-                        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#ebe7e1] pb-5">
-                          <div>
-                            <h3 className="text-base font-semibold text-[#111111] flex items-center gap-2">
-                              <Package className="w-5 h-5 text-[#ff5600]" />
-                              <span>Product Catalog & Knowledge Base</span>
-                              <span className="bg-[#f5f1ec] text-[#111111] border border-[#d3cec6] px-2.5 py-0.5 rounded-full text-xs font-medium">
-                                {(config.products || []).length} Products
-                              </span>
-                            </h3>
-                            <p className="text-xs text-[#626260] font-normal mt-1">
-                              Auto-scrape store catalog or manually add/edit products, pricing, links, and pictures.
-                            </p>
-                          </div>
-
-                          <div className="flex items-center gap-3">
-                            {(config.products || []).length > 0 && (
-                              <button
-                                type="button"
-                                onClick={handleClearCatalog}
-                                className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-medium flex items-center gap-1.5 transition cursor-pointer"
-                                title="Clear all products from catalog"
-                              >
-                                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                                <span>Clear Catalog</span>
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => setShowRawCatalogText(!showRawCatalogText)}
-                              className="px-3.5 py-2 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-lg text-xs font-medium flex items-center gap-1.5 transition"
-                            >
-                              {showRawCatalogText ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                              <span>{showRawCatalogText ? "Hide Raw Text" : "View Raw Text"}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={openAddProductModal}
-                              className="px-4 py-2 bg-[#111111] hover:bg-black text-white rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-xs transition cursor-pointer"
-                            >
-                              <Plus className="w-4 h-4" />
-                              <span>+ Add Product</span>
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Store URL Auto-Scraper */}
-                        <div className="bg-[#f5f1ec] p-4 rounded-xl border border-[#d3cec6] space-y-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-xs font-semibold text-[#111111]">
-                              <Globe className="w-4 h-4 text-[#ff5600]" />
-                              <span>Auto-Fetch & Synchronize Store URL</span>
-                            </div>
-                            <span className="text-[10px] text-[#626260] font-mono">Shopify, WooCommerce & Generic Sites</span>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2">
-                            <input
-                              type="url"
-                              value={scrapeUrl}
-                              onChange={(e) => setScrapeUrl(e.target.value)}
-                              placeholder="https://yourstore.com"
-                              className="flex-1 min-w-[200px] p-2.5 text-xs bg-white border border-[#d3cec6] rounded-lg font-medium text-[#111111] outline-none"
-                            />
-                            <input
-                              type="text"
-                              value={scrapeCurrency}
-                              onChange={(e) => setScrapeCurrency(e.target.value)}
-                              placeholder="Rs."
-                              className="w-20 p-2.5 text-xs bg-white border border-[#d3cec6] rounded-lg font-medium text-[#111111] outline-none text-center"
-                            />
-                            <button
-                              type="button"
-                              onClick={handleScrape}
-                              disabled={isScraping || !scrapeUrl}
-                              className="px-5 py-2.5 bg-[#ff5600] hover:bg-[#e04c00] disabled:bg-[#d3cec6] text-white rounded-lg text-xs font-semibold flex items-center gap-2 transition cursor-pointer shadow-xs"
-                            >
-                              {isScraping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                              <span>{isScraping ? "Fetching..." : "Auto-Populate Catalog"}</span>
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Filter & Search Bar */}
-                        <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
-                          <div className="relative flex-1 min-w-[200px]">
-                            <Search className="w-4 h-4 text-[#7b7b78] absolute left-3 top-3" />
-                            <input
-                              type="text"
-                              value={productSearch}
-                              onChange={(e) => setProductSearch(e.target.value)}
-                              placeholder="Search products..."
-                              className="w-full pl-9 pr-4 py-2.5 text-xs bg-[#f5f1ec] border border-[#d3cec6] rounded-lg font-medium text-[#111111] outline-none"
-                            />
-                          </div>
-
-                          {/* Category Filter Pills */}
-                          {(() => {
-                            const allCategories = Array.from(
-                              new Set(
-                                (config.products || [])
-                                  .map((p: any) => p.category)
-                                  .filter((c: any) => c && typeof c === "string" && c.trim() !== "")
-                              )
-                            );
-                            if (allCategories.length === 0) return null;
-
-                            return (
-                              <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto max-w-full">
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedCategory("all")}
-                                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
-                                    selectedCategory === "all"
-                                      ? "bg-[#ff5600] text-white"
-                                      : "bg-[#f5f1ec] text-[#626260] border border-[#d3cec6] hover:bg-[#ebe7e1]"
-                                  }`}
-                                >
-                                  All
-                                </button>
-                                {allCategories.map((cat: any) => (
-                                  <button
-                                    key={cat}
-                                    type="button"
-                                    onClick={() => setSelectedCategory(cat)}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
-                                      selectedCategory === cat
-                                        ? "bg-[#ff5600] text-white"
-                                        : "bg-[#f5f1ec] text-[#626260] border border-[#d3cec6] hover:bg-[#ebe7e1]"
-                                    }`}
-                                  >
-                                    {cat}
-                                  </button>
-                                ))}
-                              </div>
-                            );
-                          })()}
-                        </div>
-
-                        {/* Product Grid */}
-                        {(() => {
-                          let displayProducts = config.products || [];
-                          if (selectedCategory !== "all") {
-                            displayProducts = displayProducts.filter((p: any) => p.category === selectedCategory);
-                          }
-                          if (productSearch.trim()) {
-                            const q = productSearch.toLowerCase().trim();
-                            displayProducts = displayProducts.filter(
-                              (p: any) =>
-                                (p.title || "").toLowerCase().includes(q) ||
-                                (p.category || "").toLowerCase().includes(q) ||
-                                (p.description || "").toLowerCase().includes(q)
-                            );
-                          }
-
-                          if (displayProducts.length === 0) {
-                            return (
-                              <div className="text-center py-12 bg-[#f5f1ec] rounded-xl border border-dashed border-[#d3cec6]">
-                                <Package className="w-10 h-10 text-[#7b7b78] mx-auto mb-2 opacity-50" />
-                                <h4 className="text-sm font-semibold text-[#111111]">No products found</h4>
-                                <p className="text-xs text-[#626260] mt-1">Try tweaking your search or add a new product using the button above.</p>
-                              </div>
-                            );
-                          }
-
-                          return (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                              {displayProducts.map((p: any, idx: number) => {
-                                const hasImg = p.image && p.image !== "N/A";
-                                return (
-                                  <div key={p.id || idx} className="bg-white border border-[#d3cec6] rounded-xl overflow-hidden shadow-xs hover:border-[#111111] transition-all flex flex-col justify-between">
-                                    <div>
-                                      <div className="h-40 bg-[#f5f1ec] relative overflow-hidden flex items-center justify-center">
-                                        {hasImg ? (
-                                          <img src={p.image} alt={p.title} className="w-full h-full object-cover" />
-                                        ) : (
-                                          <Package className="w-12 h-12 text-[#ff5600] opacity-40" />
-                                        )}
-                                        {p.category && (
-                                          <span className="absolute top-2 left-2 bg-[#111111]/80 backdrop-blur-xs text-white text-[9px] font-semibold px-2 py-0.5 rounded uppercase tracking-wider">
-                                            {p.category}
-                                          </span>
-                                        )}
-                                        {p.price && (
-                                          <span className="absolute top-2 right-2 bg-[#ff5600] text-white text-xs font-bold px-2.5 py-0.5 rounded-full shadow-xs">
-                                            {p.price}
-                                          </span>
-                                        )}
-                                      </div>
-
-                                      <div className="p-4 space-y-2">
-                                        <h4 className="text-xs font-semibold text-[#111111] line-clamp-1">{p.title}</h4>
-                                        {p.description && (
-                                          <p className="text-[11px] text-[#626260] line-clamp-2 leading-relaxed">{p.description}</p>
-                                        )}
-                                        {Array.isArray(p.variations) && p.variations.length > 0 && (
-                                          <div className="flex flex-wrap gap-1 pt-1">
-                                            {p.variations.map((v: any, vIdx: number) => (
-                                              <span key={vIdx} className="text-[9px] bg-[#f5f1ec] text-[#626260] border border-[#d3cec6] px-1.5 py-0.5 rounded">
-                                                {v.title}: {v.price}
-                                              </span>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-
-                                    <div className="p-3 bg-[#f5f1ec] border-t border-[#ebe7e1] flex items-center justify-between gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => openEditProductModal(p)}
-                                        className="py-1 px-2.5 bg-white hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded text-xs font-medium flex items-center gap-1 transition cursor-pointer"
-                                      >
-                                        <Edit3 className="w-3 h-3 text-[#ff5600]" />
-                                        <span>Edit</span>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteProduct(p.id)}
-                                        className="py-1 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-xs font-medium flex items-center gap-1 transition cursor-pointer"
-                                      >
-                                        <Trash2 className="w-3 h-3 text-rose-600" />
-                                        <span>Delete</span>
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    )}
-
-                    {/* SUB-TAB 3: BUSINESS KNOWLEDGE BASE & FAQS */}
-                    {kbSubTab === "kb" && (
-                      <div className="bg-white p-6 rounded-xl border border-[#d3cec6] shadow-xs space-y-4">
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ebe7e1] pb-4">
-                          <div>
-                            <h3 className="text-base font-semibold text-[#111111] flex items-center gap-2">
-                              <BookOpen className="w-5 h-5 text-[#ff5600]" />
-                              <span>Business Knowledge Base & FAQs</span>
-                            </h3>
-                            <p className="text-xs text-[#626260] font-normal mt-0.5">
-                              Store rules, delivery charges, return policies, payment options, and FAQs. Indexed by the Hybrid Engine to answer customers with 0 API tokens.
-                            </p>
-                          </div>
-                          <button 
-                            type="button"
-                            onClick={saveKnowledgeBase}
-                            disabled={savingKB}
-                            className={`px-5 py-2.5 rounded-lg font-medium text-xs flex items-center gap-2 transition-all cursor-pointer shadow-xs active:scale-95 ${
-                              kbSaveSuccess
-                                ? "bg-emerald-600 text-white"
-                                : "bg-[#111111] hover:bg-black text-white"
-                            }`}
-                          >
-                            {savingKB ? (
-                              <>
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                <span>Saving...</span>
-                              </>
-                            ) : kbSaveSuccess ? (
-                              <>
-                                <CheckCircle2 className="h-3.5 w-3.5 text-white" />
-                                <span>Saved!</span>
-                              </>
-                            ) : (
-                              <>
-                                <Save className="h-3.5 w-3.5" />
-                                <span>Save Knowledge Base</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <label className="text-xs font-semibold text-[#111111] uppercase tracking-wider">Store Information & Common Q&As</label>
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="text-[11px] font-medium text-[#7b7b78] mr-1">Quick Templates:</span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const snippet = "\n\n[DELIVERY & SHIPPING]\n- Standard Delivery: PKR 150 (Free shipping on orders above PKR 1,000)\n- Guaranteed delivery within 35 to 45 minutes.";
-                                  setConfig({ ...config, productInfo: (config.productInfo || "") + snippet });
-                                }}
-                                className="px-2.5 py-1 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-full text-[11px] font-medium transition cursor-pointer"
-                              >
-                                + Delivery Info
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const snippet = "\n\n[RETURN & REFUND POLICY]\n- Fresh food items can be replaced immediately if missing or damaged.";
-                                  setConfig({ ...config, productInfo: (config.productInfo || "") + snippet });
-                                }}
-                                className="px-2.5 py-1 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-full text-[11px] font-medium transition cursor-pointer"
-                              >
-                                + Return Policy
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const snippet = "\n\n[PAYMENT METHODS]\n- Cash on Delivery (COD)\n- Bank Transfer (Meezan Bank & HBL)\n- JazzCash / EasyPaisa";
-                                  setConfig({ ...config, productInfo: (config.productInfo || "") + snippet });
-                                }}
-                                className="px-2.5 py-1 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-full text-[11px] font-medium transition cursor-pointer"
-                              >
-                                + Payment Methods
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const snippet = "\n\n[BUSINESS HOURS & LOCATION]\n- Operating Hours: 12:00 PM to 2:00 AM (Midnight) Every Day\n- Address: Gulberg III, Lahore, Pakistan";
-                                  setConfig({ ...config, productInfo: (config.productInfo || "") + snippet });
-                                }}
-                                className="px-2.5 py-1 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-full text-[11px] font-medium transition cursor-pointer"
-                              >
-                                + Hours & Location
-                              </button>
-                            </div>
-                          </div>
-                          <textarea 
-                            id="productInfoInput"
-                            rows={12}
-                            value={config.productInfo || ""}
-                            onChange={(e) => setConfig({ ...config, productInfo: e.target.value })}
-                            className="w-full p-4 text-xs bg-[#f5f1ec] border border-[#d3cec6] rounded-lg focus:ring-2 focus:ring-[#111111]/20 focus:border-[#111111] outline-none transition font-medium text-[#111111] leading-relaxed placeholder:text-[#9c9fa5]"
-                            placeholder="Write your business FAQs, store policies, delivery details, exchange rules, and general information here..."
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* SUB-TAB 4: KEYWORD AUTO-REPLIES */}
-                    {kbSubTab === "keywords" && (
-                      <div className="bg-white p-6 rounded-xl border border-[#d3cec6] shadow-xs space-y-6">
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ebe7e1] pb-4">
-                          <div>
-                            <h3 className="text-base font-semibold text-[#111111] flex items-center gap-2">
-                              <Zap className="w-5 h-5 text-[#ff5600]" />
-                              <span>Keyword Auto-Replies & Instant Triggers</span>
-                            </h3>
-                            <p className="text-xs text-[#626260] font-normal mt-0.5">
-                              Bypass AI to instantly reply to specific exact keywords with 0 API token cost.
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button 
-                              type="button"
-                              onClick={() => setConfig({
-                                ...config, 
-                                keywordReplies: [...(config.keywordReplies || []), { keyword: "", reply: "" }]
-                              })}
-                              className="px-4 py-2 bg-[#ff5600] hover:bg-[#e04c00] text-white text-xs font-semibold rounded-lg shadow-xs transition cursor-pointer flex items-center gap-1.5"
-                            >
-                              <Plus className="h-4 w-4" /> Add Keyword Rule
-                            </button>
-                            <button 
-                              type="button"
-                              onClick={saveKeywordRules}
-                              disabled={savingKeywords}
-                              className={`px-5 py-2 rounded-lg font-medium text-xs flex items-center gap-2 transition-all cursor-pointer shadow-xs active:scale-95 ${
-                                keywordsSaveSuccess
-                                  ? "bg-emerald-600 text-white"
-                                  : "bg-[#111111] hover:bg-black text-white"
-                              }`}
-                            >
-                              {savingKeywords ? (
-                                <>
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  <span>Saving...</span>
-                                </>
-                              ) : keywordsSaveSuccess ? (
-                                <>
-                                  <CheckCircle2 className="h-3.5 w-3.5 text-white" />
-                                  <span>Saved!</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Save className="h-3.5 w-3.5" />
-                                  <span>Save Rules</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-3">
-                          {(!config.keywordReplies || config.keywordReplies.length === 0) ? (
-                            <div className="text-center p-8 bg-[#f5f1ec] rounded-xl border border-dashed border-[#d3cec6] text-[#7b7b78] text-xs font-medium">
-                              No keyword rules added yet. Click &quot;Add Keyword Rule&quot; to set up instant replies.
-                            </div>
-                          ) : (
-                            config.keywordReplies.map((kr: any, idx: number) => (
-                              <div key={idx} className="flex flex-wrap sm:flex-nowrap gap-3 items-start bg-[#f5f1ec] p-3.5 rounded-xl border border-[#d3cec6]">
-                                <div className="w-full sm:w-1/3">
-                                  <input 
-                                    type="text" 
-                                    value={kr.keyword}
-                                    onChange={(e) => {
-                                      const newReplies = [...(config.keywordReplies || [])];
-                                      newReplies[idx].keyword = e.target.value;
-                                      setConfig({ ...config, keywordReplies: newReplies });
-                                    }}
-                                    placeholder="Keyword (e.g. menu, timing)"
-                                    className="w-full p-2.5 text-xs bg-white border border-[#d3cec6] rounded-lg font-semibold text-[#111111] outline-none"
-                                  />
-                                </div>
-                                <div className="w-full sm:flex-1 flex items-center gap-2">
-                                  <input 
-                                    type="text" 
-                                    value={kr.reply}
-                                    onChange={(e) => {
-                                      const newReplies = [...(config.keywordReplies || [])];
-                                      newReplies[idx].reply = e.target.value;
-                                      setConfig({ ...config, keywordReplies: newReplies });
-                                    }}
-                                    placeholder="Exact match auto-reply message..."
-                                    className="w-full p-2.5 text-xs bg-white border border-[#d3cec6] rounded-lg font-medium text-[#111111] outline-none"
-                                  />
-                                  <button 
-                                    type="button"
-                                    onClick={() => {
-                                      const newReplies = [...(config.keywordReplies || [])];
-                                      newReplies.splice(idx, 1);
-                                      setConfig({ ...config, keywordReplies: newReplies });
-                                    }}
-                                    className="bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 p-2.5 rounded-lg transition cursor-pointer shrink-0"
-                                    title="Delete rule"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                </div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* SUB-TAB 5: AI AUTOPILOT & SETTINGS */}
-                    {kbSubTab === "settings" && (
-                      <div className="bg-white p-6 rounded-xl border border-[#d3cec6] shadow-xs space-y-6">
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ebe7e1] pb-4">
-                          <div>
-                            <h3 className="text-base font-semibold text-[#111111] flex items-center gap-2">
-                              <Settings className="w-5 h-5 text-[#ff5600]" />
-                              <span>AI Autopilot & Feature Controls</span>
-                            </h3>
-                            <p className="text-xs text-[#626260] font-normal mt-0.5">
-                              Configure global autopilot mode, multi-language support, lead collection, and Deepgram voice integration.
-                            </p>
-                          </div>
-                          <button 
-                            type="button"
-                            onClick={saveConfig}
-                            disabled={savingConfig}
-                            className="bg-[#111111] hover:bg-black text-white font-medium py-2.5 px-5 rounded-lg transition-all shadow-xs flex items-center gap-2 text-xs cursor-pointer"
-                          >
-                            {savingConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                            Save Settings
-                          </button>
-                        </div>
-
-                        {/* Autopilot Master Switch */}
-                        <div className="flex items-center justify-between p-4 bg-[#f5f1ec] rounded-xl border border-[#d3cec6]">
-                          <div>
-                            <h4 className="text-xs font-semibold text-[#111111]">Global AI Autopilot Response</h4>
-                            <p className="text-[11px] text-[#626260]">When enabled, the AI assistant automatically replies to incoming WhatsApp messages.</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setConfig({ ...config, globalAiEnabled: !config.globalAiEnabled })}
-                            className={`px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                              config.globalAiEnabled !== false
-                                ? "bg-emerald-600 text-white"
-                                : "bg-rose-600 text-white"
-                            }`}
-                          >
-                            {config.globalAiEnabled !== false ? "Autopilot ON" : "Autopilot OFF"}
-                          </button>
-                        </div>
-
-                        {/* Enabled Features Checkboxes */}
-                        <div className="space-y-3">
-                          <label className="text-xs font-semibold text-[#111111] uppercase tracking-wider block">Advanced AI Capability Features</label>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                            {[
-                              "Multi-language Support",
-                              "Lead Collection",
-                              "Service Recommendation",
-                              "Personalized Consultation",
-                              "Price Inquiry",
-                              "Human Handoff"
-                            ].map((feature) => {
-                              const isChecked = (config.enabledFeatures || []).includes(feature);
-                              return (
-                                <label
-                                  key={feature}
-                                  className={`p-3 rounded-lg border text-xs font-medium flex items-center gap-2.5 cursor-pointer transition ${
-                                    isChecked
-                                      ? "bg-[#f5f1ec] border-[#111111] text-[#111111]"
-                                      : "bg-white border-[#d3cec6] text-[#626260] hover:bg-[#f5f1ec]"
-                                  }`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={(e) => {
-                                      const current = config.enabledFeatures || [];
-                                      const updated = e.target.checked
-                                        ? [...current, feature]
-                                        : current.filter((f: string) => f !== feature);
-                                      setConfig({ ...config, enabledFeatures: updated });
-                                    }}
-                                    className="w-4 h-4 accent-[#ff5600] rounded"
-                                  />
-                                  <span>{feature}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Product Add / Edit Modal */}
-                    {showProductModal && (
-                      <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
-                        <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 border border-[#d3cec6] my-8">
-                          <div className="flex items-center justify-between border-b border-[#ebe7e1] pb-3">
-                            <h3 className="text-sm font-semibold text-[#111111] flex items-center gap-2">
-                              <Package className="w-4 h-4 text-[#ff5600]" />
-                              <span>{editingProduct ? "Edit Product Details" : "Add New Product"}</span>
-                            </h3>
-                            <button
-                              type="button"
-                              onClick={() => setShowProductModal(false)}
-                              className="text-[#7b7b78] hover:text-[#111111] p-1 transition cursor-pointer"
-                            >
-                              <X className="w-5 h-5" />
-                            </button>
-                          </div>
-
-                          <div className="space-y-3 text-xs font-medium">
-                            <div>
-                              <label className="block text-[#111111] font-semibold mb-1">Product Title *</label>
-                              <input
-                                type="text"
-                                value={prodTitle}
-                                onChange={(e) => setProdTitle(e.target.value)}
-                                placeholder="e.g. Smokey Zinger Burger Supreme"
-                                className="w-full p-2.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg outline-none text-[#111111] font-semibold"
-                              />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <label className="block text-[#111111] font-semibold mb-1">Price / Base Rate</label>
-                                <input
-                                  type="text"
-                                  value={prodPrice}
-                                  onChange={(e) => setProdPrice(e.target.value)}
-                                  placeholder="e.g. 750 or PKR 750"
-                                  className="w-full p-2.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg outline-none text-[#111111]"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-[#111111] font-semibold mb-1">Category</label>
-                                <input
-                                  type="text"
-                                  value={prodCategory}
-                                  onChange={(e) => setProdCategory(e.target.value)}
-                                  placeholder="e.g. Burgers & Sandwiches"
-                                  className="w-full p-2.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg outline-none text-[#111111]"
-                                />
-                              </div>
-                            </div>
-
-                            <div>
-                              <label className="block text-[#111111] font-semibold mb-1">Product Images (URLs, one per line)</label>
-                              <textarea
-                                rows={3}
-                                value={prodImage}
-                                onChange={(e) => setProdImage(e.target.value)}
-                                placeholder="https://images.unsplash.com/photo-1...&#10;https://images.unsplash.com/photo-2..."
-                                className="w-full p-2.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg outline-none text-[#111111] font-medium"
-                              />
-                              {prodImage && (
-                                <div className="mt-2 flex gap-2 flex-wrap max-h-32 overflow-y-auto p-1 border border-dashed border-[#d3cec6] rounded-lg bg-[#fcfbf9]">
-                                  {prodImage.split("\n").map((url, idx) => {
-                                    const trimmed = url.trim();
-                                    if (!trimmed || (!trimmed.startsWith("http://") && !trimmed.startsWith("https://") && !trimmed.startsWith("data:"))) return null;
-                                    return (
-                                      <div key={idx} className="relative h-16 w-16 rounded-lg overflow-hidden border border-[#d3cec6] flex-shrink-0 group">
-                                        <img src={trimmed} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
-                                        <span className="absolute bottom-0 right-0 bg-black/60 text-[8px] text-white px-1 rounded-tl">{idx + 1}</span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-
-                            <div>
-                              <label className="block text-[#111111] font-semibold mb-1">Product Page Link (Optional)</label>
-                              <input
-                                type="url"
-                                value={prodLink}
-                                onChange={(e) => setProdLink(e.target.value)}
-                                placeholder="https://atomixfood.com/menu/zinger"
-                                className="w-full p-2.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg outline-none text-[#111111]"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-[#111111] font-semibold mb-1">Price Variations (Optional)</label>
-                              <input
-                                type="text"
-                                value={prodVariations}
-                                onChange={(e) => setProdVariations(e.target.value)}
-                                placeholder="Single Patty: 750, Double Patty: 1050"
-                                className="w-full p-2.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg outline-none text-[#111111]"
-                              />
-                              <p className="text-[10px] text-[#7b7b78] mt-1">Separate variations with commas in Title: Price format.</p>
-                            </div>
-
-                            <div>
-                              <label className="block text-[#111111] font-semibold mb-1">Short Description</label>
-                              <textarea
-                                rows={2}
-                                value={prodDesc}
-                                onChange={(e) => setProdDesc(e.target.value)}
-                                placeholder="Crispy double-fried chicken breast, smoked cheese slice..."
-                                className="w-full p-2.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg outline-none text-[#111111]"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="pt-3 border-t border-[#ebe7e1] flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setShowProductModal(false)}
-                              className="px-4 py-2 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-lg text-xs font-semibold transition cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleSaveProductModal}
-                              className="px-5 py-2 bg-[#111111] hover:bg-black text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer"
-                            >
-                              {editingProduct ? "Save Changes" : "Create Product"}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const techPrompt = `You are the senior sales consultant for a top digital software agency. Be professional, direct, polite, and assist clients with custom quotes.`;
+                        setConfig({ ...config, systemPrompt: techPrompt });
+                      }}
+                      className="px-3 py-1.5 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-lg text-xs font-medium transition cursor-pointer"
+                    >
+                      💻 Software & Tech Agency
+                    </button>
                   </div>
                 </div>
-              )}
-        {activeTab === 'promotions' && (
-          <div className="flex-1 h-full overflow-y-auto bg-[#f5f1ec]">
-            <div className="p-8 md:p-10 max-w-[1400px] mx-auto w-full space-y-8">
-              <div className="flex justify-between items-center flex-wrap gap-4">
-                <div>
-                  <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
-                    <Clock className="h-7 w-7 text-purple-600" /> Follow Ups
-                  </h2>
-                  <p className="text-xs text-slate-500 font-medium mt-1">Configure automated follow-up sequence rules & intervals for un-replied leads.</p>
+
+                {/* System Prompt Textarea */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-[#111111] uppercase tracking-wider">System Prompt Instructions</label>
+                  <textarea
+                    rows={10}
+                    value={config.systemPrompt || ""}
+                    onChange={(e) => setConfig({ ...config, systemPrompt: e.target.value })}
+                    className="w-full p-4 text-xs bg-[#f5f1ec] border border-[#d3cec6] rounded-lg focus:ring-2 focus:ring-[#111111]/20 focus:border-[#111111] outline-none transition font-medium text-[#111111] leading-relaxed placeholder:text-[#9c9fa5]"
+                    placeholder="Write system prompt instructions for your AI bot..."
+                  />
                 </div>
-                <button 
-                  onClick={saveConfig}
-                  disabled={savingConfig}
-                  className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold py-2.5 px-6 rounded-xl transition-all shadow-md shadow-purple-500/20 flex items-center gap-2 text-xs cursor-pointer"
-                >
-                  {savingConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  Save Settings
-                </button>
+
+                {/* Bot Mode & Store Details */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-[#ebe7e1]">
+                  <div>
+                    <label className="text-xs font-semibold text-[#111111] uppercase tracking-wider block mb-1">Bot Purpose / Mode</label>
+                    <select
+                      value={config.botMode || "both"}
+                      onChange={(e) => setConfig({ ...config, botMode: e.target.value })}
+                      className="w-full p-2.5 text-xs bg-[#f5f1ec] border border-[#d3cec6] rounded-lg font-medium text-[#111111] outline-none"
+                    >
+                      <option value="orders">Orders & E-Commerce Only</option>
+                      <option value="appointments">Appointments & Calls Only</option>
+                      <option value="both">Both (Orders & Appointments)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-[#111111] uppercase tracking-wider block mb-1">Business Name</label>
+                    <input
+                      type="text"
+                      value={config.businessName || ""}
+                      onChange={(e) => setConfig({ ...config, businessName: e.target.value })}
+                      placeholder="Atomix Food Hub"
+                      className="w-full p-2.5 text-xs bg-[#f5f1ec] border border-[#d3cec6] rounded-lg font-medium text-[#111111] outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-[#111111] uppercase tracking-wider block mb-1">Store Currency</label>
+                    <input
+                      type="text"
+                      value={config.storeCurrency || "PKR"}
+                      onChange={(e) => setConfig({ ...config, storeCurrency: e.target.value })}
+                      placeholder="PKR"
+                      className="w-full p-2.5 text-xs bg-[#f5f1ec] border border-[#d3cec6] rounded-lg font-medium text-[#111111] outline-none"
+                    />
+                  </div>
+                </div>
               </div>
+            )}
 
-              <div className="dash-card p-8 space-y-6">
-                <div>
-                  <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">Automated Follow-up Sequence Rules</h3>
-                  <p className="text-xs text-slate-500 font-medium mt-1">Sends automated follow-up reminders to un-replied leads every N hours or days. Smart AI automatically skips follow-ups if the customer completes the booking or order.</p>
+            {/* SUB-TAB 2: PRODUCT CATALOG */}
+            {kbSubTab === "products" && (
+              <div className="bg-white p-6 rounded-xl border border-[#d3cec6] shadow-xs space-y-6">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#ebe7e1] pb-5">
+                  <div>
+                    <h3 className="text-base font-semibold text-[#111111] flex items-center gap-2">
+                      <Package className="w-5 h-5 text-[#ff5600]" />
+                      <span>Product Catalog & Knowledge Base</span>
+                      <span className="bg-[#f5f1ec] text-[#111111] border border-[#d3cec6] px-2.5 py-0.5 rounded-full text-xs font-medium">
+                        {(config.products || []).length} Products
+                      </span>
+                    </h3>
+                    <p className="text-xs text-[#626260] font-normal mt-1">
+                      Auto-scrape store catalog or manually add/edit products, pricing, links, and pictures.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    {(config.products || []).length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleClearCatalog}
+                        className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-medium flex items-center gap-1.5 transition cursor-pointer"
+                        title="Clear all products from catalog"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span>Clear Catalog</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setShowRawCatalogText(!showRawCatalogText)}
+                      className="px-3.5 py-2 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-lg text-xs font-medium flex items-center gap-1.5 transition"
+                    >
+                      {showRawCatalogText ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      <span>{showRawCatalogText ? "Hide Raw Text" : "View Raw Text"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openAddProductModal}
+                      className="px-4 py-2 bg-[#111111] hover:bg-black text-white rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>+ Add Product</span>
+                    </button>
+                  </div>
                 </div>
-                
-                <div className="space-y-4 pt-2">
+
+                {/* Store URL Auto-Scraper */}
+                <div className="bg-[#f5f1ec] p-4 rounded-xl border border-[#d3cec6] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-[#111111]">
+                      <Globe className="w-4 h-4 text-[#ff5600]" />
+                      <span>Auto-Fetch & Synchronize Store URL</span>
+                    </div>
+                    <span className="text-[10px] text-[#626260] font-mono">Shopify, WooCommerce & Generic Sites</span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      type="url"
+                      value={scrapeUrl}
+                      onChange={(e) => setScrapeUrl(e.target.value)}
+                      placeholder="https://yourstore.com"
+                      className="flex-1 min-w-[200px] p-2.5 text-xs bg-white border border-[#d3cec6] rounded-lg font-medium text-[#111111] outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={scrapeCurrency}
+                      onChange={(e) => setScrapeCurrency(e.target.value)}
+                      placeholder="Rs."
+                      className="w-20 p-2.5 text-xs bg-white border border-[#d3cec6] rounded-lg font-medium text-[#111111] outline-none text-center"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleScrape}
+                      disabled={isScraping || !scrapeUrl}
+                      className="px-5 py-2.5 bg-[#ff5600] hover:bg-[#e04c00] disabled:bg-[#d3cec6] text-white rounded-lg text-xs font-semibold flex items-center gap-2 transition cursor-pointer shadow-xs"
+                    >
+                      {isScraping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                      <span>{isScraping ? "Fetching..." : "Auto-Populate Catalog"}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filter & Search Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+                  <div className="relative flex-1 min-w-[200px]">
+                    <Search className="w-4 h-4 text-[#7b7b78] absolute left-3 top-3" />
+                    <input
+                      type="text"
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
+                      placeholder="Search products..."
+                      className="w-full pl-9 pr-4 py-2.5 text-xs bg-[#f5f1ec] border border-[#d3cec6] rounded-lg font-medium text-[#111111] outline-none"
+                    />
+                  </div>
+
+                  {/* Category Filter Pills */}
                   {(() => {
-                    const defaultFUs = [
-                      { enabled: true, delayMinutes: 60, delayValue: 1, unit: 'hours' as const },
-                      { enabled: true, delayMinutes: 1440, delayValue: 1, unit: 'days' as const },
-                      { enabled: true, delayMinutes: 2880, delayValue: 2, unit: 'days' as const },
-                      { enabled: true, delayMinutes: 4320, delayValue: 3, unit: 'days' as const },
-                      { enabled: true, delayMinutes: 7200, delayValue: 5, unit: 'days' as const },
-                      { enabled: true, delayMinutes: 10080, delayValue: 7, unit: 'days' as const },
-                      { enabled: true, delayMinutes: 14400, delayValue: 10, unit: 'days' as const },
-                    ];
-                    const currentFUs = config.followUps || [];
-                    const fullFUs = defaultFUs.map((df, i) => ({ ...df, ...(currentFUs[i] || {}) }));
+                    const allCategories = Array.from(
+                      new Set(
+                        (config.products || [])
+                          .map((p: any) => p.category)
+                          .filter((c: any) => c && typeof c === "string" && c.trim() !== "")
+                      )
+                    );
+                    if (allCategories.length === 0) return null;
 
-                    const computeMinutes = (val: number, unit: string) => {
-                      if (unit === 'hours') return val * 60;
-                      if (unit === 'days') return val * 1440;
-                      if (unit === 'months') return val * 43200;
-                      return val;
-                    };
-
-                    const getValAndUnit = (fu: any, df: any) => {
-                      if (fu.unit && fu.delayValue !== undefined) {
-                        return { unit: fu.unit, val: fu.delayValue };
-                      }
-                      const mins = fu.delayMinutes || df.delayMinutes;
-                      if (mins >= 43200 && mins % 43200 === 0) return { unit: 'months', val: mins / 43200 };
-                      if (mins >= 1440 && mins % 1440 === 0) return { unit: 'days', val: mins / 1440 };
-                      if (mins >= 60 && mins % 60 === 0) return { unit: 'hours', val: mins / 60 };
-                      return { unit: 'minutes', val: mins };
-                    };
-
-                    return fullFUs.map((fu: any, idx: number) => {
-                      const { unit: currentUnit, val: currentValue } = getValAndUnit(fu, defaultFUs[idx]);
-
-                      return (
-                        <div key={idx} className={`p-5 rounded-2xl border transition-all ${fu.enabled ? 'bg-white border-purple-200 shadow-sm' : 'bg-slate-50/80 border-slate-200/80'}`}>
-                          <div className="flex items-center justify-between mb-2">
-                            <h4 className="font-bold text-slate-800 flex items-center gap-2 text-xs">
-                              <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs text-white ${fu.enabled ? 'bg-purple-600' : 'bg-slate-300'}`}>{idx + 1}</span>
-                              Follow-up {idx + 1}
-                            </h4>
-                            
-                            <div className="flex items-center gap-4">
-                              <div className="flex items-center gap-2">
-                                <label className="text-xs font-bold text-slate-500">Wait</label>
-                                <input 
-                                  type="number"
-                                  min="1"
-                                  value={currentValue}
-                                  onChange={(e) => {
-                                    const val = Math.max(1, parseInt(e.target.value) || 1);
-                                    const newMinutes = computeMinutes(val, currentUnit);
-                                    const newFUs = [...fullFUs];
-                                    newFUs[idx] = { ...newFUs[idx], delayValue: val, unit: currentUnit, delayMinutes: newMinutes };
-                                    setConfig({ ...config, followUps: newFUs });
-                                  }}
-                                  className="w-16 px-3 py-1.5 text-xs bg-white border border-slate-200/80 rounded-lg focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold"
-                                />
-                                <select
-                                  value={currentUnit}
-                                  onChange={(e) => {
-                                    const unit = e.target.value;
-                                    const newMinutes = computeMinutes(currentValue, unit);
-                                    const newFUs = [...fullFUs];
-                                    newFUs[idx] = { ...newFUs[idx], delayValue: currentValue, unit, delayMinutes: newMinutes };
-                                    setConfig({ ...config, followUps: newFUs });
-                                  }}
-                                  className="px-2.5 py-1.5 text-xs bg-white border border-slate-200/80 rounded-lg focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold text-slate-700 cursor-pointer"
-                                >
-                                  <option value="minutes">Minutes</option>
-                                  <option value="hours">Hours</option>
-                                  <option value="days">Days</option>
-                                  <option value="months">Months</option>
-                                </select>
-                              </div>
-                              <div 
-                                onClick={() => {
-                                  const newFUs = [...fullFUs];
-                                  newFUs[idx] = { ...newFUs[idx], enabled: !fu.enabled };
-                                  setConfig({ ...config, followUps: newFUs });
-                                }}
-                                className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${fu.enabled ? 'bg-purple-600' : 'bg-slate-300'}`}
-                              >
-                                <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${fu.enabled ? 'translate-x-6' : 'translate-x-0'}`} />
-                              </div>
-                            </div>
-                          </div>
-
-                          {fu.enabled && (
-                            <div className="mt-3 border-t border-slate-100 pt-3">
-                              <div className="flex items-center gap-2 text-xs font-semibold text-purple-700 bg-purple-50/70 p-3 rounded-xl border border-purple-100/80">
-                                <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0" />
-                                <span>AI dynamically generates context-aware follow-up messages based on recent chat history. Smart intelligence automatically skips follow-ups if the deal or booking is already completed.</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    });
+                    return (
+                      <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto max-w-full">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCategory("all")}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${selectedCategory === "all"
+                              ? "bg-[#ff5600] text-white"
+                              : "bg-[#f5f1ec] text-[#626260] border border-[#d3cec6] hover:bg-[#ebe7e1]"
+                            }`}
+                        >
+                          All
+                        </button>
+                        {allCategories.map((cat: any) => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setSelectedCategory(cat)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${selectedCategory === cat
+                                ? "bg-[#ff5600] text-white"
+                                : "bg-[#f5f1ec] text-[#626260] border border-[#d3cec6] hover:bg-[#ebe7e1]"
+                              }`}
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
+                    );
                   })()}
                 </div>
+
+                {/* Product Grid */}
+                {(() => {
+                  let displayProducts = config.products || [];
+                  if (selectedCategory !== "all") {
+                    displayProducts = displayProducts.filter((p: any) => p.category === selectedCategory);
+                  }
+                  if (productSearch.trim()) {
+                    const q = productSearch.toLowerCase().trim();
+                    displayProducts = displayProducts.filter(
+                      (p: any) =>
+                        (p.title || "").toLowerCase().includes(q) ||
+                        (p.category || "").toLowerCase().includes(q) ||
+                        (p.description || "").toLowerCase().includes(q)
+                    );
+                  }
+
+                  if (displayProducts.length === 0) {
+                    return (
+                      <div className="text-center py-12 bg-[#f5f1ec] rounded-xl border border-dashed border-[#d3cec6]">
+                        <Package className="w-10 h-10 text-[#7b7b78] mx-auto mb-2 opacity-50" />
+                        <h4 className="text-sm font-semibold text-[#111111]">No products found</h4>
+                        <p className="text-xs text-[#626260] mt-1">Try tweaking your search or add a new product using the button above.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {displayProducts.map((p: any, idx: number) => {
+                        const hasImg = p.image && p.image !== "N/A";
+                        return (
+                          <div key={p.id || idx} className="bg-white border border-[#d3cec6] rounded-xl overflow-hidden shadow-xs hover:border-[#111111] transition-all flex flex-col justify-between">
+                            <div>
+                              <div className="h-40 bg-[#f5f1ec] relative overflow-hidden flex items-center justify-center">
+                                {hasImg ? (
+                                  <img src={p.image} alt={p.title} className="w-full h-full object-cover" />
+                                ) : (
+                                  <Package className="w-12 h-12 text-[#ff5600] opacity-40" />
+                                )}
+                                {p.category && (
+                                  <span className="absolute top-2 left-2 bg-[#111111]/80 backdrop-blur-xs text-white text-[9px] font-semibold px-2 py-0.5 rounded uppercase tracking-wider">
+                                    {p.category}
+                                  </span>
+                                )}
+                                {p.price && (
+                                  <span className="absolute top-2 right-2 bg-[#ff5600] text-white text-xs font-bold px-2.5 py-0.5 rounded-full shadow-xs">
+                                    {p.price}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="p-4 space-y-2">
+                                <h4 className="text-xs font-semibold text-[#111111] line-clamp-1">{p.title}</h4>
+                                {p.description && (
+                                  <p className="text-[11px] text-[#626260] line-clamp-2 leading-relaxed">{p.description}</p>
+                                )}
+                                {Array.isArray(p.variations) && p.variations.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 pt-1">
+                                    {p.variations.map((v: any, vIdx: number) => (
+                                      <span key={vIdx} className="text-[9px] bg-[#f5f1ec] text-[#626260] border border-[#d3cec6] px-1.5 py-0.5 rounded">
+                                        {v.title}: {v.price}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="p-3 bg-[#f5f1ec] border-t border-[#ebe7e1] flex items-center justify-between gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openEditProductModal(p)}
+                                className="py-1 px-2.5 bg-white hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded text-xs font-medium flex items-center gap-1 transition cursor-pointer"
+                              >
+                                <Edit3 className="w-3 h-3 text-[#ff5600]" />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteProduct(p.id)}
+                                className="py-1 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-xs font-medium flex items-center gap-1 transition cursor-pointer"
+                              >
+                                <Trash2 className="w-3 h-3 text-rose-600" />
+                                <span>Delete</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* SUB-TAB 3: BUSINESS KNOWLEDGE BASE & FAQS */}
+            {kbSubTab === "kb" && (
+              <div className="bg-white p-6 rounded-xl border border-[#d3cec6] shadow-xs space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ebe7e1] pb-4">
+                  <div>
+                    <h3 className="text-base font-semibold text-[#111111] flex items-center gap-2">
+                      <BookOpen className="w-5 h-5 text-[#ff5600]" />
+                      <span>Business Knowledge Base & FAQs</span>
+                    </h3>
+                    <p className="text-xs text-[#626260] font-normal mt-0.5">
+                      Store rules, delivery charges, return policies, payment options, and FAQs. Indexed by the Hybrid Engine to answer customers with 0 API tokens.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={saveKnowledgeBase}
+                    disabled={savingKB}
+                    className={`px-5 py-2.5 rounded-lg font-medium text-xs flex items-center gap-2 transition-all cursor-pointer shadow-xs active:scale-95 ${kbSaveSuccess
+                        ? "bg-emerald-600 text-white"
+                        : "bg-[#111111] hover:bg-black text-white"
+                      }`}
+                  >
+                    {savingKB ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : kbSaveSuccess ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                        <span>Saved!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-3.5 w-3.5" />
+                        <span>Save Knowledge Base</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="text-xs font-semibold text-[#111111] uppercase tracking-wider">Store Information & Common Q&As</label>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[11px] font-medium text-[#7b7b78] mr-1">Quick Templates:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const snippet = "\n\n[DELIVERY & SHIPPING]\n- Standard Delivery: PKR 150 (Free shipping on orders above PKR 1,000)\n- Guaranteed delivery within 35 to 45 minutes.";
+                          setConfig({ ...config, productInfo: (config.productInfo || "") + snippet });
+                        }}
+                        className="px-2.5 py-1 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-full text-[11px] font-medium transition cursor-pointer"
+                      >
+                        + Delivery Info
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const snippet = "\n\n[RETURN & REFUND POLICY]\n- Fresh food items can be replaced immediately if missing or damaged.";
+                          setConfig({ ...config, productInfo: (config.productInfo || "") + snippet });
+                        }}
+                        className="px-2.5 py-1 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-full text-[11px] font-medium transition cursor-pointer"
+                      >
+                        + Return Policy
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const snippet = "\n\n[PAYMENT METHODS]\n- Cash on Delivery (COD)\n- Bank Transfer (Meezan Bank & HBL)\n- JazzCash / EasyPaisa";
+                          setConfig({ ...config, productInfo: (config.productInfo || "") + snippet });
+                        }}
+                        className="px-2.5 py-1 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-full text-[11px] font-medium transition cursor-pointer"
+                      >
+                        + Payment Methods
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const snippet = "\n\n[BUSINESS HOURS & LOCATION]\n- Operating Hours: 12:00 PM to 2:00 AM (Midnight) Every Day\n- Address: Gulberg III, Lahore, Pakistan";
+                          setConfig({ ...config, productInfo: (config.productInfo || "") + snippet });
+                        }}
+                        className="px-2.5 py-1 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-full text-[11px] font-medium transition cursor-pointer"
+                      >
+                        + Hours & Location
+                      </button>
+                    </div>
+                  </div>
+                  <textarea
+                    id="productInfoInput"
+                    rows={12}
+                    value={config.productInfo || ""}
+                    onChange={(e) => setConfig({ ...config, productInfo: e.target.value })}
+                    className="w-full p-4 text-xs bg-[#f5f1ec] border border-[#d3cec6] rounded-lg focus:ring-2 focus:ring-[#111111]/20 focus:border-[#111111] outline-none transition font-medium text-[#111111] leading-relaxed placeholder:text-[#9c9fa5]"
+                    placeholder="Write your business FAQs, store policies, delivery details, exchange rules, and general information here..."
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* SUB-TAB 4: KEYWORD AUTO-REPLIES */}
+            {kbSubTab === "keywords" && (
+              <div className="bg-white p-6 rounded-xl border border-[#d3cec6] shadow-xs space-y-6">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ebe7e1] pb-4">
+                  <div>
+                    <h3 className="text-base font-semibold text-[#111111] flex items-center gap-2">
+                      <Zap className="w-5 h-5 text-[#ff5600]" />
+                      <span>Keyword Auto-Replies & Instant Triggers</span>
+                    </h3>
+                    <p className="text-xs text-[#626260] font-normal mt-0.5">
+                      Bypass AI to instantly reply to specific exact keywords with 0 API token cost.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setConfig({
+                        ...config,
+                        keywordReplies: [...(config.keywordReplies || []), { keyword: "", reply: "" }]
+                      })}
+                      className="px-4 py-2 bg-[#ff5600] hover:bg-[#e04c00] text-white text-xs font-semibold rounded-lg shadow-xs transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Plus className="h-4 w-4" /> Add Keyword Rule
+                    </button>
+                    <button
+                      type="button"
+                      onClick={saveKeywordRules}
+                      disabled={savingKeywords}
+                      className={`px-5 py-2 rounded-lg font-medium text-xs flex items-center gap-2 transition-all cursor-pointer shadow-xs active:scale-95 ${keywordsSaveSuccess
+                          ? "bg-emerald-600 text-white"
+                          : "bg-[#111111] hover:bg-black text-white"
+                        }`}
+                    >
+                      {savingKeywords ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : keywordsSaveSuccess ? (
+                        <>
+                          <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                          <span>Saved!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-3.5 w-3.5" />
+                          <span>Save Rules</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {(!config.keywordReplies || config.keywordReplies.length === 0) ? (
+                    <div className="text-center p-8 bg-[#f5f1ec] rounded-xl border border-dashed border-[#d3cec6] text-[#7b7b78] text-xs font-medium">
+                      No keyword rules added yet. Click &quot;Add Keyword Rule&quot; to set up instant replies.
+                    </div>
+                  ) : (
+                    config.keywordReplies.map((kr: any, idx: number) => (
+                      <div key={idx} className="flex flex-wrap sm:flex-nowrap gap-3 items-start bg-[#f5f1ec] p-3.5 rounded-xl border border-[#d3cec6]">
+                        <div className="w-full sm:w-1/3">
+                          <input
+                            type="text"
+                            value={kr.keyword}
+                            onChange={(e) => {
+                              const newReplies = [...(config.keywordReplies || [])];
+                              newReplies[idx].keyword = e.target.value;
+                              setConfig({ ...config, keywordReplies: newReplies });
+                            }}
+                            placeholder="Keyword (e.g. menu, timing)"
+                            className="w-full p-2.5 text-xs bg-white border border-[#d3cec6] rounded-lg font-semibold text-[#111111] outline-none"
+                          />
+                        </div>
+                        <div className="w-full sm:flex-1 flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={kr.reply}
+                            onChange={(e) => {
+                              const newReplies = [...(config.keywordReplies || [])];
+                              newReplies[idx].reply = e.target.value;
+                              setConfig({ ...config, keywordReplies: newReplies });
+                            }}
+                            placeholder="Exact match auto-reply message..."
+                            className="w-full p-2.5 text-xs bg-white border border-[#d3cec6] rounded-lg font-medium text-[#111111] outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newReplies = [...(config.keywordReplies || [])];
+                              newReplies.splice(idx, 1);
+                              setConfig({ ...config, keywordReplies: newReplies });
+                            }}
+                            className="bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 p-2.5 rounded-lg transition cursor-pointer shrink-0"
+                            title="Delete rule"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* SUB-TAB 5: AI AUTOPILOT & SETTINGS */}
+            {kbSubTab === "settings" && (
+              <div className="bg-white p-6 rounded-xl border border-[#d3cec6] shadow-xs space-y-6">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#ebe7e1] pb-4">
+                  <div>
+                    <h3 className="text-base font-semibold text-[#111111] flex items-center gap-2">
+                      <Settings className="w-5 h-5 text-[#ff5600]" />
+                      <span>AI Autopilot & Feature Controls</span>
+                    </h3>
+                    <p className="text-xs text-[#626260] font-normal mt-0.5">
+                      Configure global autopilot mode, multi-language support, lead collection, and Deepgram voice integration.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={saveConfig}
+                    disabled={savingConfig}
+                    className="bg-[#111111] hover:bg-black text-white font-medium py-2.5 px-5 rounded-lg transition-all shadow-xs flex items-center gap-2 text-xs cursor-pointer"
+                  >
+                    {savingConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Save Settings
+                  </button>
+                </div>
+
+                {/* Autopilot Master Switch */}
+                <div className="flex items-center justify-between p-4 bg-[#f5f1ec] rounded-xl border border-[#d3cec6]">
+                  <div>
+                    <h4 className="text-xs font-semibold text-[#111111]">Global AI Autopilot Response</h4>
+                    <p className="text-[11px] text-[#626260]">When enabled, the AI assistant automatically replies to incoming WhatsApp messages.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setConfig({ ...config, globalAiEnabled: !config.globalAiEnabled })}
+                    className={`px-4 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${config.globalAiEnabled !== false
+                        ? "bg-emerald-600 text-white"
+                        : "bg-rose-600 text-white"
+                      }`}
+                  >
+                    {config.globalAiEnabled !== false ? "Autopilot ON" : "Autopilot OFF"}
+                  </button>
+                </div>
+
+                {/* Enabled Features Checkboxes */}
+                <div className="space-y-3">
+                  <label className="text-xs font-semibold text-[#111111] uppercase tracking-wider block">Advanced AI Capability Features</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {[
+                      "Multi-language Support",
+                      "Lead Collection",
+                      "Service Recommendation",
+                      "Personalized Consultation",
+                      "Price Inquiry",
+                      "Human Handoff"
+                    ].map((feature) => {
+                      const isChecked = (config.enabledFeatures || []).includes(feature);
+                      return (
+                        <label
+                          key={feature}
+                          className={`p-3 rounded-lg border text-xs font-medium flex items-center gap-2.5 cursor-pointer transition ${isChecked
+                              ? "bg-[#f5f1ec] border-[#111111] text-[#111111]"
+                              : "bg-white border-[#d3cec6] text-[#626260] hover:bg-[#f5f1ec]"
+                            }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const current = config.enabledFeatures || [];
+                              const updated = e.target.checked
+                                ? [...current, feature]
+                                : current.filter((f: string) => f !== feature);
+                              setConfig({ ...config, enabledFeatures: updated });
+                            }}
+                            className="w-4 h-4 accent-[#ff5600] rounded"
+                          />
+                          <span>{feature}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Product Add / Edit Modal */}
+            {showProductModal && (
+              <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
+                <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4 border border-[#d3cec6] my-8">
+                  <div className="flex items-center justify-between border-b border-[#ebe7e1] pb-3">
+                    <h3 className="text-sm font-semibold text-[#111111] flex items-center gap-2">
+                      <Package className="w-4 h-4 text-[#ff5600]" />
+                      <span>{editingProduct ? "Edit Product Details" : "Add New Product"}</span>
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setShowProductModal(false)}
+                      className="text-[#7b7b78] hover:text-[#111111] p-1 transition cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3 text-xs font-medium">
+                    <div>
+                      <label className="block text-[#111111] font-semibold mb-1">Product Title *</label>
+                      <input
+                        type="text"
+                        value={prodTitle}
+                        onChange={(e) => setProdTitle(e.target.value)}
+                        placeholder="e.g. Smokey Zinger Burger Supreme"
+                        className="w-full p-2.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg outline-none text-[#111111] font-semibold"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[#111111] font-semibold mb-1">Price / Base Rate</label>
+                        <input
+                          type="text"
+                          value={prodPrice}
+                          onChange={(e) => setProdPrice(e.target.value)}
+                          placeholder="e.g. 750 or PKR 750"
+                          className="w-full p-2.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg outline-none text-[#111111]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[#111111] font-semibold mb-1">Category</label>
+                        <input
+                          type="text"
+                          value={prodCategory}
+                          onChange={(e) => setProdCategory(e.target.value)}
+                          placeholder="e.g. Burgers & Sandwiches"
+                          className="w-full p-2.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg outline-none text-[#111111]"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[#111111] font-semibold mb-1">Product Images (URLs, one per line)</label>
+                      <textarea
+                        rows={3}
+                        value={prodImage}
+                        onChange={(e) => setProdImage(e.target.value)}
+                        placeholder="https://images.unsplash.com/photo-1...&#10;https://images.unsplash.com/photo-2..."
+                        className="w-full p-2.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg outline-none text-[#111111] font-medium"
+                      />
+                      {prodImage && (
+                        <div className="mt-2 flex gap-2 flex-wrap max-h-32 overflow-y-auto p-1 border border-dashed border-[#d3cec6] rounded-lg bg-[#fcfbf9]">
+                          {prodImage.split("\n").map((url, idx) => {
+                            const trimmed = url.trim();
+                            if (!trimmed || (!trimmed.startsWith("http://") && !trimmed.startsWith("https://") && !trimmed.startsWith("data:"))) return null;
+                            return (
+                              <div key={idx} className="relative h-16 w-16 rounded-lg overflow-hidden border border-[#d3cec6] flex-shrink-0 group">
+                                <img src={trimmed} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                                <span className="absolute bottom-0 right-0 bg-black/60 text-[8px] text-white px-1 rounded-tl">{idx + 1}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-[#111111] font-semibold mb-1">Product Page Link (Optional)</label>
+                      <input
+                        type="url"
+                        value={prodLink}
+                        onChange={(e) => setProdLink(e.target.value)}
+                        placeholder="https://atomixfood.com/menu/zinger"
+                        className="w-full p-2.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg outline-none text-[#111111]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[#111111] font-semibold mb-1">Price Variations (Optional)</label>
+                      <input
+                        type="text"
+                        value={prodVariations}
+                        onChange={(e) => setProdVariations(e.target.value)}
+                        placeholder="Single Patty: 750, Double Patty: 1050"
+                        className="w-full p-2.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg outline-none text-[#111111]"
+                      />
+                      <p className="text-[10px] text-[#7b7b78] mt-1">Separate variations with commas in Title: Price format.</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-[#111111] font-semibold mb-1">Short Description</label>
+                      <textarea
+                        rows={2}
+                        value={prodDesc}
+                        onChange={(e) => setProdDesc(e.target.value)}
+                        placeholder="Crispy double-fried chicken breast, smoked cheese slice..."
+                        className="w-full p-2.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-lg outline-none text-[#111111]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-[#ebe7e1] flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowProductModal(false)}
+                      className="px-4 py-2 bg-[#f5f1ec] hover:bg-[#ebe7e1] text-[#111111] border border-[#d3cec6] rounded-lg text-xs font-semibold transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveProductModal}
+                      className="px-5 py-2 bg-[#111111] hover:bg-black text-white rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer"
+                    >
+                      {editingProduct ? "Save Changes" : "Create Product"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+      {activeTab === 'promotions' && (
+        <div className="flex-1 h-full overflow-y-auto bg-[#f5f1ec]">
+          <div className="p-8 md:p-10 max-w-[1400px] mx-auto w-full space-y-8">
+            <div className="flex justify-between items-center flex-wrap gap-4">
+              <div>
+                <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
+                  <Clock className="h-7 w-7 text-purple-600" /> Follow Ups
+                </h2>
+                <p className="text-xs text-slate-500 font-medium mt-1">Configure automated follow-up sequence rules & intervals for un-replied leads.</p>
+              </div>
+              <button
+                onClick={saveConfig}
+                disabled={savingConfig}
+                className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold py-2.5 px-6 rounded-xl transition-all shadow-md shadow-purple-500/20 flex items-center gap-2 text-xs cursor-pointer"
+              >
+                {savingConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Save Settings
+              </button>
+            </div>
+
+            <div className="dash-card p-8 space-y-6">
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">Automated Follow-up Sequence Rules</h3>
+                <p className="text-xs text-slate-500 font-medium mt-1">Sends automated follow-up reminders to un-replied leads every N hours or days. Smart AI automatically skips follow-ups if the customer completes the booking or order.</p>
+              </div>
+
+              <div className="space-y-4 pt-2">
+                {(() => {
+                  const defaultFUs = [
+                    { enabled: true, delayMinutes: 60, delayValue: 1, unit: 'hours' as const },
+                    { enabled: true, delayMinutes: 1440, delayValue: 1, unit: 'days' as const },
+                    { enabled: true, delayMinutes: 2880, delayValue: 2, unit: 'days' as const },
+                    { enabled: true, delayMinutes: 4320, delayValue: 3, unit: 'days' as const },
+                    { enabled: true, delayMinutes: 7200, delayValue: 5, unit: 'days' as const },
+                    { enabled: true, delayMinutes: 10080, delayValue: 7, unit: 'days' as const },
+                    { enabled: true, delayMinutes: 14400, delayValue: 10, unit: 'days' as const },
+                  ];
+                  const currentFUs = config.followUps || [];
+                  const fullFUs = defaultFUs.map((df, i) => ({ ...df, ...(currentFUs[i] || {}) }));
+
+                  const computeMinutes = (val: number, unit: string) => {
+                    if (unit === 'hours') return val * 60;
+                    if (unit === 'days') return val * 1440;
+                    if (unit === 'months') return val * 43200;
+                    return val;
+                  };
+
+                  const getValAndUnit = (fu: any, df: any) => {
+                    if (fu.unit && fu.delayValue !== undefined) {
+                      return { unit: fu.unit, val: fu.delayValue };
+                    }
+                    const mins = fu.delayMinutes || df.delayMinutes;
+                    if (mins >= 43200 && mins % 43200 === 0) return { unit: 'months', val: mins / 43200 };
+                    if (mins >= 1440 && mins % 1440 === 0) return { unit: 'days', val: mins / 1440 };
+                    if (mins >= 60 && mins % 60 === 0) return { unit: 'hours', val: mins / 60 };
+                    return { unit: 'minutes', val: mins };
+                  };
+
+                  return fullFUs.map((fu: any, idx: number) => {
+                    const { unit: currentUnit, val: currentValue } = getValAndUnit(fu, defaultFUs[idx]);
+
+                    return (
+                      <div key={idx} className={`p-5 rounded-2xl border transition-all ${fu.enabled ? 'bg-white border-purple-200 shadow-sm' : 'bg-slate-50/80 border-slate-200/80'}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-bold text-slate-800 flex items-center gap-2 text-xs">
+                            <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs text-white ${fu.enabled ? 'bg-purple-600' : 'bg-slate-300'}`}>{idx + 1}</span>
+                            Follow-up {idx + 1}
+                          </h4>
+
+                          <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs font-bold text-slate-500">Wait</label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={currentValue}
+                                onChange={(e) => {
+                                  const val = Math.max(1, parseInt(e.target.value) || 1);
+                                  const newMinutes = computeMinutes(val, currentUnit);
+                                  const newFUs = [...fullFUs];
+                                  newFUs[idx] = { ...newFUs[idx], delayValue: val, unit: currentUnit, delayMinutes: newMinutes };
+                                  setConfig({ ...config, followUps: newFUs });
+                                }}
+                                className="w-16 px-3 py-1.5 text-xs bg-white border border-slate-200/80 rounded-lg focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold"
+                              />
+                              <select
+                                value={currentUnit}
+                                onChange={(e) => {
+                                  const unit = e.target.value;
+                                  const newMinutes = computeMinutes(currentValue, unit);
+                                  const newFUs = [...fullFUs];
+                                  newFUs[idx] = { ...newFUs[idx], delayValue: currentValue, unit, delayMinutes: newMinutes };
+                                  setConfig({ ...config, followUps: newFUs });
+                                }}
+                                className="px-2.5 py-1.5 text-xs bg-white border border-slate-200/80 rounded-lg focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold text-slate-700 cursor-pointer"
+                              >
+                                <option value="minutes">Minutes</option>
+                                <option value="hours">Hours</option>
+                                <option value="days">Days</option>
+                                <option value="months">Months</option>
+                              </select>
+                            </div>
+                            <div
+                              onClick={() => {
+                                const newFUs = [...fullFUs];
+                                newFUs[idx] = { ...newFUs[idx], enabled: !fu.enabled };
+                                setConfig({ ...config, followUps: newFUs });
+                              }}
+                              className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${fu.enabled ? 'bg-purple-600' : 'bg-slate-300'}`}
+                            >
+                              <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${fu.enabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                            </div>
+                          </div>
+                        </div>
+
+                        {fu.enabled && (
+                          <div className="mt-3 border-t border-slate-100 pt-3">
+                            <div className="flex items-center gap-2 text-xs font-semibold text-purple-700 bg-purple-50/70 p-3 rounded-xl border border-purple-100/80">
+                              <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                              <span>AI dynamically generates context-aware follow-up messages based on recent chat history. Smart intelligence automatically skips follow-ups if the deal or booking is already completed.</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Leads Revival Tab - DashMark Theme */}
-        {activeTab === 'leads-revival' && (
-          <div className="flex-1 h-full overflow-y-auto bg-[#f5f1ec]">
-            <div className="p-8 md:p-10 max-w-[1400px] mx-auto w-full space-y-8">
+      {/* Leads Revival Tab - DashMark Theme */}
+      {activeTab === 'leads-revival' && (
+        <div className="flex-1 h-full overflow-y-auto bg-[#f5f1ec]">
+          <div className="p-8 md:p-10 max-w-[1400px] mx-auto w-full space-y-8">
             <div className="flex justify-between items-center mb-2">
               <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
                 <RefreshCw className={`h-7 w-7 text-purple-600 ${activeRevivalCampaign?.status === 'active' ? 'animate-spin' : ''}`} style={{ animationDuration: '4s' }} /> Leads Revival
               </h2>
               {activeRevivalCampaign && (
-                <div className={`px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5 ${
-                  activeRevivalCampaign.status === 'active' ? 'bg-purple-50 text-purple-700 border border-purple-200 animate-pulse' :
-                  activeRevivalCampaign.status === 'paused' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                  'bg-slate-100 text-slate-500'
-                }`}>
-                  <span className={`h-2 w-2 rounded-full ${
-                    activeRevivalCampaign.status === 'active' ? 'bg-purple-600' :
-                    activeRevivalCampaign.status === 'paused' ? 'bg-amber-500' :
-                    'bg-slate-400'
-                  }`} />
+                <div className={`px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider flex items-center gap-1.5 ${activeRevivalCampaign.status === 'active' ? 'bg-purple-50 text-purple-700 border border-purple-200 animate-pulse' :
+                    activeRevivalCampaign.status === 'paused' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                      'bg-slate-100 text-slate-500'
+                  }`}>
+                  <span className={`h-2 w-2 rounded-full ${activeRevivalCampaign.status === 'active' ? 'bg-purple-600' :
+                      activeRevivalCampaign.status === 'paused' ? 'bg-amber-500' :
+                        'bg-slate-400'
+                    }`} />
                   Campaign {activeRevivalCampaign.status}
                 </div>
               )}
@@ -4434,8 +4436,8 @@ export default function DashboardPage() {
                       </span>
                     </div>
                     <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
-                      <div 
-                        className="bg-gradient-to-r from-purple-600 to-indigo-600 h-full transition-all duration-500" 
+                      <div
+                        className="bg-gradient-to-r from-purple-600 to-indigo-600 h-full transition-all duration-500"
                         style={{ width: `${Math.round(((activeRevivalCampaign.sentPhones.length + activeRevivalCampaign.failedPhones.length) / activeRevivalCampaign.targetPhones.length) * 100)}%` }}
                       />
                     </div>
@@ -4474,7 +4476,7 @@ export default function DashboardPage() {
                         statusText = "Failed";
                         colorClass = "bg-red-50 text-red-700 border border-red-200";
                       }
-                      
+
                       const customerName = customers[phone]?.name;
 
                       return (
@@ -4496,7 +4498,7 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 {/* Left Column (8 cols): Campaign Content & Sequence */}
                 <div className="lg:col-span-8 space-y-6">
-                  
+
                   {/* Phase 1 Introductory Message & Format */}
                   <div className="dash-card p-8 space-y-5 border border-purple-100/80 bg-white">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
@@ -4531,7 +4533,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
 
-                    <textarea 
+                    <textarea
                       value={revivalMessage}
                       onChange={(e) => setRevivalMessage(e.target.value)}
                       className="w-full h-28 p-4 text-xs bg-slate-50 border border-slate-200/80 rounded-2xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none transition font-semibold text-slate-800 leading-relaxed"
@@ -4543,13 +4545,13 @@ export default function DashboardPage() {
                       <div className="p-4 bg-purple-50/60 rounded-xl border border-purple-100 space-y-3">
                         <label className="text-xs font-bold text-slate-700 block uppercase tracking-wider">Document / PDF / Image File</label>
                         <div className="flex items-center gap-4 flex-wrap">
-                          <input 
-                            type="file" 
-                            className="hidden" 
+                          <input
+                            type="file"
+                            className="hidden"
                             ref={revivalFileInputRef}
                             onChange={handleRevivalFileChange}
                           />
-                          <button 
+                          <button
                             type="button"
                             onClick={() => revivalFileInputRef.current?.click()}
                             className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm"
@@ -4608,14 +4610,14 @@ export default function DashboardPage() {
                             </button>
                           )}
 
-                          <input 
-                            type="file" 
-                            className="hidden" 
+                          <input
+                            type="file"
+                            className="hidden"
                             ref={voiceFileInputRef}
                             accept="audio/*,.mp3,.wav,.ogg,.m4a"
                             onChange={handleRevivalVoiceChange}
                           />
-                          <button 
+                          <button
                             type="button"
                             onClick={() => voiceFileInputRef.current?.click()}
                             className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/80 px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm"
@@ -4631,9 +4633,9 @@ export default function DashboardPage() {
                               <span className="text-xs font-extrabold text-purple-900 truncate max-w-[320px]">
                                 🎤 {revivalVoiceName}
                               </span>
-                              <button 
-                                type="button" 
-                                onClick={removeRevivalVoice} 
+                              <button
+                                type="button"
+                                onClick={removeRevivalVoice}
                                 className="text-rose-600 hover:text-rose-700 font-bold text-xs flex items-center gap-1 cursor-pointer"
                               >
                                 <X className="w-4 h-4" /> Delete
@@ -4749,14 +4751,14 @@ export default function DashboardPage() {
                                 </button>
                               )}
 
-                              <input 
-                                type="file" 
-                                className="hidden" 
+                              <input
+                                type="file"
+                                className="hidden"
                                 ref={p2VoiceFileInputRef}
                                 accept="audio/*,.mp3,.wav,.ogg,.m4a"
                                 onChange={handleP2VoiceChange}
                               />
-                              <button 
+                              <button
                                 type="button"
                                 onClick={() => p2VoiceFileInputRef.current?.click()}
                                 className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/80 px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm"
@@ -4772,9 +4774,9 @@ export default function DashboardPage() {
                                   <span className="text-xs font-extrabold text-purple-900 truncate max-w-[320px]">
                                     🎤 {p2VoiceName}
                                   </span>
-                                  <button 
-                                    type="button" 
-                                    onClick={removeP2Voice} 
+                                  <button
+                                    type="button"
+                                    onClick={removeP2Voice}
                                     className="text-rose-600 hover:text-rose-700 font-bold text-xs flex items-center gap-1 cursor-pointer"
                                   >
                                     <X className="w-4 h-4" /> Delete
@@ -4796,13 +4798,13 @@ export default function DashboardPage() {
                           <div className="p-4 bg-white rounded-xl border border-purple-200 space-y-3">
                             <label className="text-xs font-bold text-slate-700 block uppercase tracking-wider">Follow-up Document / PDF / Image File</label>
                             <div className="flex items-center gap-4 flex-wrap">
-                              <input 
-                                type="file" 
-                                className="hidden" 
+                              <input
+                                type="file"
+                                className="hidden"
                                 ref={p2FileInputRef}
                                 onChange={handleP2FileChange}
                               />
-                              <button 
+                              <button
                                 type="button"
                                 onClick={() => p2FileInputRef.current?.click()}
                                 className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-sm"
@@ -4860,12 +4862,12 @@ export default function DashboardPage() {
                     <h3 className="text-xs font-extrabold text-slate-900 flex items-center gap-2 uppercase tracking-wider">
                       <ShieldCheck className="w-4 h-4 text-purple-600" /> Safety Settings (Anti-Ban Limits)
                     </h3>
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-xs font-bold text-slate-500 block mb-1">Time Slot Start</label>
-                        <input 
-                          type="time" 
+                        <input
+                          type="time"
                           value={revivalTimeStart}
                           onChange={(e) => handleTimeStartChange(e.target.value)}
                           className="w-full px-3 py-2 text-xs bg-white border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold"
@@ -4873,8 +4875,8 @@ export default function DashboardPage() {
                       </div>
                       <div>
                         <label className="text-xs font-bold text-slate-500 block mb-1">Time Slot End</label>
-                        <input 
-                          type="time" 
+                        <input
+                          type="time"
                           value={revivalTimeEnd}
                           onChange={(e) => handleTimeEndChange(e.target.value)}
                           className="w-full px-3 py-2 text-xs bg-white border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold"
@@ -4885,9 +4887,9 @@ export default function DashboardPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-xs font-bold text-slate-500 block mb-1">Delay per Reachout (Minutes)</label>
-                        <input 
-                          type="number" 
-                          min={0.1} 
+                        <input
+                          type="number"
+                          min={0.1}
                           max={1440}
                           step={0.1}
                           value={revivalDelayMinutes}
@@ -4897,9 +4899,9 @@ export default function DashboardPage() {
                       </div>
                       <div>
                         <label className="text-xs font-bold text-slate-500 block mb-1">Daily Cap</label>
-                        <input 
-                          type="number" 
-                          min={1} 
+                        <input
+                          type="number"
+                          min={1}
                           max={1000}
                           value={revivalDailyCap}
                           onChange={(e) => setRevivalDailyCap(Math.max(1, Math.min(1000, parseInt(e.target.value) || 1)))}
@@ -4912,9 +4914,9 @@ export default function DashboardPage() {
                       <div className="grid grid-cols-3 gap-4 pt-4 border-t border-slate-200/60">
                         <div className="col-span-2">
                           <label className="text-xs font-bold text-slate-500 block mb-1">Target Campaign Duration</label>
-                          <input 
-                            type="number" 
-                            min={0.1} 
+                          <input
+                            type="number"
+                            min={0.1}
                             step={0.1}
                             value={targetDuration}
                             onChange={(e) => handleTargetDurationChange(Math.max(0.1, parseFloat(e.target.value) || 0.1))}
@@ -4923,7 +4925,7 @@ export default function DashboardPage() {
                         </div>
                         <div>
                           <label className="text-xs font-bold text-slate-500 block mb-1">Unit</label>
-                          <select 
+                          <select
                             value={targetDurationUnit}
                             onChange={(e) => handleTargetDurationUnitChange(e.target.value as "Days" | "Hours")}
                             className="w-full px-3 py-2 text-xs bg-white border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold text-slate-700"
@@ -4936,7 +4938,7 @@ export default function DashboardPage() {
                     )}
                   </div>
 
-                  <button 
+                  <button
                     onClick={launchRevivalCampaign}
                     disabled={creatingCampaign || (!revivalMessage.trim() && !revivalMediaBase64 && !revivalVoiceBase64) || getSelectedLeadsCount() === 0}
                     className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white font-extrabold h-13 rounded-xl shadow-md shadow-purple-500/20 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
@@ -4967,20 +4969,20 @@ export default function DashboardPage() {
                           handleCustomPhonesFileUploaded(e);
                         }}
                       />
-                      <button 
-                        type="button" 
-                        onClick={() => customPhonesFileInputRef.current?.click()} 
+                      <button
+                        type="button"
+                        onClick={() => customPhonesFileInputRef.current?.click()}
                         className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white py-3 px-4 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-md shadow-purple-500/20"
                       >
                         <Paperclip className="w-4 h-4" />
                         {isFileUploaded ? `Leads Attached (${customPhones.length})` : "Attach Target Leads File (.pdf, .csv, .txt)"}
                       </button>
-                      
+
                       {isFileUploaded && (
                         <div className="flex items-center justify-between text-xs text-purple-800 font-extrabold bg-white p-3 rounded-xl border border-purple-200 shadow-sm">
                           <span>Parsed {customPhones.length} valid target leads</span>
-                          <button 
-                            type="button" 
+                          <button
+                            type="button"
                             onClick={() => {
                               setCustomPhones([]);
                               setCustomPhonesInput("");
@@ -4997,7 +4999,7 @@ export default function DashboardPage() {
 
                     <div className="space-y-2">
                       <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block">Or Select Saved Audience Segment</label>
-                      <select 
+                      <select
                         value={revivalAudience}
                         onChange={(e) => setRevivalAudience(e.target.value)}
                         className="w-full p-3.5 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none font-bold text-slate-700"
@@ -5025,7 +5027,7 @@ export default function DashboardPage() {
                       </div>
                     )}
 
-                    <button 
+                    <button
                       onClick={launchRevivalCampaign}
                       disabled={creatingCampaign || (!revivalMessage.trim() && !revivalMediaBase64 && !revivalVoiceBase64) || getSelectedLeadsCount() === 0}
                       className="w-full mt-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white font-extrabold h-13 rounded-xl shadow-md shadow-purple-500/20 transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
@@ -5044,7 +5046,7 @@ export default function DashboardPage() {
                     const msgsPerHour = 60 / delayMins;
                     const maxDailyByTime = activeHours * msgsPerHour;
                     const actualDailySend = Math.min(revivalDailyCap, Math.round(maxDailyByTime * 10) / 10);
-                    
+
                     const totalHoursEst = (targetLeads * delayMins) / 60;
                     const daysEst = actualDailySend > 0 ? Math.ceil(targetLeads / actualDailySend) : 0;
 
@@ -5053,13 +5055,13 @@ export default function DashboardPage() {
                         <h3 className="text-xs font-extrabold flex items-center gap-2 border-b border-white/10 pb-3 tracking-tight uppercase">
                           <Eye className="w-4 h-4 text-purple-400" /> AI Campaign Estimator
                         </h3>
-                        
+
                         <div className="space-y-4">
                           <div>
                             <div className="text-[10px] text-purple-200 font-bold uppercase tracking-wider">Target Leads Selected</div>
                             <div className="text-2xl font-extrabold text-white">{targetLeads}</div>
                           </div>
-                          
+
                           <div>
                             <div className="text-[10px] text-purple-200 font-bold uppercase tracking-wider">Daily Send Speed (Estimated)</div>
                             <div className="text-sm font-bold text-white">{actualDailySend} leads / day</div>
@@ -5137,802 +5139,856 @@ export default function DashboardPage() {
         </div>
       )}
 
-        {/* Orders Tab - Intercom Editorial High Density View */}
-        {activeTab === 'orders' && (
-          <div className="flex-1 h-full overflow-y-auto bg-[#f5f1ec]">
-            <div className="p-4 md:p-6 w-full space-y-6">
-              
-              {/* Top Header */}
-              <div className="flex justify-between items-center flex-wrap gap-4">
+      {/* Orders Tab - Intercom Editorial High Density View */}
+      {activeTab === 'orders' && (
+        <div className="flex-1 h-full overflow-y-auto bg-[#f5f1ec]">
+          <div className="p-4 md:p-6 w-full space-y-6">
+
+            {/* Top Header & Live Status Description */}
+            <div className="flex justify-between items-center flex-wrap gap-4">
+              <div>
                 <h2 className="text-2xl font-semibold text-[#111111] tracking-tight flex items-center gap-3">
-                  <ShoppingCart className="h-6 w-6 text-[#ff5600]" /> Incoming Orders & Projects
+                  <ShoppingCart className="h-6 w-6 text-[#ff5600]" /> Kitchen Order Management
                 </h2>
-                
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={toggleSound}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer border ${
-                      soundEnabled 
-                        ? 'bg-white text-[#111111] border-[#d3cec6] hover:bg-[#ebe7e1]' 
-                        : 'bg-[#ebe7e1] text-[#626260] border-[#d3cec6] hover:bg-slate-200'
-                    }`}
-                  >
-                    {soundEnabled ? <Volume2 className="h-4 w-4 text-[#ff5600]" /> : <VolumeX className="h-4 w-4 text-[#7b7b78]" />}
-                    <span>{soundEnabled ? 'Order Sound Alert: ON' : 'Order Sound Alert: OFF'}</span>
-                  </button>
-
-                  <button
-                    onClick={() => playSweetOrderSound(0.95)}
-                    className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium bg-[#ff5600] text-white hover:bg-[#e04c00] transition-all shadow-xs cursor-pointer"
-                    title="Play sample sweet order alert sound"
-                  >
-                    <BellRing className="h-4 w-4 text-white animate-pulse" />
-                    <span>Test Sweet Sound 🔔</span>
-                  </button>
-                </div>
+                <p className="text-xs text-[#626260] font-medium mt-1 flex items-center gap-2">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  Real-Time Order Counter • Decrements when order status moves to Baking or Delivered
+                </p>
               </div>
 
-              {/* Filter Pills */}
-              <div className="flex gap-2 mb-2 flex-wrap">
-                {[
-                  { id: 'all', label: 'All Items', activeClass: 'bg-[#111111] text-white shadow-md' },
-                  { id: 'new_order', label: '🔵 New Order', activeClass: 'bg-blue-600 text-white shadow-md ring-2 ring-blue-400/40' },
-                  { id: 'under_baking', label: '🟠 Under Baking', activeClass: 'bg-amber-500 text-white shadow-md ring-2 ring-amber-400/40' },
-                  { id: 'delivered', label: '🟢 Delivered', activeClass: 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400/40' },
-                  { id: 'cancelled', label: '🔴 Cancelled', activeClass: 'bg-rose-600 text-white shadow-md ring-2 ring-rose-400/40' }
-                ].map(filter => (
-                  <button
-                    key={filter.id}
-                    onClick={() => setOrderFilter(filter.id as any)}
-                    className={`px-4 py-1.5 rounded-full text-xs font-black transition-all cursor-pointer ${
-                      orderFilter === filter.id 
-                        ? filter.activeClass 
-                        : 'bg-[#ebe7e1] text-[#626260] hover:text-[#111111] hover:bg-[#e2ddd5]'
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={toggleSound}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer border ${soundEnabled
+                      ? 'bg-white text-[#111111] border-[#d3cec6] hover:bg-[#ebe7e1]'
+                      : 'bg-[#ebe7e1] text-[#626260] border-[#d3cec6] hover:bg-slate-200'
                     }`}
-                  >
-                    {filter.label}
-                  </button>
-                ))}
-              </div>
+                >
+                  {soundEnabled ? <Volume2 className="h-4 w-4 text-[#ff5600]" /> : <VolumeX className="h-4 w-4 text-[#7b7b78]" />}
+                  <span>{soundEnabled ? 'Order Sound Alert: ON' : 'Order Sound Alert: OFF'}</span>
+                </button>
 
-              {/* Full-Width Intercom Data Table */}
-              <div className="dash-card p-0 overflow-hidden min-h-[500px] bg-white border border-[#d3cec6] rounded-xl shadow-xs">
-                {orders.filter(o => {
-                  const statusLower = o.status?.toLowerCase() || '';
-                  const isDelivered = statusLower === 'delivered' || statusLower === 'deliver';
-                  
-                  // Auto-hide delivered orders older than 5 minutes to prevent clutter
-                  if (isDelivered) {
-                    const deliveredTime = o.deliveredAt ? new Date(o.deliveredAt).getTime() : (o.timestamp ? new Date(o.timestamp).getTime() : null);
-                    if (deliveredTime && (Date.now() - deliveredTime > 5 * 60 * 1000)) {
-                      return false;
-                    }
-                  }
-
-                  if (orderFilter === 'all') return true;
-                  if (orderFilter === 'new_order') return statusLower === 'new_order' || statusLower === 'new' || statusLower === 'new order' || statusLower === 'pending';
-                  if (orderFilter === 'under_baking') return statusLower === 'under_baking' || statusLower === 'under baking' || statusLower === 'under_booking' || statusLower === 'confirmed';
-                  if (orderFilter === 'delivered') return isDelivered;
-                  return o.status === orderFilter;
-                }).length === 0 ? (
-                  <div className="text-center p-12 bg-[#f5f1ec] text-[#7b7b78] font-medium text-xs">
-                    No active orders found.
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-[#f5f1ec] border-b border-[#d3cec6] text-[11px] font-semibold text-[#7b7b78] uppercase tracking-wider">
-                          <th className="py-3.5 px-4 w-14 text-center">#</th>
-                          <th className="py-3.5 px-4">Date</th>
-                          <th className="py-3.5 px-4">Customer / Lead</th>
-                          <th className="py-3.5 px-4">Type & Product</th>
-                          <th className="py-3.5 px-4">Price</th>
-                          <th className="py-3.5 px-4">Delivery / Schedule</th>
-                          <th className="py-3.5 px-4">Status</th>
-                          <th className="py-3.5 px-4 text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#ebe7e1] text-xs">
-                        {orders.filter(o => {
-                          const statusLower = o.status?.toLowerCase() || '';
-                          const isDelivered = statusLower === 'delivered' || statusLower === 'deliver';
-
-                          // Auto-hide delivered orders older than 5 minutes to prevent clutter
-                          if (isDelivered) {
-                            const deliveredTime = o.deliveredAt ? new Date(o.deliveredAt).getTime() : (o.timestamp ? new Date(o.timestamp).getTime() : null);
-                            if (deliveredTime && (Date.now() - deliveredTime > 5 * 60 * 1000)) {
-                              return false;
-                            }
-                          }
-
-                          if (orderFilter === 'all') return true;
-                          if (orderFilter === 'new_order') return statusLower === 'new_order' || statusLower === 'new' || statusLower === 'new order' || statusLower === 'pending';
-                          if (orderFilter === 'under_baking') return statusLower === 'under_baking' || statusLower === 'under baking' || statusLower === 'under_booking' || statusLower === 'confirmed';
-                          if (orderFilter === 'delivered') return isDelivered;
-                          return o.status === orderFilter;
-                        }).map((order, idx) => {
-                          const isAppointment = order.productName.includes('Appointment') || order.productName.startsWith('📅');
-                          const clientName = customers[order.phone]?.name || order.customerName || order.phone || "Verified Client";
-                          const statusLower = order.status?.toLowerCase() || '';
-
-                          return (
-                            <tr key={order.id} className="hover:bg-[#f5f1ec]/60 transition-colors">
-                              {/* Row Counter Index */}
-                              <td className="py-3.5 px-4 align-top text-center">
-                                <span className="font-mono text-xs font-semibold text-[#111111] bg-[#ebe7e1] px-2.5 py-1 rounded border border-[#d3cec6] inline-block">
-                                  #{idx + 1}
-                                </span>
-                              </td>
-
-                              {/* Timestamp */}
-                              <td className="py-3.5 px-4 align-top">
-                                <div className="text-[11px] text-[#111111] font-medium flex items-center gap-1">
-                                  <Clock className="w-3 h-3 text-[#7b7b78]" />
-                                  {isMounted ? new Date(order.timestamp).toLocaleString([], { month: '2-digit', day: '2-digit', hour: 'numeric', minute: '2-digit', hour12: true }) : ""}
-                                </div>
-                              </td>
-
-                              {/* Clickable Customer / Lead Cell (Opens Inbox Chat directly) */}
-                              <td className="py-3.5 px-4 align-top">
-                                <div 
-                                  onClick={() => openChatForPhone(order.phone)}
-                                  className="flex items-center gap-2.5 group cursor-pointer w-fit p-1 -m-1 rounded-lg hover:bg-[#ebe7e1]/80 transition-all"
-                                  title="Click to open full chat history in Inbox"
-                                >
-                                  <div className="w-7 h-7 rounded-full bg-[#111111] text-white flex items-center justify-center font-medium text-xs shrink-0 group-hover:bg-[#ff5600] transition-colors">
-                                    <User className="w-4 h-4 text-white" />
-                                  </div>
-                                  <div>
-                                    <div className="font-semibold text-[#111111] group-hover:text-[#ff5600] transition-colors flex items-center gap-1.5">
-                                      {clientName}
-                                      <MessageCircle className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-110 transition-transform" />
-                                    </div>
-                                    <div className="text-[11px] text-[#626260] font-mono">{order.phone}</div>
-                                    {(order.deliveryAddress || customers[order.phone]?.address) && (
-                                      <div className="text-[10px] text-[#7b7b78] flex items-center gap-1 mt-0.5 max-w-[200px] truncate" title={order.deliveryAddress || customers[order.phone]?.address}>
-                                        <MapPin className="w-3 h-3 text-[#ff5600] shrink-0" />
-                                        <span className="truncate">{order.deliveryAddress || customers[order.phone]?.address}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </td>
-
-                              {/* Product & Type */}
-                              <td className="py-3.5 px-4 align-top">
-                                <div className="font-semibold text-[#111111] max-w-[220px] truncate">{order.productName}</div>
-                                <span className={`text-[9px] font-semibold px-2 py-0.5 rounded uppercase tracking-wider inline-flex items-center gap-1 mt-1 ${
-                                  isAppointment 
-                                    ? 'bg-[#ebe7e1] text-[#111111] border border-[#d3cec6]' 
-                                    : 'bg-[#f5f1ec] text-[#111111] border border-[#d3cec6]'
-                                }`}>
-                                  {isAppointment ? <Calendar className="w-2.5 h-2.5 text-[#ff5600]" /> : <ShoppingCart className="w-2.5 h-2.5 text-[#ff5600]" />}
-                                  {isAppointment ? 'Appointment' : 'Product Order'}
-                                </span>
-                              </td>
-
-                              {/* Price */}
-                              <td className="py-3.5 px-4 align-top">
-                                <span className="font-semibold text-[#ff5600]">
-                                  {order.price || (isAppointment ? 'Booking' : 'N/A')}
-                                </span>
-                                {order.paymentMethod && (
-                                  <span className="block text-[10px] text-[#7b7b78] font-normal uppercase mt-0.5">
-                                    {order.paymentMethod}
-                                  </span>
-                                )}
-                              </td>
-
-                              {/* Delivery / Schedule */}
-                              <td className="py-3.5 px-4 align-top max-w-[180px]">
-                                <div className="text-xs text-[#111111] font-medium truncate" title={order.deliveryAddress || 'Pending Details'}>
-                                  {order.deliveryAddress || 'Pending Details'}
-                                </div>
-                                {!isAppointment && (order.size || order.color) && (
-                                  <div className="text-[10px] text-[#7b7b78] font-normal mt-0.5">
-                                    {order.size ? `Size: ${order.size}` : ''} {order.color ? `Color: ${order.color}` : ''}
-                                  </div>
-                                )}
-                              </td>
-
-                              {/* Interactive High-Contrast Status Dropdown Select */}
-                              <td className="py-3.5 px-4 align-top">
-                                <select
-                                  value={order.status === 'pending' ? 'new_order' : order.status === 'confirmed' ? 'under_baking' : order.status}
-                                  onChange={async (e) => {
-                                    const newStatus = e.target.value;
-                                    stopOrderAlarm();
-                                    const deliveredAtISO = newStatus === 'delivered' ? new Date().toISOString() : undefined;
-                                    setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: newStatus, deliveredAt: deliveredAtISO } : o));
-                                    await fetch('/api/whatsapp/orders', {
-                                      method: 'PATCH',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ id: order.id, status: newStatus, deliveredAt: deliveredAtISO })
-                                    });
-                                    fetchOrders();
-                                  }}
-                                  className={`text-xs font-black px-3 py-1.5 rounded-xl border-2 outline-none cursor-pointer transition-all shadow-sm ${
-                                    statusLower === 'new_order' || statusLower === 'new' || statusLower === 'new order' || statusLower === 'pending' ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-400/30 animate-pulse' :
-                                    statusLower === 'under_baking' || statusLower === 'under baking' || statusLower === 'under_booking' || statusLower === 'confirmed' ? 'bg-amber-500 text-white border-amber-600 ring-2 ring-amber-400/30' :
-                                    statusLower === 'delivered' || statusLower === 'deliver' ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400/30' :
-                                    statusLower === 'cancelled' ? 'bg-rose-600 text-white border-rose-700 ring-2 ring-rose-400/30' :
-                                    'bg-slate-700 text-white border-slate-800'
-                                  }`}
-                                >
-                                  <option value="new_order" className="bg-blue-600 text-white font-extrabold py-1">🔵 New Order</option>
-                                  <option value="under_baking" className="bg-amber-600 text-white font-extrabold py-1">🟠 Under Baking</option>
-                                  <option value="delivered" className="bg-emerald-600 text-white font-extrabold py-1">🟢 Delivered</option>
-                                  <option value="cancelled" className="bg-rose-600 text-white font-extrabold py-1">🔴 Cancelled</option>
-                                </select>
-                              </td>
-
-                              {/* Action Buttons (Details Button Opens 70% Side Panel Drawer) */}
-                              <td className="py-3.5 px-4 align-top text-right space-x-2">
-                                <button
-                                  onClick={() => setSelectedOrderDetail(order)}
-                                  className="px-3 py-1.5 text-xs font-semibold bg-[#111111] hover:bg-black text-white rounded-lg transition-all shadow-xs cursor-pointer inline-flex items-center gap-1.5 active:scale-95"
-                                  title="View complete order details & AI notes in side drawer"
-                                >
-                                  <FileText className="w-3.5 h-3.5 text-[#ff5600]" />
-                                  <span>Details</span>
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                <button
+                  onClick={() => playSweetOrderSound(0.95)}
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium bg-[#ff5600] text-white hover:bg-[#e04c00] transition-all shadow-xs cursor-pointer"
+                  title="Play sample sweet order alert sound"
+                >
+                  <BellRing className="h-4 w-4 text-white animate-pulse" />
+                  <span>Test Sweet Sound 🔔</span>
+                </button>
               </div>
             </div>
 
-            {/* 70% Screen Width Side Panel Dialog / Drawer (Upgraded Order Details & Product Catalog UI) */}
-            {selectedOrderDetail && (
-              <div className="fixed inset-0 z-50 flex justify-end">
-                {/* Backdrop */}
-                <div 
-                  className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
-                  onClick={() => setSelectedOrderDetail(null)}
-                />
-
-                {/* Slide-over Drawer Panel */}
-                <div className="relative w-[85vw] md:w-[70vw] max-w-5xl h-full bg-[#f8f6f2] shadow-2xl border-l border-[#d3cec6] z-50 flex flex-col overflow-y-auto animate-in slide-in-from-right duration-200">
-                  
-                  {/* Drawer Top Header */}
-                  <div className="p-5 bg-white border-b border-[#d3cec6] flex items-center justify-between sticky top-0 z-20 shadow-xs">
-                    <div className="flex items-center gap-3">
-                      <div className="bg-[#ff5600] text-white p-2.5 rounded-xl shadow-xs">
-                        <ShoppingCart className="w-5 h-5 text-white" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-bold text-[#111111] tracking-tight">Order Details</h3>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#ebe7e1] text-[#626260] font-mono border border-[#d3cec6]">
-                            #{selectedOrderDetail.id}
-                          </span>
-                        </div>
-                        <p className="text-xs text-[#7b7b78] font-medium">
-                          Placed {isMounted ? new Date(selectedOrderDetail.timestamp).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : ""}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      {/* Change Status Dropdown in Drawer Header */}
-                      <select
-                        value={selectedOrderDetail.status === 'pending' ? 'new_order' : selectedOrderDetail.status === 'confirmed' ? 'under_baking' : selectedOrderDetail.status}
-                        onChange={async (e) => {
-                          const newStatus = e.target.value;
-                          stopOrderAlarm();
-                          const deliveredAtISO = newStatus === 'delivered' ? new Date().toISOString() : undefined;
-                          setOrders(prev => prev.map(o => o.id === selectedOrderDetail.id ? { ...o, status: newStatus, deliveredAt: deliveredAtISO } : o));
-                          await fetch('/api/whatsapp/orders', {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id: selectedOrderDetail.id, status: newStatus, deliveredAt: deliveredAtISO })
-                          });
-                          selectedOrderDetail.status = newStatus;
-                          selectedOrderDetail.deliveredAt = deliveredAtISO;
-                          fetchOrders();
-                        }}
-                        className={`text-xs font-black px-3.5 py-2 rounded-xl border-2 outline-none cursor-pointer transition-all shadow-xs ${
-                          selectedOrderDetail.status === 'new_order' || selectedOrderDetail.status === 'new' || selectedOrderDetail.status === 'pending' ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-400/30 animate-pulse' :
-                          selectedOrderDetail.status === 'under_baking' || selectedOrderDetail.status === 'under baking' || selectedOrderDetail.status === 'confirmed' ? 'bg-amber-500 text-white border-amber-600 ring-2 ring-amber-400/30' :
-                          selectedOrderDetail.status === 'delivered' || selectedOrderDetail.status === 'deliver' ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400/30' :
-                          selectedOrderDetail.status === 'cancelled' ? 'bg-rose-600 text-white border-rose-700 ring-2 ring-rose-400/30' :
-                          'bg-slate-700 text-white border-slate-800'
-                        }`}
-                      >
-                        <option value="new_order" className="bg-blue-600 text-white font-extrabold py-1">🔵 New Order</option>
-                        <option value="under_baking" className="bg-amber-600 text-white font-extrabold py-1">🟠 Under Baking</option>
-                        <option value="delivered" className="bg-emerald-600 text-white font-extrabold py-1">🟢 Delivered</option>
-                        <option value="cancelled" className="bg-rose-600 text-white font-extrabold py-1">🔴 Cancelled</option>
-                      </select>
-
-                      <button 
-                        onClick={() => setSelectedOrderDetail(null)}
-                        className="p-2 text-[#7b7b78] hover:text-[#111111] hover:bg-[#ebe7e1] rounded-xl transition-colors cursor-pointer"
-                        title="Close Drawer"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Drawer Main Body Container */}
-                  <div className="p-6 md:p-8 space-y-6 flex-1">
-                    
-                    {/* Top Task Info Quick Stats Bar (Image 1 UI Style) */}
-                    <div className="bg-white p-5 rounded-2xl border border-[#d3cec6] shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                      
-                      {/* Stat 1: Order / Preparing Time */}
-                      <div className="flex items-center gap-3 pr-4 border-r-0 md:border-r border-[#ebe7e1]">
-                        <div className="w-10 h-10 rounded-xl bg-orange-50 text-[#ff5600] flex items-center justify-center shrink-0 border border-orange-100">
-                          <Clock className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <div className="text-[10px] text-[#7b7b78] uppercase font-bold tracking-wider">Preparing / Order Time</div>
-                          <div className="text-sm font-extrabold text-[#111111] font-mono mt-0.5">
-                            {isMounted ? new Date(selectedOrderDetail.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just Now"}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Stat 2: Delivery Address */}
-                      <div className="flex items-center gap-3 pr-4 border-r-0 md:border-r border-[#ebe7e1]">
-                        <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
-                          <MapPin className="w-5 h-5" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[10px] text-[#7b7b78] uppercase font-bold tracking-wider">Delivery Destination</div>
-                          {(() => {
-                            // Resolve best available delivery address
-                            const orderAddr = selectedOrderDetail.deliveryAddress;
-                            const isPlaceholder = !orderAddr || orderAddr.toLowerCase().includes("provided in chat") || orderAddr.toLowerCase().includes("to be confirmed");
-                            let resolvedAddr = isPlaceholder ? "" : orderAddr;
-                            if (!resolvedAddr) {
-                              // Try customer saved address from preferences JSON
-                              try {
-                                const prefs = JSON.parse(customers[selectedOrderDetail.phone]?.preferences || "{}");
-                                resolvedAddr = prefs.deliveryAddress || "";
-                              } catch (_) {}
-                            }
-                            if (!resolvedAddr) {
-                              resolvedAddr = customers[selectedOrderDetail.phone]?.address || "";
-                            }
-                            return (
-                              <div className="text-xs font-semibold text-[#111111] truncate mt-0.5" title={resolvedAddr || 'Pending Address'}>
-                                {resolvedAddr || 'Pending Address'}
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      </div>
-
-                      {/* Stat 3: Customer & Quick Communication Buttons */}
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-sm shrink-0 border border-emerald-100">
-                            <User className="w-5 h-5" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-xs font-bold text-[#111111] truncate">
-                              {customers[selectedOrderDetail.phone]?.name || selectedOrderDetail.customerName || "Customer"}
-                            </div>
-                            <div className="text-[11px] text-[#626260] font-mono">{selectedOrderDetail.phone}</div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <a 
-                            href={`https://wa.me/${selectedOrderDetail.phone.replace(/[^0-9]/g, '')}`} 
-                            target="_blank" 
-                            rel="noreferrer" 
-                            className="p-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl transition-all shadow-xs flex items-center justify-center cursor-pointer"
-                            title="Message on WhatsApp"
-                          >
-                            <Phone className="w-4 h-4 text-white" />
-                          </a>
-
-                          <button
-                            onClick={() => {
-                              openChatForPhone(selectedOrderDetail.phone);
-                              setSelectedOrderDetail(null);
-                            }}
-                            className="p-2.5 bg-[#111111] hover:bg-black text-white rounded-xl transition-all shadow-xs flex items-center justify-center cursor-pointer"
-                            title="Open Chat History in Inbox"
-                          >
-                            <MessageSquare className="w-4 h-4 text-[#ff5600]" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Section Switcher Tabs inside Order Drawer */}
-                    {(() => {
-                      // Internal drawer sub-tab state helper
-                      const matchedCatalogProducts = (config.products || []).filter((p: any) => {
-                        const searchLower = (selectedOrderDetail.productName || "").toLowerCase();
-                        return p.title && searchLower.includes(p.title.toLowerCase().trim());
-                      });
-
-                      return (
-                        <div className="space-y-6">
-                          
-                          {/* Main Order Items & Invoice Breakdown Card (Image 1 UI Layout) */}
-                          <div className="bg-white rounded-2xl border border-[#d3cec6] shadow-sm overflow-hidden p-6 md:p-8 space-y-6">
-                            
-                            <div className="flex items-center justify-between pb-4 border-b border-[#ebe7e1]">
-                              <div className="flex items-center gap-2.5">
-                                <Package className="w-5 h-5 text-[#ff5600]" />
-                                <h4 className="text-sm font-extrabold text-[#111111] uppercase tracking-wider">
-                                  Task Info & Itemized Breakdown
-                                </h4>
-                              </div>
-                              
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold px-3 py-1 rounded-full bg-[#f5f1ec] text-[#626260] border border-[#d3cec6]">
-                                  {matchedCatalogProducts.length > 0 ? `${matchedCatalogProducts.length} Matched from Catalog` : 'Custom WhatsApp Order'}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Itemized Order List (Image 1 Layout with Thumbnails, Qty x1/x2, Specs, & Line Price) */}
-                            <div className="divide-y divide-[#ebe7e1]">
-                              {(() => {
-                                // Split multi-item product names if comma/newline separated
-                                const rawItems = (selectedOrderDetail.productName || "General Order").split(/,|\n/).map((s: string) => s.trim()).filter(Boolean);
-                                
-                                return rawItems.map((itemStr: string, idx: number) => {
-                                  // Extract embedded price if present: e.g. "Large Crown Crust (PKR 3,180)"
-                                  let embeddedPrice = "";
-                                  let cleanItemStr = itemStr;
-                                  const embeddedPriceMatch = itemStr.match(/\((?:PKR|Rs\.?|\$)\s*([\d,]+)\)$/i);
-                                  if (embeddedPriceMatch) {
-                                    embeddedPrice = `PKR ${parseInt(embeddedPriceMatch[1].replace(/,/g, "")).toLocaleString()}`;
-                                    cleanItemStr = itemStr.replace(/\s*\((?:PKR|Rs\.?|\$)\s*[\d,]+\)$/i, "").trim();
-                                  }
-
-                                  // Extract quantity if formatted as "2x item" or "item (x2)"
-                                  let qty = 1;
-                                  let itemName = cleanItemStr;
-                                  const qtyMatch = cleanItemStr.match(/^(\d+)\s*x\s*(.+)$/i) || cleanItemStr.match(/^(.+)\s*\(x?(\d+)\)$/i);
-                                  if (qtyMatch) {
-                                    if (/^\d+$/.test(qtyMatch[1])) {
-                                      qty = parseInt(qtyMatch[1]);
-                                      itemName = qtyMatch[2].trim();
-                                    } else {
-                                      itemName = qtyMatch[1].trim();
-                                      qty = parseInt(qtyMatch[2]);
-                                    }
-                                  }
-
-                                  // Match against store product catalog items (flexible matching for titles/images)
-                                  const matchedCat = (config.products || []).find((p: any) => {
-                                    if (!p.title) return false;
-                                    const pTitle = p.title.toLowerCase().trim();
-                                    const iTitle = itemName.toLowerCase().trim();
-                                    return iTitle.includes(pTitle) || pTitle.includes(iTitle) || 
-                                           pTitle.split(' ').some(w => w.length > 3 && iTitle.includes(w));
-                                  });
-
-                                  const imgUrl = matchedCat?.image || matchedCat?.imageUrl || (matchedCat?.images && matchedCat.images[0]) || selectedOrderDetail.productImageUrl;
-                                  const displayPrice = embeddedPrice || (matchedCat?.price ? (matchedCat.price.includes("PKR") || matchedCat.price.includes("Rs.") ? matchedCat.price : `PKR ${matchedCat.price}`) : (rawItems.length === 1 ? selectedOrderDetail.price : "—"));
-
-                                  return (
-                                    <div key={idx} className="py-4 first:pt-0 last:pb-0 flex items-center justify-between gap-4 flex-wrap hover:bg-[#f5f1ec]/40 p-2 rounded-xl transition-all">
-                                      
-                                      {/* Left: Product Thumbnail & Details */}
-                                      <div className="flex items-center gap-4 min-w-[240px] flex-1">
-                                        <div className="w-16 h-16 rounded-xl bg-[#f5f1ec] border border-[#d3cec6] overflow-hidden shrink-0 shadow-xs flex items-center justify-center">
-                                          {imgUrl ? (
-                                            <img src={imgUrl} alt={itemName} className="w-full h-full object-cover" />
-                                          ) : (
-                                            <Package className="w-8 h-8 text-[#ff5600]/80" />
-                                          )}
-                                        </div>
-
-                                        <div className="space-y-1 min-w-0">
-                                          <h5 className="font-bold text-[#111111] text-sm leading-snug">
-                                            {itemName}
-                                          </h5>
-                                          
-                                          {/* Specifications / Notes Pill */}
-                                          <div className="flex flex-wrap gap-1.5 items-center">
-                                            {selectedOrderDetail.size && (
-                                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-[#ebe7e1] text-[#626260]">
-                                                {selectedOrderDetail.size}
-                                              </span>
-                                            )}
-                                            {selectedOrderDetail.color && (
-                                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-[#ebe7e1] text-[#626260]">
-                                                Color: {selectedOrderDetail.color}
-                                              </span>
-                                            )}
-                                            {matchedCat?.category && (
-                                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
-                                                {matchedCat.category}
-                                              </span>
-                                            )}
-                                            {selectedOrderDetail.paymentMethod && (
-                                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
-                                                {selectedOrderDetail.paymentMethod}
-                                              </span>
-                                            )}
-                                          </div>
-
-                                          {matchedCat?.description && (
-                                            <p className="text-[11px] text-[#7b7b78] line-clamp-1 italic">
-                                              {matchedCat.description}
-                                            </p>
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      {/* Center: Quantity Pill (Image 1 Style "x2") */}
-                                      <div className="flex items-center justify-center px-4 py-1.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-xl font-mono text-xs font-black text-[#111111]">
-                                        x{qty}
-                                      </div>
-
-                                      {/* Right: Line Item Total */}
-                                      <div className="text-right font-extrabold text-[#111111] text-sm min-w-[90px]">
-                                        {displayPrice}
-                                      </div>
-                                    </div>
-                                  );
-                                });
-                              })()}
-                            </div>
-
-                            {/* Large Total Price & Calculation Summary Card (Image 1 Big Price Style) */}
-                            <div className="bg-[#f5f1ec] p-5 rounded-2xl border border-[#d3cec6] space-y-3">
-                              <div className="flex justify-between text-xs font-semibold text-[#626260]">
-                                <span>Subtotal Order Items</span>
-                                <span className="font-bold text-[#111111]">{selectedOrderDetail.price || 'COD'}</span>
-                              </div>
-                              
-                              <div className="flex justify-between text-xs font-semibold text-[#626260]">
-                                <span>Delivery / Shipping Charge</span>
-                                <span className="font-bold text-emerald-700 bg-emerald-100/80 px-2.5 py-0.5 rounded-md text-[10px] border border-emerald-300">
-                                  Free / Included
-                                </span>
-                              </div>
-
-                              <div className="flex justify-between text-xs font-semibold text-[#626260]">
-                                <span>Payment Mode</span>
-                                <span className="font-bold text-[#111111]">{selectedOrderDetail.paymentMethod || 'Cash on Delivery (COD)'}</span>
-                              </div>
-
-                              <div className="pt-3 border-t border-[#d3cec6] flex justify-between items-center">
-                                <div className="space-y-0.5">
-                                  <span className="text-xs font-black uppercase tracking-wider text-[#111111] block">
-                                    Grand Total Price
-                                  </span>
-                                  <span className="text-[10px] text-[#7b7b78] font-medium block">Taxes included</span>
-                                </div>
-
-                                <div className="text-2xl md:text-3xl font-black text-[#ff5600] tracking-tight font-mono">
-                                  {selectedOrderDetail.price || 'COD'}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Bottom Primary Action Button (Image 1 Vibrant CTA Style) */}
-                            <div className="pt-2">
-                              {selectedOrderDetail.status === 'delivered' || selectedOrderDetail.status === 'deliver' ? (
-                                <button
-                                  disabled
-                                  className="w-full py-4 bg-emerald-600 text-white font-extrabold rounded-2xl shadow-md flex items-center justify-center gap-2 cursor-not-allowed opacity-90"
-                                >
-                                  <Check className="w-5 h-5 text-white" />
-                                  <span>Order Delivered & Completed</span>
-                                </button>
-                              ) : selectedOrderDetail.status === 'under_baking' || selectedOrderDetail.status === 'confirmed' ? (
-                                <button
-                                  onClick={async () => {
-                                    await fetch('/api/whatsapp/orders', {
-                                      method: 'PATCH',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ id: selectedOrderDetail.id, status: 'delivered' })
-                                    });
-                                    selectedOrderDetail.status = 'delivered';
-                                    fetchOrders();
-                                  }}
-                                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
-                                >
-                                  <Check className="w-5 h-5 text-white" />
-                                  <span>Mark Order as Delivered 🟢</span>
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={async () => {
-                                    await fetch('/api/whatsapp/orders', {
-                                      method: 'PATCH',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ id: selectedOrderDetail.id, status: 'under_baking' })
-                                    });
-                                    selectedOrderDetail.status = 'under_baking';
-                                    fetchOrders();
-                                  }}
-                                  className="w-full py-4 bg-[#ff5600] hover:bg-[#e04c00] text-white font-extrabold text-sm rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
-                                >
-                                  <ShoppingCart className="w-5 h-5 text-white" />
-                                  <span>Accept & Start Preparing Order 🟠</span>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Store Product Catalog Inspector & Quick-Add Section */}
-                          <div className="bg-white rounded-2xl border border-[#d3cec6] shadow-sm p-6 space-y-5">
-                            <div className="flex items-center justify-between pb-3 border-b border-[#ebe7e1]">
-                              <div className="flex items-center gap-2.5">
-                                <BookOpen className="w-5 h-5 text-[#ff5600]" />
-                                <h4 className="text-xs font-bold text-[#111111] uppercase tracking-wider">
-                                  Store Product Catalog ({config.products?.length || 0} Available Items)
-                                </h4>
-                              </div>
-                              <span className="text-[11px] text-[#7b7b78] font-medium">Click any catalog item to append or copy specs</span>
-                            </div>
-
-                            {(!config.products || config.products.length === 0) ? (
-                              <div className="p-8 text-center bg-[#f5f1ec] rounded-xl border border-dashed border-[#d3cec6] text-xs text-[#7b7b78] space-y-2">
-                                <p className="font-semibold">No products found in store catalog.</p>
-                                <p className="text-[11px]">Go to <button onClick={() => { setActiveTab('knowledge'); setSelectedOrderDetail(null); }} className="text-[#ff5600] font-bold underline cursor-pointer">Knowledge Base &gt; Products</button> to add your store menu.</p>
-                              </div>
-                            ) : (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[350px] overflow-y-auto pr-1">
-                                {config.products.map((prod: any, pIdx: number) => {
-                                  const isSelected = (selectedOrderDetail.productName || "").toLowerCase().includes((prod.title || "").toLowerCase());
-                                  
-                                  return (
-                                    <div 
-                                      key={prod.id || pIdx} 
-                                      className={`p-3.5 rounded-xl border transition-all flex items-center justify-between gap-3 ${
-                                        isSelected 
-                                          ? 'bg-orange-50/80 border-[#ff5600] ring-1 ring-[#ff5600]/30 shadow-xs' 
-                                          : 'bg-[#f5f1ec] border-[#d3cec6] hover:bg-white hover:border-[#b8b3ab]'
-                                      }`}
-                                    >
-                                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                                        <div className="w-12 h-12 rounded-lg bg-white border border-[#d3cec6] overflow-hidden shrink-0 flex items-center justify-center">
-                                          {prod.image ? (
-                                            <img src={prod.image} alt={prod.title} className="w-full h-full object-cover" />
-                                          ) : (
-                                            <Package className="w-6 h-6 text-[#ff5600]" />
-                                          )}
-                                        </div>
-
-                                        <div className="min-w-0">
-                                          <div className="text-xs font-bold text-[#111111] truncate">{prod.title}</div>
-                                          <div className="text-[11px] font-semibold text-[#ff5600]">{prod.price || 'COD'}</div>
-                                          {prod.category && (
-                                            <span className="text-[9px] text-[#626260] font-medium block truncate">{prod.category}</span>
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      <button
-                                        onClick={async () => {
-                                          const newProductName = `${selectedOrderDetail.productName}, ${prod.title}`;
-                                          await fetch('/api/whatsapp/orders', {
-                                            method: 'PATCH',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ id: selectedOrderDetail.id, productName: newProductName })
-                                          });
-                                          selectedOrderDetail.productName = newProductName;
-                                          fetchOrders();
-                                        }}
-                                        className="px-2.5 py-1.5 bg-[#111111] hover:bg-black text-white text-[10px] font-bold rounded-lg transition-all shrink-0 cursor-pointer active:scale-95 flex items-center gap-1"
-                                        title="Append product to this order"
-                                      >
-                                        <Plus className="w-3 h-3 text-[#ff5600]" /> Add
-                                      </button>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* AI Call Summary & Requirements Card */}
-                          <div className="bg-white p-6 rounded-2xl border border-[#d3cec6] shadow-sm space-y-4">
-                            <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-[#ebe7e1]">
-                              <div className="flex items-center gap-2 text-sm font-bold text-[#111111]">
-                                <FileText className="w-5 h-5 text-[#ff5600]" />
-                                <span>Call Summary & AI Client Requirements</span>
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={async () => {
-                                    setGeneratingNotesId(selectedOrderDetail.id);
-                                    try {
-                                      const res = await fetch('/api/whatsapp/orders', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ id: selectedOrderDetail.id, phone: selectedOrderDetail.phone })
-                                      });
-                                      const data = await res.json();
-                                      if (data.notes) {
-                                        selectedOrderDetail.notes = data.notes;
-                                        fetchOrders();
-                                      }
-                                    } catch (e) {
-                                      console.error(e);
-                                    } finally {
-                                      setGeneratingNotesId(null);
-                                    }
-                                  }}
-                                  disabled={generatingNotesId === selectedOrderDetail.id}
-                                  className="text-xs font-bold text-[#111111] hover:text-black bg-[#f5f1ec] border border-[#d3cec6] hover:border-[#b8b3ab] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
-                                >
-                                  {generatingNotesId === selectedOrderDetail.id ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[#ff5600]" /> : <Sparkles className="w-3.5 h-3.5 text-[#ff5600]" />}
-                                  <span>{generatingNotesId === selectedOrderDetail.id ? 'Generating AI Notes...' : 'Generate AI Notes'}</span>
-                                </button>
-
-                                <button
-                                  onClick={() => {
-                                    if (editingNotesId === selectedOrderDetail.id) {
-                                      setEditingNotesId(null);
-                                    } else {
-                                      setEditingNotesId(selectedOrderDetail.id);
-                                      setNotesInput(selectedOrderDetail.notes || "");
-                                    }
-                                  }}
-                                  className="text-xs font-bold text-[#626260] hover:text-[#111111] bg-[#f5f1ec] border border-[#d3cec6] hover:border-[#b8b3ab] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5 text-[#7b7b78]" />
-                                  <span>{editingNotesId === selectedOrderDetail.id ? 'Cancel' : 'Edit Notes'}</span>
-                                </button>
-                              </div>
-                            </div>
-
-                            {editingNotesId === selectedOrderDetail.id ? (
-                              <div className="space-y-3 pt-1">
-                                <textarea
-                                  value={notesInput}
-                                  onChange={(e) => setNotesInput(e.target.value)}
-                                  placeholder="Add custom call summary, client requirements, or special instructions..."
-                                  className="w-full p-4 text-xs bg-[#f5f1ec] border border-[#d3cec6] rounded-xl focus:ring-2 focus:ring-[#ff5600]/20 outline-none text-[#111111] font-medium min-h-[120px]"
-                                />
-                                <div className="flex justify-end gap-2">
-                                  <button
-                                    onClick={async () => {
-                                      await fetch('/api/whatsapp/orders', {
-                                        method: 'PATCH',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ id: selectedOrderDetail.id, notes: notesInput })
-                                      });
-                                      selectedOrderDetail.notes = notesInput;
-                                      setEditingNotesId(null);
-                                      fetchOrders();
-                                    }}
-                                    className="px-4 py-2 bg-[#111111] hover:bg-black text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shadow-xs"
-                                  >
-                                    Save Notes
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="text-xs text-[#111111] font-normal leading-relaxed bg-[#f5f1ec] p-4 rounded-xl border border-[#d3cec6] min-h-[90px]">
-                                {selectedOrderDetail.notes ? (
-                                  <p className="whitespace-pre-wrap">{selectedOrderDetail.notes}</p>
-                                ) : (
-                                  <span className="text-[#7b7b78] italic text-xs">No summary notes recorded yet. Click "Generate AI Notes" or "Edit Notes" to record details.</span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
+            {/* Real-time Order Counter Badges */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white p-4 rounded-xl border border-blue-200 shadow-xs flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] font-extrabold text-blue-700 uppercase tracking-wider">New Incoming Orders</div>
+                  <div className="text-2xl font-black text-blue-900 font-mono mt-0.5">{newOrdersCount}</div>
+                </div>
+                <div className="bg-blue-600 text-white h-10 w-10 rounded-xl flex items-center justify-center font-extrabold text-sm shadow-xs animate-pulse">
+                  🔵
                 </div>
               </div>
-            )}
+
+              <div className="bg-white p-4 rounded-xl border border-amber-200 shadow-xs flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] font-extrabold text-amber-700 uppercase tracking-wider">Under Baking</div>
+                  <div className="text-2xl font-black text-amber-900 font-mono mt-0.5">{underBakingOrdersCount}</div>
+                </div>
+                <div className="bg-amber-500 text-white h-10 w-10 rounded-xl flex items-center justify-center font-extrabold text-sm shadow-xs">
+                  🟠
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border border-emerald-200 shadow-xs flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] font-extrabold text-emerald-700 uppercase tracking-wider">Delivered</div>
+                  <div className="text-2xl font-black text-emerald-900 font-mono mt-0.5">{deliveredOrdersCount}</div>
+                </div>
+                <div className="bg-emerald-600 text-white h-10 w-10 rounded-xl flex items-center justify-center font-extrabold text-sm shadow-xs">
+                  🟢
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border border-[#d3cec6] shadow-xs flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] font-extrabold text-[#7b7b78] uppercase tracking-wider">Total Active Queue</div>
+                  <div className="text-2xl font-black text-[#111111] font-mono mt-0.5">{orders.length}</div>
+                </div>
+                <div className="bg-[#111111] text-white h-10 w-10 rounded-xl flex items-center justify-center font-extrabold text-sm shadow-xs">
+                  📋
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Pills with Live Counter Badges */}
+            <div className="flex gap-2.5 mb-3 flex-wrap items-center">
+              {[
+                { id: 'all', label: 'All Items', count: orders.length, dotColor: 'bg-slate-700', activeClass: 'bg-[#111111] text-white shadow-md', badgeActive: 'bg-white text-slate-900', badgeInactive: 'bg-slate-200 text-slate-800' },
+                { id: 'new_order', label: 'New Order', count: newOrdersCount, dotColor: 'bg-blue-500', activeClass: 'bg-blue-600 text-white shadow-md ring-2 ring-blue-400/40', badgeActive: 'bg-white text-blue-900', badgeInactive: 'bg-blue-100 text-blue-800' },
+                { id: 'under_baking', label: 'Under Baking', count: underBakingOrdersCount, dotColor: 'bg-amber-500', activeClass: 'bg-amber-500 text-white shadow-md ring-2 ring-amber-400/40', badgeActive: 'bg-white text-amber-900', badgeInactive: 'bg-amber-100 text-amber-800' },
+                { id: 'delivered', label: 'Delivered', count: deliveredOrdersCount, dotColor: 'bg-emerald-500', activeClass: 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400/40', badgeActive: 'bg-white text-emerald-900', badgeInactive: 'bg-emerald-100 text-emerald-800' },
+                { id: 'cancelled', label: 'Cancelled', count: cancelledOrdersCount, dotColor: 'bg-rose-500', activeClass: 'bg-rose-600 text-white shadow-md ring-2 ring-rose-400/40', badgeActive: 'bg-white text-rose-900', badgeInactive: 'bg-rose-100 text-rose-800' }
+              ].map(filter => {
+                const isActive = orderFilter === filter.id;
+                return (
+                  <button
+                    key={filter.id}
+                    onClick={() => setOrderFilter(filter.id as any)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer active:scale-95 ${
+                      isActive ? filter.activeClass : 'bg-[#ebe7e1] text-[#626260] hover:text-[#111111] hover:bg-[#e2ddd5]'
+                    }`}
+                  >
+                    <span className={`w-2.5 h-2.5 rounded-full ${filter.dotColor} ${isActive ? 'ring-2 ring-white/50' : ''}`} />
+                    <span>{filter.label}</span>
+                    <span key={filter.count} className={`px-2 py-0.5 rounded-full text-[11px] font-black min-w-[20px] text-center shadow-xs transition-all animate-pop-in ${
+                      isActive ? filter.badgeActive : filter.badgeInactive
+                    }`}>
+                      {filter.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Full-Width Intercom Data Table */}
+            <div className="dash-card p-0 overflow-hidden min-h-[500px] bg-white border border-[#d3cec6] rounded-xl shadow-xs">
+              {orders.filter(o => {
+                const statusLower = o.status?.toLowerCase() || '';
+                const isDelivered = statusLower === 'delivered' || statusLower === 'deliver';
+
+                // Auto-hide delivered orders older than 5 minutes to prevent clutter
+                if (isDelivered) {
+                  const deliveredTime = o.deliveredAt ? new Date(o.deliveredAt).getTime() : (o.timestamp ? new Date(o.timestamp).getTime() : null);
+                  if (deliveredTime && (Date.now() - deliveredTime > 5 * 60 * 1000)) {
+                    return false;
+                  }
+                }
+
+                if (orderFilter === 'all') return true;
+                if (orderFilter === 'new_order') return statusLower === 'new_order' || statusLower === 'new' || statusLower === 'new order' || statusLower === 'pending';
+                if (orderFilter === 'under_baking') return statusLower === 'under_baking' || statusLower === 'under baking' || statusLower === 'under_booking' || statusLower === 'confirmed';
+                if (orderFilter === 'delivered') return isDelivered;
+                return o.status === orderFilter;
+              }).length === 0 ? (
+                <div className="text-center p-12 bg-[#f5f1ec] text-[#7b7b78] font-medium text-xs">
+                  No active orders found.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-[#f5f1ec] border-b border-[#d3cec6] text-[11px] font-semibold text-[#7b7b78] uppercase tracking-wider">
+                        <th className="py-3.5 px-4 w-14 text-center">#</th>
+                        <th className="py-3.5 px-4">Date</th>
+                        <th className="py-3.5 px-4">Customer / Lead</th>
+                        <th className="py-3.5 px-4">Type & Product</th>
+                        <th className="py-3.5 px-4">Price</th>
+                        <th className="py-3.5 px-4">Delivery / Schedule</th>
+                        <th className="py-3.5 px-4">Status</th>
+                        <th className="py-3.5 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#ebe7e1] text-xs">
+                      {orders.filter(o => {
+                        const statusLower = o.status?.toLowerCase() || '';
+                        const isDelivered = statusLower === 'delivered' || statusLower === 'deliver';
+
+                        // Auto-hide delivered orders older than 5 minutes to prevent clutter
+                        if (isDelivered) {
+                          const deliveredTime = o.deliveredAt ? new Date(o.deliveredAt).getTime() : (o.timestamp ? new Date(o.timestamp).getTime() : null);
+                          if (deliveredTime && (Date.now() - deliveredTime > 5 * 60 * 1000)) {
+                            return false;
+                          }
+                        }
+
+                        if (orderFilter === 'all') return true;
+                        if (orderFilter === 'new_order') return statusLower === 'new_order' || statusLower === 'new' || statusLower === 'new order' || statusLower === 'pending';
+                        if (orderFilter === 'under_baking') return statusLower === 'under_baking' || statusLower === 'under baking' || statusLower === 'under_booking' || statusLower === 'confirmed';
+                        if (orderFilter === 'delivered') return isDelivered;
+                        return o.status === orderFilter;
+                      }).map((order, idx) => {
+                        const isAppointment = order.productName.includes('Appointment') || order.productName.startsWith('📅');
+                        const clientName = customers[order.phone]?.name || order.customerName || order.phone || "Verified Client";
+                        const statusLower = order.status?.toLowerCase() || '';
+
+                        return (
+                          <tr key={order.id} className="hover:bg-[#f5f1ec]/60 transition-colors">
+                            {/* Row Counter Index */}
+                            <td className="py-3.5 px-4 align-top text-center">
+                              <span className="font-mono text-xs font-semibold text-[#111111] bg-[#ebe7e1] px-2.5 py-1 rounded border border-[#d3cec6] inline-block">
+                                #{idx + 1}
+                              </span>
+                            </td>
+
+                            {/* Timestamp */}
+                            <td className="py-3.5 px-4 align-top">
+                              <div className="text-[11px] text-[#111111] font-medium flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-[#7b7b78]" />
+                                {isMounted ? new Date(order.timestamp).toLocaleString([], { month: '2-digit', day: '2-digit', hour: 'numeric', minute: '2-digit', hour12: true }) : ""}
+                              </div>
+                            </td>
+
+                            {/* Clickable Customer / Lead Cell (Opens Inbox Chat directly) */}
+                            <td className="py-3.5 px-4 align-top">
+                              <div
+                                onClick={() => openChatForPhone(order.phone)}
+                                className="flex items-center gap-2.5 group cursor-pointer w-fit p-1 -m-1 rounded-lg hover:bg-[#ebe7e1]/80 transition-all"
+                                title="Click to open full chat history in Inbox"
+                              >
+                                <div className="w-7 h-7 rounded-full bg-[#111111] text-white flex items-center justify-center font-medium text-xs shrink-0 group-hover:bg-[#ff5600] transition-colors">
+                                  <User className="w-4 h-4 text-white" />
+                                </div>
+                                <div>
+                                  <div className="font-semibold text-[#111111] group-hover:text-[#ff5600] transition-colors flex items-center gap-1.5">
+                                    {clientName}
+                                    <MessageCircle className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-110 transition-transform" />
+                                  </div>
+                                  <div className="text-[11px] text-[#626260] font-mono">{order.phone}</div>
+                                  {(order.deliveryAddress || customers[order.phone]?.address) && (
+                                    <div className="text-[10px] text-[#7b7b78] flex items-center gap-1 mt-0.5 max-w-[200px] truncate" title={order.deliveryAddress || customers[order.phone]?.address}>
+                                      <MapPin className="w-3 h-3 text-[#ff5600] shrink-0" />
+                                      <span className="truncate">{order.deliveryAddress || customers[order.phone]?.address}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Product & Type */}
+                            <td className="py-3.5 px-4 align-top">
+                              <div className="font-semibold text-[#111111] max-w-[220px] truncate">{order.productName}</div>
+                              <span className={`text-[9px] font-semibold px-2 py-0.5 rounded uppercase tracking-wider inline-flex items-center gap-1 mt-1 ${isAppointment
+                                  ? 'bg-[#ebe7e1] text-[#111111] border border-[#d3cec6]'
+                                  : 'bg-[#f5f1ec] text-[#111111] border border-[#d3cec6]'
+                                }`}>
+                                {isAppointment ? <Calendar className="w-2.5 h-2.5 text-[#ff5600]" /> : <ShoppingCart className="w-2.5 h-2.5 text-[#ff5600]" />}
+                                {isAppointment ? 'Appointment' : 'Product Order'}
+                              </span>
+                            </td>
+
+                            {/* Price */}
+                            <td className="py-3.5 px-4 align-top">
+                              <span className="font-semibold text-[#ff5600]">
+                                {order.price || (isAppointment ? 'Booking' : 'N/A')}
+                              </span>
+                              {order.paymentMethod && (
+                                <span className="block text-[10px] text-[#7b7b78] font-normal uppercase mt-0.5">
+                                  {order.paymentMethod}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Delivery / Schedule */}
+                            <td className="py-3.5 px-4 align-top max-w-[180px]">
+                              <div className="text-xs text-[#111111] font-medium truncate" title={order.deliveryAddress || 'Pending Details'}>
+                                {order.deliveryAddress || 'Pending Details'}
+                              </div>
+                              {!isAppointment && (order.size || order.color) && (
+                                <div className="text-[10px] text-[#7b7b78] font-normal mt-0.5">
+                                  {order.size ? `Size: ${order.size}` : ''} {order.color ? `Color: ${order.color}` : ''}
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Interactive High-Contrast Status Dropdown Select */}
+                            <td className="py-3.5 px-4 align-top">
+                              <select
+                                value={order.status === 'pending' ? 'new_order' : order.status === 'confirmed' ? 'under_baking' : order.status}
+                                onChange={async (e) => {
+                                  const newStatus = e.target.value;
+                                  stopOrderAlarm();
+                                  const deliveredAtISO = newStatus === 'delivered' ? new Date().toISOString() : undefined;
+                                  setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: newStatus, deliveredAt: deliveredAtISO } : o));
+                                  await fetch('/api/whatsapp/orders', {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ id: order.id, status: newStatus, deliveredAt: deliveredAtISO })
+                                  });
+                                  fetchOrders();
+                                }}
+                                className={`text-xs font-black px-3 py-1.5 rounded-xl border-2 outline-none cursor-pointer transition-all shadow-sm ${statusLower === 'new_order' || statusLower === 'new' || statusLower === 'new order' || statusLower === 'pending' ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-400/30 animate-pulse' :
+                                    statusLower === 'under_baking' || statusLower === 'under baking' || statusLower === 'under_booking' || statusLower === 'confirmed' ? 'bg-amber-500 text-white border-amber-600 ring-2 ring-amber-400/30' :
+                                      statusLower === 'delivered' || statusLower === 'deliver' ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400/30' :
+                                        statusLower === 'cancelled' ? 'bg-rose-600 text-white border-rose-700 ring-2 ring-rose-400/30' :
+                                          'bg-slate-700 text-white border-slate-800'
+                                  }`}
+                              >
+                                <option value="new_order" className="bg-blue-600 text-white font-extrabold py-1">🔵 New Order</option>
+                                <option value="under_baking" className="bg-amber-600 text-white font-extrabold py-1">🟠 Under Baking</option>
+                                <option value="delivered" className="bg-emerald-600 text-white font-extrabold py-1">🟢 Delivered</option>
+                                <option value="cancelled" className="bg-rose-600 text-white font-extrabold py-1">🔴 Cancelled</option>
+                              </select>
+                            </td>
+
+                            {/* Action Buttons (Details Button Opens 70% Side Panel Drawer) */}
+                            <td className="py-3.5 px-4 align-top text-right space-x-2">
+                              <button
+                                onClick={() => setSelectedOrderDetail(order)}
+                                className="px-3 py-1.5 text-xs font-semibold bg-[#111111] hover:bg-black text-white rounded-lg transition-all shadow-xs cursor-pointer inline-flex items-center gap-1.5 active:scale-95"
+                                title="View complete order details & AI notes in side drawer"
+                              >
+                                <FileText className="w-3.5 h-3.5 text-[#ff5600]" />
+                                <span>Details</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 70% Screen Width Side Panel Dialog / Drawer (Upgraded Order Details & Product Catalog UI) */}
+          {selectedOrderDetail && (
+            <div className="fixed inset-0 z-50 flex justify-end">
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
+                onClick={() => setSelectedOrderDetail(null)}
+              />
+
+              {/* Slide-over Drawer Panel */}
+              <div className="relative w-[85vw] md:w-[70vw] max-w-5xl h-full bg-[#f8f6f2] shadow-2xl border-l border-[#d3cec6] z-50 flex flex-col overflow-y-auto animate-in slide-in-from-right duration-200">
+
+                {/* Drawer Top Header */}
+                <div className="p-5 bg-white border-b border-[#d3cec6] flex items-center justify-between sticky top-0 z-20 shadow-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-[#ff5600] text-white p-2.5 rounded-xl shadow-xs">
+                      <ShoppingCart className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-bold text-[#111111] tracking-tight">Order Details</h3>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#ebe7e1] text-[#626260] font-mono border border-[#d3cec6]">
+                          #{selectedOrderDetail.id}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#7b7b78] font-medium">
+                        Placed {isMounted ? new Date(selectedOrderDetail.timestamp).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : ""}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    {/* Change Status Dropdown in Drawer Header */}
+                    <select
+                      value={selectedOrderDetail.status === 'pending' ? 'new_order' : selectedOrderDetail.status === 'confirmed' ? 'under_baking' : selectedOrderDetail.status}
+                      onChange={async (e) => {
+                        const newStatus = e.target.value;
+                        stopOrderAlarm();
+                        const deliveredAtISO = newStatus === 'delivered' ? new Date().toISOString() : undefined;
+                        setOrders(prev => prev.map(o => o.id === selectedOrderDetail.id ? { ...o, status: newStatus, deliveredAt: deliveredAtISO } : o));
+                        await fetch('/api/whatsapp/orders', {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ id: selectedOrderDetail.id, status: newStatus, deliveredAt: deliveredAtISO })
+                        });
+                        selectedOrderDetail.status = newStatus;
+                        selectedOrderDetail.deliveredAt = deliveredAtISO;
+                        fetchOrders();
+                      }}
+                      className={`text-xs font-black px-3.5 py-2 rounded-xl border-2 outline-none cursor-pointer transition-all shadow-xs ${selectedOrderDetail.status === 'new_order' || selectedOrderDetail.status === 'new' || selectedOrderDetail.status === 'pending' ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-400/30 animate-pulse' :
+                          selectedOrderDetail.status === 'under_baking' || selectedOrderDetail.status === 'under baking' || selectedOrderDetail.status === 'confirmed' ? 'bg-amber-500 text-white border-amber-600 ring-2 ring-amber-400/30' :
+                            selectedOrderDetail.status === 'delivered' || selectedOrderDetail.status === 'deliver' ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400/30' :
+                              selectedOrderDetail.status === 'cancelled' ? 'bg-rose-600 text-white border-rose-700 ring-2 ring-rose-400/30' :
+                                'bg-slate-700 text-white border-slate-800'
+                        }`}
+                    >
+                      <option value="new_order" className="bg-blue-600 text-white font-extrabold py-1">🔵 New Order</option>
+                      <option value="under_baking" className="bg-amber-600 text-white font-extrabold py-1">🟠 Under Baking</option>
+                      <option value="delivered" className="bg-emerald-600 text-white font-extrabold py-1">🟢 Delivered</option>
+                      <option value="cancelled" className="bg-rose-600 text-white font-extrabold py-1">🔴 Cancelled</option>
+                    </select>
+
+                    <button
+                      onClick={() => setSelectedOrderDetail(null)}
+                      className="p-2 text-[#7b7b78] hover:text-[#111111] hover:bg-[#ebe7e1] rounded-xl transition-colors cursor-pointer"
+                      title="Close Drawer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Drawer Main Body Container */}
+                <div className="p-6 md:p-8 space-y-6 flex-1">
+
+                  {/* Top Task Info Quick Stats Bar (Image 1 UI Style) */}
+                  <div className="bg-white p-5 rounded-2xl border border-[#d3cec6] shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+
+                    {/* Stat 1: Order / Preparing Time */}
+                    <div className="flex items-center gap-3 pr-4 border-r-0 md:border-r border-[#ebe7e1]">
+                      <div className="w-10 h-10 rounded-xl bg-orange-50 text-[#ff5600] flex items-center justify-center shrink-0 border border-orange-100">
+                        <Clock className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-[#7b7b78] uppercase font-bold tracking-wider">Preparing / Order Time</div>
+                        <div className="text-sm font-extrabold text-[#111111] font-mono mt-0.5">
+                          {isMounted ? new Date(selectedOrderDetail.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just Now"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Stat 2: Delivery Address */}
+                    <div className="flex items-center gap-3 pr-4 border-r-0 md:border-r border-[#ebe7e1]">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
+                        <MapPin className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[10px] text-[#7b7b78] uppercase font-bold tracking-wider">Delivery Destination</div>
+                        {(() => {
+                          // Resolve best available delivery address
+                          const orderAddr = selectedOrderDetail.deliveryAddress;
+                          const isPlaceholder = !orderAddr || orderAddr.toLowerCase().includes("provided in chat") || orderAddr.toLowerCase().includes("to be confirmed");
+                          let resolvedAddr = isPlaceholder ? "" : orderAddr;
+                          if (!resolvedAddr) {
+                            // Try customer saved address from preferences JSON
+                            try {
+                              const prefs = JSON.parse(customers[selectedOrderDetail.phone]?.preferences || "{}");
+                              resolvedAddr = prefs.deliveryAddress || "";
+                            } catch (_) { }
+                          }
+                          if (!resolvedAddr) {
+                            resolvedAddr = customers[selectedOrderDetail.phone]?.address || "";
+                          }
+                          return (
+                            <div className="text-xs font-semibold text-[#111111] truncate mt-0.5" title={resolvedAddr || 'Pending Address'}>
+                              {resolvedAddr || 'Pending Address'}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Stat 3: Customer & Quick Communication Buttons */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-sm shrink-0 border border-emerald-100">
+                          <User className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-[#111111] truncate">
+                            {customers[selectedOrderDetail.phone]?.name || selectedOrderDetail.customerName || "Customer"}
+                          </div>
+                          <div className="text-[11px] text-[#626260] font-mono">{selectedOrderDetail.phone}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <a
+                          href={`https://wa.me/${selectedOrderDetail.phone.replace(/[^0-9]/g, '')}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl transition-all shadow-xs flex items-center justify-center cursor-pointer"
+                          title="Message on WhatsApp"
+                        >
+                          <Phone className="w-4 h-4 text-white" />
+                        </a>
+
+                        <button
+                          onClick={() => {
+                            openChatForPhone(selectedOrderDetail.phone);
+                            setSelectedOrderDetail(null);
+                          }}
+                          className="p-2.5 bg-[#111111] hover:bg-black text-white rounded-xl transition-all shadow-xs flex items-center justify-center cursor-pointer"
+                          title="Open Chat History in Inbox"
+                        >
+                          <MessageSquare className="w-4 h-4 text-[#ff5600]" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section Switcher Tabs inside Order Drawer */}
+                  {(() => {
+                    // Internal drawer sub-tab state helper
+                    const matchedCatalogProducts = (config.products || []).filter((p: any) => {
+                      const searchLower = (selectedOrderDetail.productName || "").toLowerCase();
+                      return p.title && searchLower.includes(p.title.toLowerCase().trim());
+                    });
+
+                    return (
+                      <div className="space-y-6">
+
+                        {/* Main Order Items & Invoice Breakdown Card (Image 1 UI Layout) */}
+                        <div className="bg-white rounded-2xl border border-[#d3cec6] shadow-sm overflow-hidden p-6 md:p-8 space-y-6">
+
+                          <div className="flex items-center justify-between pb-4 border-b border-[#ebe7e1]">
+                            <div className="flex items-center gap-2.5">
+                              <Package className="w-5 h-5 text-[#ff5600]" />
+                              <h4 className="text-sm font-extrabold text-[#111111] uppercase tracking-wider">
+                                Task Info & Itemized Breakdown
+                              </h4>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold px-3 py-1 rounded-full bg-[#f5f1ec] text-[#626260] border border-[#d3cec6]">
+                                {matchedCatalogProducts.length > 0 ? `${matchedCatalogProducts.length} Matched from Catalog` : 'Custom WhatsApp Order'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Itemized Order List (Image 1 Layout with Thumbnails, Qty x1/x2, Specs, & Line Price) */}
+                          <div className="divide-y divide-[#ebe7e1]">
+                            {(() => {
+                              // Split multi-item product names if comma/newline separated
+                              const rawItems = (selectedOrderDetail.productName || "General Order").split(/,|\n/).map((s: string) => s.trim()).filter(Boolean);
+
+                              return rawItems.map((itemStr: string, idx: number) => {
+                                // Extract embedded price if present: e.g. "Large Crown Crust (PKR 3,180)"
+                                let embeddedPrice = "";
+                                let cleanItemStr = itemStr;
+                                const embeddedPriceMatch = itemStr.match(/\((?:PKR|Rs\.?|\$)\s*([\d,]+)\)$/i);
+                                if (embeddedPriceMatch) {
+                                  embeddedPrice = `PKR ${parseInt(embeddedPriceMatch[1].replace(/,/g, "")).toLocaleString()}`;
+                                  cleanItemStr = itemStr.replace(/\s*\((?:PKR|Rs\.?|\$)\s*[\d,]+\)$/i, "").trim();
+                                }
+
+                                // Extract quantity if formatted as "2x item" or "item (x2)"
+                                let qty = 1;
+                                let itemName = cleanItemStr;
+                                const qtyMatch = cleanItemStr.match(/^(\d+)\s*x\s*(.+)$/i) || cleanItemStr.match(/^(.+)\s*\(x?(\d+)\)$/i);
+                                if (qtyMatch) {
+                                  if (/^\d+$/.test(qtyMatch[1])) {
+                                    qty = parseInt(qtyMatch[1]);
+                                    itemName = qtyMatch[2].trim();
+                                  } else {
+                                    itemName = qtyMatch[1].trim();
+                                    qty = parseInt(qtyMatch[2]);
+                                  }
+                                }
+
+                                // Match against store product catalog items (flexible matching for titles/images)
+                                const matchedCat = (config.products || []).find((p: any) => {
+                                  if (!p.title) return false;
+                                  const pTitle = p.title.toLowerCase().trim();
+                                  const iTitle = itemName.toLowerCase().trim();
+                                  return iTitle.includes(pTitle) || pTitle.includes(iTitle) ||
+                                    pTitle.split(' ').some(w => w.length > 3 && iTitle.includes(w));
+                                });
+
+                                const imgUrl = matchedCat?.image || matchedCat?.imageUrl || (matchedCat?.images && matchedCat.images[0]) || selectedOrderDetail.productImageUrl;
+                                const displayPrice = embeddedPrice || (matchedCat?.price ? (matchedCat.price.includes("PKR") || matchedCat.price.includes("Rs.") ? matchedCat.price : `PKR ${matchedCat.price}`) : (rawItems.length === 1 ? selectedOrderDetail.price : "—"));
+
+                                return (
+                                  <div key={idx} className="py-4 first:pt-0 last:pb-0 flex items-center justify-between gap-4 flex-wrap hover:bg-[#f5f1ec]/40 p-2 rounded-xl transition-all">
+
+                                    {/* Left: Product Thumbnail & Details */}
+                                    <div className="flex items-center gap-4 min-w-[240px] flex-1">
+                                      <div className="w-16 h-16 rounded-xl bg-[#f5f1ec] border border-[#d3cec6] overflow-hidden shrink-0 shadow-xs flex items-center justify-center">
+                                        {imgUrl ? (
+                                          <img src={imgUrl} alt={itemName} className="w-full h-full object-cover" />
+                                        ) : (
+                                          <Package className="w-8 h-8 text-[#ff5600]/80" />
+                                        )}
+                                      </div>
+
+                                      <div className="space-y-1 min-w-0">
+                                        <h5 className="font-bold text-[#111111] text-sm leading-snug">
+                                          {itemName}
+                                        </h5>
+
+                                        {/* Specifications / Notes Pill */}
+                                        <div className="flex flex-wrap gap-1.5 items-center">
+                                          {selectedOrderDetail.size && (
+                                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-[#ebe7e1] text-[#626260]">
+                                              {selectedOrderDetail.size}
+                                            </span>
+                                          )}
+                                          {selectedOrderDetail.color && (
+                                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-[#ebe7e1] text-[#626260]">
+                                              Color: {selectedOrderDetail.color}
+                                            </span>
+                                          )}
+                                          {matchedCat?.category && (
+                                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
+                                              {matchedCat.category}
+                                            </span>
+                                          )}
+                                          {selectedOrderDetail.paymentMethod && (
+                                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                                              {selectedOrderDetail.paymentMethod}
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {matchedCat?.description && (
+                                          <p className="text-[11px] text-[#7b7b78] line-clamp-1 italic">
+                                            {matchedCat.description}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Center: Quantity Pill (Image 1 Style "x2") */}
+                                    <div className="flex items-center justify-center px-4 py-1.5 bg-[#f5f1ec] border border-[#d3cec6] rounded-xl font-mono text-xs font-black text-[#111111]">
+                                      x{qty}
+                                    </div>
+
+                                    {/* Right: Line Item Total */}
+                                    <div className="text-right font-extrabold text-[#111111] text-sm min-w-[90px]">
+                                      {displayPrice}
+                                    </div>
+                                  </div>
+                                );
+                              });
+                            })()}
+                          </div>
+
+                          {/* Large Total Price & Calculation Summary Card (Image 1 Big Price Style) */}
+                          <div className="bg-[#f5f1ec] p-5 rounded-2xl border border-[#d3cec6] space-y-3">
+                            <div className="flex justify-between text-xs font-semibold text-[#626260]">
+                              <span>Subtotal Order Items</span>
+                              <span className="font-bold text-[#111111]">{selectedOrderDetail.price || 'COD'}</span>
+                            </div>
+
+                            <div className="flex justify-between text-xs font-semibold text-[#626260]">
+                              <span>Delivery / Shipping Charge</span>
+                              <span className="font-bold text-emerald-700 bg-emerald-100/80 px-2.5 py-0.5 rounded-md text-[10px] border border-emerald-300">
+                                Free / Included
+                              </span>
+                            </div>
+
+                            <div className="flex justify-between text-xs font-semibold text-[#626260]">
+                              <span>Payment Mode</span>
+                              <span className="font-bold text-[#111111]">{selectedOrderDetail.paymentMethod || 'Cash on Delivery (COD)'}</span>
+                            </div>
+
+                            <div className="pt-3 border-t border-[#d3cec6] flex justify-between items-center">
+                              <div className="space-y-0.5">
+                                <span className="text-xs font-black uppercase tracking-wider text-[#111111] block">
+                                  Grand Total Price
+                                </span>
+                                <span className="text-[10px] text-[#7b7b78] font-medium block">Taxes included</span>
+                              </div>
+
+                              <div className="text-2xl md:text-3xl font-black text-[#ff5600] tracking-tight font-mono">
+                                {selectedOrderDetail.price || 'COD'}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Bottom Primary Action Button (Image 1 Vibrant CTA Style) */}
+                          <div className="pt-2">
+                            {selectedOrderDetail.status === 'delivered' || selectedOrderDetail.status === 'deliver' ? (
+                              <button
+                                disabled
+                                className="w-full py-4 bg-emerald-600 text-white font-extrabold rounded-2xl shadow-md flex items-center justify-center gap-2 cursor-not-allowed opacity-90"
+                              >
+                                <Check className="w-5 h-5 text-white" />
+                                <span>Order Delivered & Completed</span>
+                              </button>
+                            ) : selectedOrderDetail.status === 'under_baking' || selectedOrderDetail.status === 'confirmed' ? (
+                              <button
+                                onClick={async () => {
+                                  await fetch('/api/whatsapp/orders', {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ id: selectedOrderDetail.id, status: 'delivered' })
+                                  });
+                                  selectedOrderDetail.status = 'delivered';
+                                  fetchOrders();
+                                }}
+                                className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                              >
+                                <Check className="w-5 h-5 text-white" />
+                                <span>Mark Order as Delivered 🟢</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={async () => {
+                                  await fetch('/api/whatsapp/orders', {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ id: selectedOrderDetail.id, status: 'under_baking' })
+                                  });
+                                  selectedOrderDetail.status = 'under_baking';
+                                  fetchOrders();
+                                }}
+                                className="w-full py-4 bg-[#ff5600] hover:bg-[#e04c00] text-white font-extrabold text-sm rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                              >
+                                <ShoppingCart className="w-5 h-5 text-white" />
+                                <span>Accept & Start Preparing Order 🟠</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Store Product Catalog Inspector & Quick-Add Section */}
+                        <div className="bg-white rounded-2xl border border-[#d3cec6] shadow-sm p-6 space-y-5">
+                          <div className="flex items-center justify-between pb-3 border-b border-[#ebe7e1]">
+                            <div className="flex items-center gap-2.5">
+                              <BookOpen className="w-5 h-5 text-[#ff5600]" />
+                              <h4 className="text-xs font-bold text-[#111111] uppercase tracking-wider">
+                                Store Product Catalog ({config.products?.length || 0} Available Items)
+                              </h4>
+                            </div>
+                            <span className="text-[11px] text-[#7b7b78] font-medium">Click any catalog item to append or copy specs</span>
+                          </div>
+
+                          {(!config.products || config.products.length === 0) ? (
+                            <div className="p-8 text-center bg-[#f5f1ec] rounded-xl border border-dashed border-[#d3cec6] text-xs text-[#7b7b78] space-y-2">
+                              <p className="font-semibold">No products found in store catalog.</p>
+                              <p className="text-[11px]">Go to <button onClick={() => { setActiveTab('knowledge'); setSelectedOrderDetail(null); }} className="text-[#ff5600] font-bold underline cursor-pointer">Knowledge Base &gt; Products</button> to add your store menu.</p>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[350px] overflow-y-auto pr-1">
+                              {config.products.map((prod: any, pIdx: number) => {
+                                const isSelected = (selectedOrderDetail.productName || "").toLowerCase().includes((prod.title || "").toLowerCase());
+
+                                return (
+                                  <div
+                                    key={prod.id || pIdx}
+                                    className={`p-3.5 rounded-xl border transition-all flex items-center justify-between gap-3 ${isSelected
+                                        ? 'bg-orange-50/80 border-[#ff5600] ring-1 ring-[#ff5600]/30 shadow-xs'
+                                        : 'bg-[#f5f1ec] border-[#d3cec6] hover:bg-white hover:border-[#b8b3ab]'
+                                      }`}
+                                  >
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                      <div className="w-12 h-12 rounded-lg bg-white border border-[#d3cec6] overflow-hidden shrink-0 flex items-center justify-center">
+                                        {prod.image ? (
+                                          <img src={prod.image} alt={prod.title} className="w-full h-full object-cover" />
+                                        ) : (
+                                          <Package className="w-6 h-6 text-[#ff5600]" />
+                                        )}
+                                      </div>
+
+                                      <div className="min-w-0">
+                                        <div className="text-xs font-bold text-[#111111] truncate">{prod.title}</div>
+                                        <div className="text-[11px] font-semibold text-[#ff5600]">{prod.price || 'COD'}</div>
+                                        {prod.category && (
+                                          <span className="text-[9px] text-[#626260] font-medium block truncate">{prod.category}</span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <button
+                                      onClick={async () => {
+                                        const newProductName = `${selectedOrderDetail.productName}, ${prod.title}`;
+                                        await fetch('/api/whatsapp/orders', {
+                                          method: 'PATCH',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ id: selectedOrderDetail.id, productName: newProductName })
+                                        });
+                                        selectedOrderDetail.productName = newProductName;
+                                        fetchOrders();
+                                      }}
+                                      className="px-2.5 py-1.5 bg-[#111111] hover:bg-black text-white text-[10px] font-bold rounded-lg transition-all shrink-0 cursor-pointer active:scale-95 flex items-center gap-1"
+                                      title="Append product to this order"
+                                    >
+                                      <Plus className="w-3 h-3 text-[#ff5600]" /> Add
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* AI Call Summary & Requirements Card */}
+                        <div className="bg-white p-6 rounded-2xl border border-[#d3cec6] shadow-sm space-y-4">
+                          <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-[#ebe7e1]">
+                            <div className="flex items-center gap-2 text-sm font-bold text-[#111111]">
+                              <FileText className="w-5 h-5 text-[#ff5600]" />
+                              <span>Call Summary & AI Client Requirements</span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={async () => {
+                                  setGeneratingNotesId(selectedOrderDetail.id);
+                                  try {
+                                    const res = await fetch('/api/whatsapp/orders', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ id: selectedOrderDetail.id, phone: selectedOrderDetail.phone })
+                                    });
+                                    const data = await res.json();
+                                    if (data.notes) {
+                                      selectedOrderDetail.notes = data.notes;
+                                      fetchOrders();
+                                    }
+                                  } catch (e) {
+                                    console.error(e);
+                                  } finally {
+                                    setGeneratingNotesId(null);
+                                  }
+                                }}
+                                disabled={generatingNotesId === selectedOrderDetail.id}
+                                className="text-xs font-bold text-[#111111] hover:text-black bg-[#f5f1ec] border border-[#d3cec6] hover:border-[#b8b3ab] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                              >
+                                {generatingNotesId === selectedOrderDetail.id ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[#ff5600]" /> : <Sparkles className="w-3.5 h-3.5 text-[#ff5600]" />}
+                                <span>{generatingNotesId === selectedOrderDetail.id ? 'Generating AI Notes...' : 'Generate AI Notes'}</span>
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  if (editingNotesId === selectedOrderDetail.id) {
+                                    setEditingNotesId(null);
+                                  } else {
+                                    setEditingNotesId(selectedOrderDetail.id);
+                                    setNotesInput(selectedOrderDetail.notes || "");
+                                  }
+                                }}
+                                className="text-xs font-bold text-[#626260] hover:text-[#111111] bg-[#f5f1ec] border border-[#d3cec6] hover:border-[#b8b3ab] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+                              >
+                                <Edit3 className="w-3.5 h-3.5 text-[#7b7b78]" />
+                                <span>{editingNotesId === selectedOrderDetail.id ? 'Cancel' : 'Edit Notes'}</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {editingNotesId === selectedOrderDetail.id ? (
+                            <div className="space-y-3 pt-1">
+                              <textarea
+                                value={notesInput}
+                                onChange={(e) => setNotesInput(e.target.value)}
+                                placeholder="Add custom call summary, client requirements, or special instructions..."
+                                className="w-full p-4 text-xs bg-[#f5f1ec] border border-[#d3cec6] rounded-xl focus:ring-2 focus:ring-[#ff5600]/20 outline-none text-[#111111] font-medium min-h-[120px]"
+                              />
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  onClick={async () => {
+                                    await fetch('/api/whatsapp/orders', {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ id: selectedOrderDetail.id, notes: notesInput })
+                                    });
+                                    selectedOrderDetail.notes = notesInput;
+                                    setEditingNotesId(null);
+                                    fetchOrders();
+                                  }}
+                                  className="px-4 py-2 bg-[#111111] hover:bg-black text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shadow-xs"
+                                >
+                                  Save Notes
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-xs text-[#111111] font-normal leading-relaxed bg-[#f5f1ec] p-4 rounded-xl border border-[#d3cec6] min-h-[90px]">
+                              {selectedOrderDetail.notes ? (
+                                <p className="whitespace-pre-wrap">{selectedOrderDetail.notes}</p>
+                              ) : (
+                                <span className="text-[#7b7b78] italic text-xs">No summary notes recorded yet. Click "Generate AI Notes" or "Edit Notes" to record details.</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -5940,141 +5996,291 @@ export default function DashboardPage() {
       {activeTab === 'contacts' && (
         <div className="flex-1 h-full overflow-y-auto bg-[#f5f1ec]">
           <div className="p-8 max-w-[1400px] mx-auto w-full space-y-6">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-2">
-            <div>
-              <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
-                <Users className="h-7 w-7 text-purple-600" /> Pipeline & Lead Management
-              </h2>
-              <p className="text-xs text-slate-500 mt-1 font-medium">Nurture and manage your WhatsApp leads through the sales pipeline.</p>
-            </div>
-            
-            {/* View Mode & Search */}
-            <div className="flex items-center gap-3 w-full md:w-auto">
-              <div className="bg-slate-100/70 p-1 rounded-xl flex items-center text-xs font-bold border border-slate-200/50">
-                <button 
-                  onClick={() => setContactsViewMode("board")}
-                  className={`px-4 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${contactsViewMode === 'board' ? 'bg-white text-purple-700 shadow-sm font-extrabold' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                  <Activity className="w-4 h-4" /> Board View
-                </button>
-                <button 
-                  onClick={() => setContactsViewMode("list")}
-                  className={`px-4 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${contactsViewMode === 'list' ? 'bg-white text-purple-700 shadow-sm font-extrabold' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                  <Users className="w-4 h-4" /> List View
-                </button>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-2">
+              <div>
+                <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
+                  <Users className="h-7 w-7 text-purple-600" /> Pipeline & Lead Management
+                </h2>
+                <p className="text-xs text-slate-500 mt-1 font-medium">Nurture and manage your WhatsApp leads through the sales pipeline.</p>
+              </div>
+
+              {/* View Mode & Search */}
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <div className="bg-slate-100/70 p-1 rounded-xl flex items-center text-xs font-bold border border-slate-200/50">
+                  <button
+                    onClick={() => setContactsViewMode("board")}
+                    className={`px-4 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${contactsViewMode === 'board' ? 'bg-white text-purple-700 shadow-sm font-extrabold' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    <Activity className="w-4 h-4" /> Board View
+                  </button>
+                  <button
+                    onClick={() => setContactsViewMode("list")}
+                    className={`px-4 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${contactsViewMode === 'list' ? 'bg-white text-purple-700 shadow-sm font-extrabold' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    <Users className="w-4 h-4" /> List View
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Search bar and counts */}
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6 dash-card p-4">
-            <div className="bg-slate-100/70 border border-slate-200/60 rounded-xl flex items-center px-4 py-2 gap-3 w-full md:max-w-md focus-within:ring-2 focus-within:ring-purple-500/20 focus-within:border-purple-500 transition-all">
-              <Search className="h-4 w-4 text-slate-400" />
-              <input 
-                type="text" 
-                placeholder="Search leads by name or phone..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-transparent border-none outline-none text-xs w-full placeholder:text-slate-400 text-slate-700 font-semibold" 
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600">
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+            {/* Search bar and counts */}
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6 dash-card p-4">
+              <div className="bg-slate-100/70 border border-slate-200/60 rounded-xl flex items-center px-4 py-2 gap-3 w-full md:max-w-md focus-within:ring-2 focus-within:ring-purple-500/20 focus-within:border-purple-500 transition-all">
+                <Search className="h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search leads by name or phone..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-transparent border-none outline-none text-xs w-full placeholder:text-slate-400 text-slate-700 font-semibold"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-400 self-end md:self-center">
+                Total: {Object.values(customers).filter(c => isContactActiveLead(c)).length} Active Leads
+              </div>
             </div>
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-400 self-end md:self-center">
-              Total: {Object.values(customers).filter(c => isContactActiveLead(c)).length} Active Leads
-            </div>
-          </div>
 
-          {contactsViewMode === 'board' ? (
-            /* KANBAN BOARD VIEW */
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-start min-h-[600px] pb-10">
-              {(() => {
-                const stages: { id: "new" | "qualified" | "warm" | "cold" | "completed"; title: string; color: string; bg: string; dot: string }[] = [
-                  { id: 'new', title: 'New Leads', color: 'border-indigo-500', bg: 'bg-indigo-50/30', dot: 'bg-indigo-500' },
-                  { id: 'qualified', title: 'Qualified', color: 'border-amber-400', bg: 'bg-amber-50/30', dot: 'bg-amber-400' },
-                  { id: 'warm', title: 'Warm Leads', color: 'border-purple-500', bg: 'bg-purple-50/40', dot: 'bg-purple-600' },
-                  { id: 'cold', title: 'Cold Leads', color: 'border-slate-400', bg: 'bg-slate-50/70', dot: 'bg-slate-400' },
-                  { id: 'completed', title: 'Completed', color: 'border-emerald-500', bg: 'bg-emerald-50/30', dot: 'bg-emerald-500' }
-                ];
+            {contactsViewMode === 'board' ? (
+              /* KANBAN BOARD VIEW */
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-start min-h-[600px] pb-10">
+                {(() => {
+                  const stages: { id: "new" | "qualified" | "warm" | "cold" | "completed"; title: string; color: string; bg: string; dot: string }[] = [
+                    { id: 'new', title: 'New Leads', color: 'border-indigo-500', bg: 'bg-indigo-50/30', dot: 'bg-indigo-500' },
+                    { id: 'qualified', title: 'Qualified', color: 'border-amber-400', bg: 'bg-amber-50/30', dot: 'bg-amber-400' },
+                    { id: 'warm', title: 'Warm Leads', color: 'border-purple-500', bg: 'bg-purple-50/40', dot: 'bg-purple-600' },
+                    { id: 'cold', title: 'Cold Leads', color: 'border-slate-400', bg: 'bg-slate-50/70', dot: 'bg-slate-400' },
+                    { id: 'completed', title: 'Completed', color: 'border-emerald-500', bg: 'bg-emerald-50/30', dot: 'bg-emerald-500' }
+                  ];
 
-                const getCustomerStage = (c: any): "new" | "qualified" | "warm" | "cold" | "completed" => {
-                  if (c.pipelineStage) return c.pipelineStage;
-                  if (c.leadStatus === "cold") return "cold";
-                  const hasOrder = orders.some((o: any) => o.phone === c.phone && (o.status === "confirmed" || o.status === "delivered" || o.status === "completed"));
-                  if (hasOrder) return "completed";
-                  const hasAppt = orders.some((o: any) => o.phone === c.phone && (o.productName?.includes('Appointment') || o.productName?.includes('Call')));
-                  if (hasAppt) return "qualified";
-                  if (c.leadStatus === "hot") return "warm";
-                  const userChat = chats[c.phone];
-                  if (Array.isArray(userChat) && userChat.length > 2) return "warm";
-                  return "new";
-                };
+                  const getCustomerStage = (c: any): "new" | "qualified" | "warm" | "cold" | "completed" => {
+                    if (c.pipelineStage) return c.pipelineStage;
+                    if (c.leadStatus === "cold") return "cold";
+                    const hasOrder = orders.some((o: any) => o.phone === c.phone && (o.status === "confirmed" || o.status === "delivered" || o.status === "completed"));
+                    if (hasOrder) return "completed";
+                    const hasAppt = orders.some((o: any) => o.phone === c.phone && (o.productName?.includes('Appointment') || o.productName?.includes('Call')));
+                    if (hasAppt) return "qualified";
+                    if (c.leadStatus === "hot") return "warm";
+                    const userChat = chats[c.phone];
+                    if (Array.isArray(userChat) && userChat.length > 2) return "warm";
+                    return "new";
+                  };
 
-                const activeLeads = Object.values(customers).filter(c => isContactActiveLead(c));
+                  const activeLeads = Object.values(customers).filter(c => isContactActiveLead(c));
 
-                const filteredCustomers = activeLeads.filter(c => {
-                  if (!searchQuery) return true;
-                  const searchLower = searchQuery.toLowerCase();
-                  const nameMatch = c.name?.toLowerCase().includes(searchLower);
-                  const phoneMatch = c.phone.includes(searchLower);
-                  const tagMatch = c.tags?.some((t: string) => t.toLowerCase().includes(searchLower));
-                  return nameMatch || phoneMatch || tagMatch;
-                });
+                  const filteredCustomers = activeLeads.filter(c => {
+                    if (!searchQuery) return true;
+                    const searchLower = searchQuery.toLowerCase();
+                    const nameMatch = c.name?.toLowerCase().includes(searchLower);
+                    const phoneMatch = c.phone.includes(searchLower);
+                    const tagMatch = c.tags?.some((t: string) => t.toLowerCase().includes(searchLower));
+                    return nameMatch || phoneMatch || tagMatch;
+                  });
 
-                return stages.map(stage => {
-                  const stageLeads = filteredCustomers.filter(c => getCustomerStage(c) === stage.id);
-                  return (
-                    <div key={stage.id} className={`flex flex-col rounded-2xl border border-slate-200/80 ${stage.bg} p-4 min-h-[500px] max-h-[750px]`}>
-                      {/* Column Header */}
-                      <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-200/50 text-slate-800">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${stage.dot}`}></span>
-                          <h3 className="font-extrabold text-xs">{stage.title}</h3>
+                  return stages.map(stage => {
+                    const stageLeads = filteredCustomers.filter(c => getCustomerStage(c) === stage.id);
+                    return (
+                      <div key={stage.id} className={`flex flex-col rounded-2xl border border-slate-200/80 ${stage.bg} p-4 min-h-[500px] max-h-[750px]`}>
+                        {/* Column Header */}
+                        <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-200/50 text-slate-800">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${stage.dot}`}></span>
+                            <h3 className="font-extrabold text-xs">{stage.title}</h3>
+                          </div>
+                          <span className="bg-white border border-slate-200/60 text-slate-600 text-xs px-2 py-0.5 rounded-full font-extrabold shadow-sm">
+                            {stageLeads.length}
+                          </span>
                         </div>
-                        <span className="bg-white border border-slate-200/60 text-slate-600 text-xs px-2 py-0.5 rounded-full font-extrabold shadow-sm">
-                          {stageLeads.length}
-                        </span>
-                      </div>
 
-                      {/* Card List Container */}
-                      <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
-                        {stageLeads.length === 0 ? (
-                          <div className="text-center py-8 text-xs text-slate-400 font-medium">No leads</div>
-                        ) : (
-                          stageLeads.map(lead => {
-                            const leadName = lead.name && lead.name !== lead.phone ? lead.name : 'Unknown User';
-                            const hasAi = lead.aiEnabled !== false;
-                            
-                            return (
-                              <div key={lead.phone} className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 flex flex-col gap-3 hover:shadow-md transition-all">
-                                {/* Header */}
-                                <div className="flex items-start justify-between min-w-0">
-                                  <div className="min-w-0">
-                                    <h4 className="font-extrabold text-xs text-slate-800 truncate" title={leadName}>{leadName}</h4>
-                                    <p className="text-[10px] text-slate-400 font-semibold mt-0.5">+{lead.phone}</p>
+                        {/* Card List Container */}
+                        <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+                          {stageLeads.length === 0 ? (
+                            <div className="text-center py-8 text-xs text-slate-400 font-medium">No leads</div>
+                          ) : (
+                            stageLeads.map(lead => {
+                              const leadName = lead.name && lead.name !== lead.phone ? lead.name : 'Unknown User';
+                              const hasAi = lead.aiEnabled !== false;
+
+                              return (
+                                <div key={lead.phone} className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-4 flex flex-col gap-3 hover:shadow-md transition-all">
+                                  {/* Header */}
+                                  <div className="flex items-start justify-between min-w-0">
+                                    <div className="min-w-0">
+                                      <h4 className="font-extrabold text-xs text-slate-800 truncate" title={leadName}>{leadName}</h4>
+                                      <p className="text-[10px] text-slate-400 font-semibold mt-0.5">+{lead.phone}</p>
+                                    </div>
+                                    <button
+                                      onClick={() => toggleChatAi(!hasAi, lead.phone)}
+                                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full cursor-pointer hover:opacity-80 transition ${hasAi ? 'bg-purple-50 text-purple-700 border border-purple-100' : 'bg-slate-100 text-slate-500'}`}
+                                      title="Click to toggle Autopilot / Copilot for this contact"
+                                    >
+                                      {hasAi ? 'Autopilot' : 'Copilot'}
+                                    </button>
                                   </div>
-                                  <button 
-                                    onClick={() => toggleChatAi(!hasAi, lead.phone)}
-                                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full cursor-pointer hover:opacity-80 transition ${hasAi ? 'bg-purple-50 text-purple-700 border border-purple-100' : 'bg-slate-100 text-slate-500'}`}
-                                    title="Click to toggle Autopilot / Copilot for this contact"
-                                  >
-                                    {hasAi ? 'Autopilot' : 'Copilot'}
-                                  </button>
-                                </div>
 
-                                {/* Tags */}
-                                <div className="flex flex-wrap gap-1 items-center">
-                                  {lead.tags && lead.tags.map((t: string) => (
+                                  {/* Tags */}
+                                  <div className="flex flex-wrap gap-1 items-center">
+                                    {lead.tags && lead.tags.map((t: string) => (
+                                      <span key={t} className="inline-flex items-center gap-0.5 text-[10px] font-bold bg-slate-50 border border-slate-200/80 px-2 py-0.5 rounded-full text-slate-600">
+                                        {t}
+                                        <button
+                                          onClick={() => {
+                                            const nextTags = lead.tags.filter((x: string) => x !== t);
+                                            updateCustomerField(lead.phone, { tags: nextTags });
+                                          }}
+                                          className="text-slate-400 hover:text-rose-500 text-[9px] ml-1 cursor-pointer"
+                                        >
+                                          ×
+                                        </button>
+                                      </span>
+                                    ))}
+
+                                    {editingTagsPhone === lead.phone ? (
+                                      <div className="flex items-center gap-1.5 mt-1 w-full">
+                                        <input
+                                          type="text"
+                                          placeholder="Add tag..."
+                                          value={newTagInput}
+                                          onChange={(e) => setNewTagInput(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && newTagInput.trim()) {
+                                              const nextTags = [...(lead.tags || []), newTagInput.trim()];
+                                              updateCustomerField(lead.phone, { tags: nextTags });
+                                              setNewTagInput("");
+                                              setEditingTagsPhone(null);
+                                            }
+                                          }}
+                                          className="text-[11px] border border-slate-300 rounded px-1.5 py-0.5 w-20 focus:outline-none focus:border-purple-500 font-semibold"
+                                          autoFocus
+                                        />
+                                        <button
+                                          onClick={() => {
+                                            if (newTagInput.trim()) {
+                                              const nextTags = [...(lead.tags || []), newTagInput.trim()];
+                                              updateCustomerField(lead.phone, { tags: nextTags });
+                                              setNewTagInput("");
+                                            }
+                                            setEditingTagsPhone(null);
+                                          }}
+                                          className="text-[10px] font-bold text-purple-600"
+                                        >
+                                          Add
+                                        </button>
+                                        <button onClick={() => setEditingTagsPhone(null)} className="text-[10px] text-slate-400 font-bold">Cancel</button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        onClick={() => {
+                                          setEditingTagsPhone(lead.phone);
+                                          setNewTagInput("");
+                                        }}
+                                        className="inline-flex items-center gap-0.5 text-[9px] font-bold text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-full border border-purple-100 cursor-pointer"
+                                      >
+                                        + Tag
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {/* Actions & Select Stage */}
+                                  <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-1 gap-2">
+                                    <select
+                                      value={stage.id}
+                                      onChange={(e) => updateCustomerField(lead.phone, { pipelineStage: e.target.value })}
+                                      className="text-[11px] bg-slate-50 border border-slate-200/80 rounded-lg p-1.5 text-slate-700 font-bold w-[100px] outline-none focus:border-purple-500"
+                                    >
+                                      <option value="new">New Lead</option>
+                                      <option value="qualified">Qualified</option>
+                                      <option value="warm">Warm Lead</option>
+                                      <option value="cold">Cold Lead</option>
+                                      <option value="completed">Completed</option>
+                                    </select>
+
+                                    <button
+                                      onClick={() => openChatForPhone(lead.phone)}
+                                      className="text-[11px] font-extrabold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200/60 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Inbox className="w-3 h-3" /> Chat
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            ) : (
+              /* ORIGINAL LIST TABLE VIEW */
+              <div className="dash-card overflow-hidden min-h-[500px]">
+                {Object.values(customers).filter(c => isContactActiveLead(c)).length === 0 ? (
+                  <div className="text-center p-12 text-slate-400 font-bold text-xs">
+                    No active leads found.
+                  </div>
+                ) : (
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/80 border-b border-slate-100">
+                        <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Name / Phone</th>
+                        <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Tags</th>
+                        <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Pipeline Stage</th>
+                        <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.values(customers)
+                        .filter(c => isContactActiveLead(c))
+                        .filter(c => {
+                          if (!searchQuery) return true;
+                          const searchLower = searchQuery.toLowerCase();
+                          const nameMatch = c.name?.toLowerCase().includes(searchLower);
+                          const phoneMatch = c.phone.includes(searchLower);
+                          const tagMatch = c.tags?.some((t: string) => t.toLowerCase().includes(searchLower));
+                          return nameMatch || phoneMatch || tagMatch;
+                        })
+                        .map((customer) => {
+                          const getCustomerStage = (c: any): "new" | "qualified" | "warm" | "cold" | "completed" => {
+                            if (c.pipelineStage) return c.pipelineStage;
+                            if (c.leadStatus === "cold") return "cold";
+                            const hasOrder = orders.some((o: any) => o.phone === c.phone && (o.status === "confirmed" || o.status === "delivered" || o.status === "completed"));
+                            if (hasOrder) return "completed";
+                            const hasAppt = orders.some((o: any) => o.phone === c.phone && (o.productName?.includes('Appointment') || o.productName?.includes('Call')));
+                            if (hasAppt) return "qualified";
+                            if (c.leadStatus === "hot") return "warm";
+                            const userChat = chats[c.phone];
+                            if (Array.isArray(userChat) && userChat.length > 2) return "warm";
+                            return "new";
+                          };
+                          const stage = getCustomerStage(customer);
+
+                          return (
+                            <tr key={customer.phone} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
+                              <td className="py-4 px-6">
+                                <div className="flex items-center gap-4">
+                                  <div className="h-9 w-9 bg-purple-50 text-purple-700 border border-purple-200 rounded-full flex items-center justify-center font-bold text-xs shadow-sm">
+                                    {customer.name ? customer.name.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
+                                  </div>
+                                  <div>
+                                    <div className="font-extrabold text-xs text-slate-900">{customer.name || 'Unknown User'}</div>
+                                    <div className="text-[11px] text-slate-400 font-semibold">+{customer.phone}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-4 px-6">
+                                <div className="flex flex-wrap gap-1 items-center max-w-xs">
+                                  {customer.tags && customer.tags.map((t: string) => (
                                     <span key={t} className="inline-flex items-center gap-0.5 text-[10px] font-bold bg-slate-50 border border-slate-200/80 px-2 py-0.5 rounded-full text-slate-600">
                                       {t}
-                                      <button 
+                                      <button
                                         onClick={() => {
-                                          const nextTags = lead.tags.filter((x: string) => x !== t);
-                                          updateCustomerField(lead.phone, { tags: nextTags });
+                                          const nextTags = customer.tags.filter((x: string) => x !== t);
+                                          updateCustomerField(customer.phone, { tags: nextTags });
                                         }}
                                         className="text-slate-400 hover:text-rose-500 text-[9px] ml-1 cursor-pointer"
                                       >
@@ -6082,30 +6288,29 @@ export default function DashboardPage() {
                                       </button>
                                     </span>
                                   ))}
-                                  
-                                  {editingTagsPhone === lead.phone ? (
-                                    <div className="flex items-center gap-1.5 mt-1 w-full">
-                                      <input 
-                                        type="text" 
-                                        placeholder="Add tag..."
+                                  {editingTagsPhone === customer.phone ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <input
+                                        type="text"
+                                        placeholder="Tag..."
                                         value={newTagInput}
                                         onChange={(e) => setNewTagInput(e.target.value)}
                                         onKeyDown={(e) => {
                                           if (e.key === 'Enter' && newTagInput.trim()) {
-                                            const nextTags = [...(lead.tags || []), newTagInput.trim()];
-                                            updateCustomerField(lead.phone, { tags: nextTags });
+                                            const nextTags = [...(customer.tags || []), newTagInput.trim()];
+                                            updateCustomerField(customer.phone, { tags: nextTags });
                                             setNewTagInput("");
                                             setEditingTagsPhone(null);
                                           }
                                         }}
-                                        className="text-[11px] border border-slate-300 rounded px-1.5 py-0.5 w-20 focus:outline-none focus:border-purple-500 font-semibold"
+                                        className="text-[11px] border border-slate-300 rounded px-1.5 py-0.5 w-16 focus:outline-none focus:border-purple-500"
                                         autoFocus
                                       />
-                                      <button 
+                                      <button
                                         onClick={() => {
                                           if (newTagInput.trim()) {
-                                            const nextTags = [...(lead.tags || []), newTagInput.trim()];
-                                            updateCustomerField(lead.phone, { tags: nextTags });
+                                            const nextTags = [...(customer.tags || []), newTagInput.trim()];
+                                            updateCustomerField(customer.phone, { tags: nextTags });
                                             setNewTagInput("");
                                           }
                                           setEditingTagsPhone(null);
@@ -6114,203 +6319,54 @@ export default function DashboardPage() {
                                       >
                                         Add
                                       </button>
-                                      <button onClick={() => setEditingTagsPhone(null)} className="text-[10px] text-slate-400 font-bold">Cancel</button>
                                     </div>
                                   ) : (
-                                    <button 
+                                    <button
                                       onClick={() => {
-                                        setEditingTagsPhone(lead.phone);
+                                        setEditingTagsPhone(customer.phone);
                                         setNewTagInput("");
                                       }}
-                                      className="inline-flex items-center gap-0.5 text-[9px] font-bold text-purple-600 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-full border border-purple-100 cursor-pointer"
+                                      className="text-[9px] font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-full border border-purple-100 cursor-pointer"
                                     >
-                                      + Tag
+                                      + Add
                                     </button>
                                   )}
                                 </div>
-
-                                {/* Actions & Select Stage */}
-                                <div className="flex items-center justify-between border-t border-slate-100 pt-3 mt-1 gap-2">
-                                  <select 
-                                    value={stage.id} 
-                                    onChange={(e) => updateCustomerField(lead.phone, { pipelineStage: e.target.value })}
-                                    className="text-[11px] bg-slate-50 border border-slate-200/80 rounded-lg p-1.5 text-slate-700 font-bold w-[100px] outline-none focus:border-purple-500"
-                                  >
-                                    <option value="new">New Lead</option>
-                                    <option value="qualified">Qualified</option>
-                                    <option value="warm">Warm Lead</option>
-                                    <option value="cold">Cold Lead</option>
-                                    <option value="completed">Completed</option>
-                                  </select>
-
-                                  <button 
-                                    onClick={() => openChatForPhone(lead.phone)}
-                                    className="text-[11px] font-extrabold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200/60 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                                  >
-                                    <Inbox className="w-3 h-3" /> Chat
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    </div>
-                  );
-                });
-              })()}
-            </div>
-          ) : (
-            /* ORIGINAL LIST TABLE VIEW */
-            <div className="dash-card overflow-hidden min-h-[500px]">
-              {Object.values(customers).filter(c => isContactActiveLead(c)).length === 0 ? (
-                <div className="text-center p-12 text-slate-400 font-bold text-xs">
-                  No active leads found.
-                </div>
-              ) : (
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50/80 border-b border-slate-100">
-                      <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Name / Phone</th>
-                      <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Tags</th>
-                      <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Pipeline Stage</th>
-                      <th className="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.values(customers)
-                      .filter(c => isContactActiveLead(c))
-                      .filter(c => {
-                        if (!searchQuery) return true;
-                        const searchLower = searchQuery.toLowerCase();
-                        const nameMatch = c.name?.toLowerCase().includes(searchLower);
-                        const phoneMatch = c.phone.includes(searchLower);
-                        const tagMatch = c.tags?.some((t: string) => t.toLowerCase().includes(searchLower));
-                        return nameMatch || phoneMatch || tagMatch;
-                      })
-                      .map((customer) => {
-                        const getCustomerStage = (c: any): "new" | "qualified" | "warm" | "cold" | "completed" => {
-                          if (c.pipelineStage) return c.pipelineStage;
-                          if (c.leadStatus === "cold") return "cold";
-                          const hasOrder = orders.some((o: any) => o.phone === c.phone && (o.status === "confirmed" || o.status === "delivered" || o.status === "completed"));
-                          if (hasOrder) return "completed";
-                          const hasAppt = orders.some((o: any) => o.phone === c.phone && (o.productName?.includes('Appointment') || o.productName?.includes('Call')));
-                          if (hasAppt) return "qualified";
-                          if (c.leadStatus === "hot") return "warm";
-                          const userChat = chats[c.phone];
-                          if (Array.isArray(userChat) && userChat.length > 2) return "warm";
-                          return "new";
-                        };
-                        const stage = getCustomerStage(customer);
-                        
-                        return (
-                          <tr key={customer.phone} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
-                            <td className="py-4 px-6">
-                              <div className="flex items-center gap-4">
-                                <div className="h-9 w-9 bg-purple-50 text-purple-700 border border-purple-200 rounded-full flex items-center justify-center font-bold text-xs shadow-sm">
-                                  {customer.name ? customer.name.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
-                                </div>
-                                <div>
-                                  <div className="font-extrabold text-xs text-slate-900">{customer.name || 'Unknown User'}</div>
-                                  <div className="text-[11px] text-slate-400 font-semibold">+{customer.phone}</div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="py-4 px-6">
-                              <div className="flex flex-wrap gap-1 items-center max-w-xs">
-                                {customer.tags && customer.tags.map((t: string) => (
-                                  <span key={t} className="inline-flex items-center gap-0.5 text-[10px] font-bold bg-slate-50 border border-slate-200/80 px-2 py-0.5 rounded-full text-slate-600">
-                                    {t}
-                                    <button 
-                                      onClick={() => {
-                                        const nextTags = customer.tags.filter((x: string) => x !== t);
-                                        updateCustomerField(customer.phone, { tags: nextTags });
-                                      }}
-                                      className="text-slate-400 hover:text-rose-500 text-[9px] ml-1 cursor-pointer"
-                                    >
-                                      ×
-                                    </button>
-                                  </span>
-                                ))}
-                                {editingTagsPhone === customer.phone ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <input 
-                                      type="text" 
-                                      placeholder="Tag..."
-                                      value={newTagInput}
-                                      onChange={(e) => setNewTagInput(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && newTagInput.trim()) {
-                                          const nextTags = [...(customer.tags || []), newTagInput.trim()];
-                                          updateCustomerField(customer.phone, { tags: nextTags });
-                                          setNewTagInput("");
-                                          setEditingTagsPhone(null);
-                                        }
-                                      }}
-                                      className="text-[11px] border border-slate-300 rounded px-1.5 py-0.5 w-16 focus:outline-none focus:border-purple-500"
-                                      autoFocus
-                                    />
-                                    <button 
-                                      onClick={() => {
-                                        if (newTagInput.trim()) {
-                                          const nextTags = [...(customer.tags || []), newTagInput.trim()];
-                                          updateCustomerField(customer.phone, { tags: nextTags });
-                                          setNewTagInput("");
-                                        }
-                                        setEditingTagsPhone(null);
-                                      }}
-                                      className="text-[10px] font-bold text-purple-600"
-                                    >
-                                      Add
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <button 
-                                    onClick={() => {
-                                      setEditingTagsPhone(customer.phone);
-                                      setNewTagInput("");
-                                    }}
-                                    className="text-[9px] font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-full border border-purple-100 cursor-pointer"
-                                  >
-                                    + Add
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-4 px-6">
-                              <select 
-                                value={stage} 
-                                onChange={(e) => updateCustomerField(customer.phone, { pipelineStage: e.target.value })}
-                                className="text-xs bg-slate-50 border border-slate-200/80 rounded-lg p-1.5 text-slate-700 font-bold w-[120px] outline-none focus:border-purple-500"
-                              >
-                                <option value="new">New Lead</option>
-                                <option value="qualified">Qualified</option>
-                                <option value="warm">Warm Lead</option>
-                                <option value="cold">Cold Lead</option>
-                                <option value="completed">Completed</option>
-                              </select>
-                            </td>
-                            <td className="py-4 px-6 text-right">
-                              <button 
-                                onClick={() => openChatForPhone(customer.phone)}
-                                className="text-xs font-extrabold text-purple-700 hover:bg-purple-50 px-3 py-1.5 rounded-lg transition-colors border border-purple-200/60 cursor-pointer"
-                              >
-                                Message
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          )}
+                              </td>
+                              <td className="py-4 px-6">
+                                <select
+                                  value={stage}
+                                  onChange={(e) => updateCustomerField(customer.phone, { pipelineStage: e.target.value })}
+                                  className="text-xs bg-slate-50 border border-slate-200/80 rounded-lg p-1.5 text-slate-700 font-bold w-[120px] outline-none focus:border-purple-500"
+                                >
+                                  <option value="new">New Lead</option>
+                                  <option value="qualified">Qualified</option>
+                                  <option value="warm">Warm Lead</option>
+                                  <option value="cold">Cold Lead</option>
+                                  <option value="completed">Completed</option>
+                                </select>
+                              </td>
+                              <td className="py-4 px-6 text-right">
+                                <button
+                                  onClick={() => openChatForPhone(customer.phone)}
+                                  className="text-xs font-extrabold text-purple-700 hover:bg-purple-50 px-3 py-1.5 rounded-lg transition-colors border border-purple-200/60 cursor-pointer"
+                                >
+                                  Message
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    )}
+      )}
 
 
-        </div>
+    </div>
   );
 }
