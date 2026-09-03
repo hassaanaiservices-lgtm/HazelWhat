@@ -644,11 +644,19 @@ export class DB {
         (tenantRecord?.systemPrompt && tenantRecord.systemPrompt.trim() !== '') ? tenantRecord.systemPrompt :
         '';
 
-      let productInfo = 
+      let rawProductInfo = 
         (data?.product_info && data.product_info.trim() !== '') ? data.product_info :
         (tenantRecord?.knowledgeBase && tenantRecord.knowledgeBase.trim() !== '') ? tenantRecord.knowledgeBase :
         (tenantRecord?.productKnowledgeBase && tenantRecord.productKnowledgeBase.trim() !== '') ? tenantRecord.productKnowledgeBase :
         '';
+
+      // Defensive Guard: Sanitize Base64 image blobs and cap knowledge base to 4,000 chars max
+      let productInfo = rawProductInfo
+        .replace(/data:image\/[a-zA-Z0-9+\/=;-]+;base64,[A-Za-z0-9+\/=]+/g, "[Image]")
+        .replace(/[A-Za-z0-9+\/=]{200,}/g, "[Image Data]");
+      if (productInfo.length > 4000) {
+        productInfo = productInfo.substring(0, 4000) + "\n...[KB Truncated for Token Efficiency]";
+      }
 
       if (resolvedTenantId === 't-1004') {
         if (!systemPrompt || systemPrompt.trim() === '') {

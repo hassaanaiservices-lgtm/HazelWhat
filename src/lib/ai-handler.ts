@@ -2188,9 +2188,13 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     const botPurposeMode = config.botMode || "both";
     let fullSystemPrompt = `${activeSystemPrompt}\n\n=== BOT MODE: ${botPurposeMode.toUpperCase()} (ORDERS & APPOINTMENTS SUPPORTED) ===\n`;
 
-    // Append FAQs and Business Knowledge Base (Product Info) to prompt context!
+    // Append FAQs and Business Knowledge Base (Product Info) to prompt context! (Sanitized & Capped to 4000 chars max)
     if (config.productInfo && config.productInfo.trim() !== '') {
-      fullSystemPrompt += `\n\n=== BUSINESS KNOWLEDGE BASE & FAQS (Use this to answer customer questions) ===\n${config.productInfo}\n=======================================================\n`;
+      const sanitizedKB = config.productInfo
+        .replace(/data:image\/[a-zA-Z0-9+\/=;-]+;base64,[A-Za-z0-9+\/=]+/g, "[Image]")
+        .replace(/[A-Za-z0-9+\/=]{200,}/g, "[Image Data]");
+      const truncatedKB = sanitizedKB.length > 4000 ? sanitizedKB.substring(0, 4000) + "\n...[KB Truncated for Token Efficiency]" : sanitizedKB;
+      fullSystemPrompt += `\n\n=== BUSINESS KNOWLEDGE BASE & FAQS (Use this to answer customer questions) ===\n${truncatedKB}\n=======================================================\n`;
     }
 
     fullSystemPrompt += `\n=== CUSTOMER SAVED PROFILE DATA (Variables extracted from conversation) ===\n`;
@@ -2339,9 +2343,12 @@ This customer is a revived dead lead who recently responded to our re-engagement
     }
     const sessionChats = allFilteredChats.slice(sessionStartIndex);
 
-    // Filter out system messages and sanitize past assistant refusal messages so LLM never gets primed by past errors!
+    // CRITICAL COST GUARD (Incidents 8/15 & 9/2 Token Spikes):
+    // DO NOT INCREASE THIS SLICE BEYOND 10 MESSAGES!
+    // On 9/2, history bloat combined with KB text caused a spike averaging 182,500 tokens/req ($0.44 burn rate).
+    // Keeping history capped to 10 messages provides sufficient conversational context while preventing multi-turn prompt payload explosion.
     let recentHistory = sessionChats
-      .slice(-24)
+      .slice(-10)
       .map((m: any) => {
         let textContent = m.content || "";
         if (m.role === 'assistant' && (
