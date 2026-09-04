@@ -102,6 +102,10 @@ export const PATCH = withObservability(async (req: NextRequest) => {
     return NextResponse.json({ error: 'Order not found' }, { status: 404 });
   }
 
+  if (order.tenantId) {
+    targetTenantId = order.tenantId;
+  }
+
   updateTraceContext({ tenantId: targetTenantId });
 
   const updates: any = {};

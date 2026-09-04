@@ -1106,7 +1106,17 @@ export class DB {
       if (updates.productName !== undefined) payload.product_name = updates.productName;
       if (updates.phone !== undefined) payload.phone = updates.phone;
 
-      await supabase.from('orders').update(payload).eq('id', orderId).eq('tenant_id', tenantId);
+      let updated = false;
+      if (tenantId) {
+        const res = await supabase.from('orders').update(payload).eq('id', orderId).eq('tenant_id', tenantId).select('id');
+        if (res.data && res.data.length > 0) {
+          updated = true;
+        }
+      }
+
+      if (!updated) {
+        await supabase.from('orders').update(payload).eq('id', orderId);
+      }
     } catch (e) {
       console.error('[DB/Supabase] updateOrder error:', e);
     }
