@@ -8,7 +8,7 @@ import { getRedisClient } from "./redis";
 import crypto from "crypto";
 import { logLLMUsage, logAppError } from "./observability-store";
 import { getCurrentTraceContext } from "./trace-context";
-import { acquireLLMConcurrencySlot, truncateContextWindow, recordTenantLLMCost } from "./llm-cost-concurrency";
+import { acquireLLMConcurrencySlot, truncateContextWindow, recordTenantLLMCost, getCachedLLMResponse, setCachedLLMResponse } from "./llm-cost-concurrency";
 import dns from "dns";
 import fs from "fs";
 import path from "path";
@@ -399,61 +399,48 @@ export async function transcribeAudio(buffer: Buffer, mimetype = "audio/ogg", co
   const openaiKey = getEnvKey("OPENAI_API_KEY") || process.env.OPENAI_API_KEY || config?.openaiApiKey || "";
   const geminiKey = getEnvKey("GEMINI_API_KEY") || process.env.GEMINI_API_KEY || getEnvKey("GOOGLE_API_KEY") || process.env.GOOGLE_API_KEY || config?.geminiApiKey || "";
   const { apiKey: deepgramKey } = await getDeepgramSettings(config || {});
-
   const generalKey = getEnvKey("API_KEY") || process.env.API_KEY || config?.apiKey || "";
 
-  // 2. Groq Whisper (If Key Available)
+  const tasks: { name: string; promise: Promise<string> }[] = [];
+
   const effectiveGroqKey = groqKey || (generalKey.startsWith("gsk_") ? generalKey : "");
   if (effectiveGroqKey) {
-    try {
-      const transcript = await transcribeAudioWithGroq(buffer, effectiveGroqKey, mimetype);
-      if (transcript && transcript.trim()) return transcript.trim();
-      errors["Groq"] = "Empty transcript returned";
-    } catch (err: any) {
-      errors["Groq"] = err.message || String(err);
-    }
+    tasks.push({ name: "Groq", promise: transcribeAudioWithGroq(buffer, effectiveGroqKey, mimetype) });
   }
 
-  // 3. OpenAI Whisper (If Key Available)
   const effectiveOpenAIKey = openaiKey || ((generalKey.startsWith("sk-") || generalKey.startsWith("sk-proj-")) && !generalKey.startsWith("sk-ant-") && !generalKey.startsWith("sk-or-") ? generalKey : "");
   if (effectiveOpenAIKey) {
-    try {
-      const transcript = await transcribeAudioWithOpenAI(buffer, effectiveOpenAIKey, mimetype);
-      if (transcript && transcript.trim()) return transcript.trim();
-      errors["OpenAI"] = "Empty transcript returned";
-    } catch (err: any) {
-      errors["OpenAI"] = err.message || String(err);
-    }
+    tasks.push({ name: "OpenAI", promise: transcribeAudioWithOpenAI(buffer, effectiveOpenAIKey, mimetype) });
   }
 
-  // 4. Gemini Flash STT (Primary active provider when GEMINI_API_KEY is present)
   const effectiveGeminiKey = geminiKey || (generalKey.startsWith("AIza") ? generalKey : "");
   if (effectiveGeminiKey) {
-    try {
-      const transcript = await transcribeAudioWithGemini(buffer, effectiveGeminiKey, mimetype);
-      if (transcript && transcript.trim()) return transcript.trim();
-      errors["Gemini"] = "Empty transcript returned";
-    } catch (err: any) {
-      errors["Gemini"] = err.message || String(err);
-    }
-  } else {
-    errors["Gemini"] = "No API key configured";
+    tasks.push({ name: "Gemini", promise: transcribeAudioWithGemini(buffer, effectiveGeminiKey, mimetype) });
   }
 
-  // 5. Deepgram STT (Fallback)
   if (deepgramKey) {
-    try {
-      const transcript = await transcribeAudioWithDeepgram(buffer, deepgramKey, mimetype);
-      if (transcript && transcript.trim()) return transcript.trim();
-      errors["Deepgram"] = "Empty transcript returned";
-    } catch (err: any) {
-      errors["Deepgram"] = err.message || String(err);
+    tasks.push({ name: "Deepgram", promise: transcribeAudioWithDeepgram(buffer, deepgramKey, mimetype) });
+  }
+
+  if (tasks.length === 0) {
+    console.warn("[STT Engine] No STT API keys configured.");
+    return "";
+  }
+
+  // Execute all providers concurrently for maximum speed
+  const results = await Promise.allSettled(tasks.map(t => t.promise));
+  for (let i = 0; i < results.length; i++) {
+    const res = results[i];
+    const taskName = tasks[i].name;
+    if (res.status === "fulfilled" && res.value && res.value.trim()) {
+      console.log(`[STT Engine] Successfully transcribed audio via ${taskName}`);
+      return res.value.trim();
     }
+    errors[taskName] = res.status === "rejected" ? (res.reason?.message || String(res.reason)) : "Empty transcript returned";
   }
 
   console.warn("[STT Engine] All transcription attempts failed or returned empty. Error details:", errors);
 
-  // Instrument logAppError for STT failures to capture exactly why transcription failed
   await logAppError({
     service: 'stt-pipeline',
     operation: 'transcribe',
@@ -873,6 +860,20 @@ export async function callLLMWithFallback(
   const safeMessages = truncateContextWindow(messages);
   const tenantId = config?.tenantId || config?.id || "default_tenant";
 
+  // Check LLM response cache for non-tool queries (e.g. repeated questions)
+  const isCacheable = !tools || tools.length === 0;
+  let promptHash = "";
+  if (isCacheable) {
+    const lastMsg = safeMessages.length > 0 ? safeMessages[safeMessages.length - 1] : null;
+    const msgStr = typeof lastMsg?.content === 'string' ? lastMsg.content : JSON.stringify(lastMsg?.content || "");
+    promptHash = crypto.createHash("md5").update(`${tenantId}:${msgStr.trim().toLowerCase()}`).digest("hex");
+    const cachedResponse = await getCachedLLMResponse(tenantId, promptHash);
+    if (cachedResponse) {
+      console.log(`[AI Handler Cache Hit] Returning cached LLM response for hash ${promptHash}`);
+      return cachedResponse;
+    }
+  }
+
   const slot = await acquireLLMConcurrencySlot(tenantId, "llm_fallback", config?.dailyBudgetUsd);
   if (!slot.acquired) {
     if (slot.reason === "budget_exceeded") {
@@ -920,7 +921,13 @@ export async function callLLMWithFallback(
         const keyType = detectKeyType(cand.key);
         console.log(`[AI Handler] Attempting LLM call with key ${cand.name} (${keyType})...`);
         const res = await callLLM(cand.key, systemPrompt, safeMessages, tools, temperature);
-        return { res, provider: keyType };
+        const result = { res, provider: keyType };
+
+        if (isCacheable && promptHash && res.content && res.content.length > 0) {
+          await setCachedLLMResponse(tenantId, promptHash, result, 30);
+        }
+
+        return result;
       } catch (err: any) {
         console.error(`[AI Handler] Key ${cand.name} failed:`, err.message || err);
         lastError = err;
@@ -2188,12 +2195,12 @@ async function processWhatsAppMessage(msg: any, from: string, inputTenantId?: st
     const botPurposeMode = config.botMode || "both";
     let fullSystemPrompt = `${activeSystemPrompt}\n\n=== BOT MODE: ${botPurposeMode.toUpperCase()} (ORDERS & APPOINTMENTS SUPPORTED) ===\n`;
 
-    // Append FAQs and Business Knowledge Base (Product Info) to prompt context! (Sanitized & Capped to 4000 chars max)
-    if (config.productInfo && config.productInfo.trim() !== '') {
+    // Append FAQs and Business Knowledge Base (Product Info) ONLY if structured product catalog is empty (avoids double injection)
+    if (!activeProductCatalog && config.productInfo && config.productInfo.trim() !== '') {
       const sanitizedKB = config.productInfo
         .replace(/data:image\/[a-zA-Z0-9+\/=;-]+;base64,[A-Za-z0-9+\/=]+/g, "[Image]")
         .replace(/[A-Za-z0-9+\/=]{200,}/g, "[Image Data]");
-      const truncatedKB = sanitizedKB.length > 4000 ? sanitizedKB.substring(0, 4000) + "\n...[KB Truncated for Token Efficiency]" : sanitizedKB;
+      const truncatedKB = sanitizedKB.length > 1500 ? sanitizedKB.substring(0, 1500) + "\n...[KB Truncated for Token Efficiency]" : sanitizedKB;
       fullSystemPrompt += `\n\n=== BUSINESS KNOWLEDGE BASE & FAQS (Use this to answer customer questions) ===\n${truncatedKB}\n=======================================================\n`;
     }
 

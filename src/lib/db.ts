@@ -625,6 +625,11 @@ export class DB {
   static async getConfig(tenantId?: string | null): Promise<Config> {
     if (!supabase) return DEFAULT_CONFIG;
     const resolvedTenantId = tenantId || (global as any).baileysSession?.activeTenantId || 'default';
+    const NOW = Date.now();
+    const cached = DB.configMemoryCache.get(resolvedTenantId);
+    if (cached && (NOW - cached.timestamp) < 60000) {
+      return cached.config;
+    }
     try {
       const allTenants = await DB.getTenants();
       const tenantRecord = allTenants.find(t => t.id === resolvedTenantId) || null;
@@ -688,7 +693,7 @@ export class DB {
         }, { onConflict: 'tenant_id' });
       }
 
-      return {
+      const loadedConfig: Config = {
         systemPrompt,
         productInfo,
         products,
@@ -709,6 +714,9 @@ export class DB {
         // Pull openaiApiKey from tenants.openai_api_key so DeepSeek keys stored there are used
         openaiApiKey: (tenantRecord as any)?.openaiApiKey || (tenantRecord as any)?.openai_api_key || ''
       };
+
+      DB.configMemoryCache.set(resolvedTenantId, { config: loadedConfig, timestamp: NOW });
+      return loadedConfig;
     } catch (e) {
       console.error('[DB/Supabase] getConfig exception:', e);
       return DEFAULT_CONFIG;
@@ -722,6 +730,7 @@ export class DB {
       return;
     }
     try {
+      DB.configMemoryCache.delete(tenantId);
       const payload: any = { tenant_id: tenantId };
 
       if (newConfig.systemPrompt !== undefined) payload.system_prompt = newConfig.systemPrompt;
@@ -1381,6 +1390,8 @@ export class DB {
   }
 
   // --- TENANTS & PARTNERS ---
+  static tenantsLastFetchTime = 0;
+  static configMemoryCache = new Map<string, { config: Config; timestamp: number }>();
   static tenantsMemoryStore: Tenant[] = [
     {
       id: 't-1003',
@@ -1517,12 +1528,17 @@ export class DB {
   ];
 
   static async getTenants(): Promise<Tenant[]> {
+    const NOW = Date.now();
+    if (DB.tenantsMemoryStore.length > 0 && (NOW - DB.tenantsLastFetchTime) < 30000) {
+      return DB.tenantsMemoryStore;
+    }
     if (supabase) {
       try {
         const { fetchTenantsFromSupabase } = await import('./supabase');
         const fetched = await fetchTenantsFromSupabase();
         if (fetched) {
           DB.tenantsMemoryStore = fetched;
+          DB.tenantsLastFetchTime = NOW;
           return fetched;
         }
       } catch (e) {
