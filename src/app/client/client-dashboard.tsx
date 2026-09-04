@@ -582,33 +582,43 @@ export default function DashboardPage() {
   const [leadFilter, setLeadFilter] = useState<'all' | 'hot' | 'cold'>('all');
   const [analytics, setAnalytics] = useState<any>(null);
 
+  // Helper to determine if a non-new order (under_baking, delivered, cancelled) should auto-disappear after 24 hours of inactivity
+  const isOrderExpired24h = (o: any) => {
+    const s = (o.status || '').toLowerCase();
+    const isNew = s === 'new_order' || s === 'new' || s === 'pending' || s === 'new order' || s === 'created';
+    if (isNew) return false; // New incoming orders stay in queue until staff updates status
+
+    // For shifted orders (under_baking, delivered, cancelled):
+    const refTimeStr = o.deliveredAt || o.timestamp;
+    if (!refTimeStr) return false;
+    const refTime = new Date(refTimeStr).getTime();
+    if (isNaN(refTime)) return false;
+    return (Date.now() - refTime) > 24 * 60 * 60 * 1000;
+  };
+
+  // Active unexpired orders (hides shifted non-new orders older than 24 hours)
+  const activeOrders = orders ? orders.filter(o => !isOrderExpired24h(o)) : [];
+
   // Computed Real-Time Order Counters
-  const newOrdersCount = orders ? orders.filter((o: any) => {
+  const newOrdersCount = activeOrders.filter((o: any) => {
     const s = (o.status || '').toLowerCase();
     return s === 'new_order' || s === 'new' || s === 'pending' || s === 'new order' || s === 'created';
-  }).length : 0;
+  }).length;
 
-  const underBakingOrdersCount = orders ? orders.filter((o: any) => {
+  const underBakingOrdersCount = activeOrders.filter((o: any) => {
     const s = (o.status || '').toLowerCase();
     return s === 'under_baking' || s === 'under baking' || s === 'under_booking' || s === 'baking' || s === 'confirmed' || s === 'processing' || s === 'in_progress';
-  }).length : 0;
+  }).length;
 
-  const deliveredOrdersCount = orders ? orders.filter((o: any) => {
+  const deliveredOrdersCount = activeOrders.filter((o: any) => {
     const s = (o.status || '').toLowerCase();
-    const isDelivered = s === 'delivered' || s === 'deliver' || s === 'completed' || s === 'shipped';
-    if (isDelivered) {
-      const deliveredTime = o.deliveredAt ? new Date(o.deliveredAt).getTime() : (o.timestamp ? new Date(o.timestamp).getTime() : null);
-      if (deliveredTime && (Date.now() - deliveredTime > 5 * 60 * 1000)) {
-        return false;
-      }
-    }
-    return isDelivered;
-  }).length : 0;
+    return s === 'delivered' || s === 'deliver' || s === 'completed' || s === 'shipped';
+  }).length;
 
-  const cancelledOrdersCount = orders ? orders.filter((o: any) => {
+  const cancelledOrdersCount = activeOrders.filter((o: any) => {
     const s = (o.status || '').toLowerCase();
     return s === 'cancelled' || s === 'canceled' || s === 'rejected';
-  }).length : 0;
+  }).length;
 
   // Sound Alert for Received Orders
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
@@ -5217,7 +5227,7 @@ export default function DashboardPage() {
               <div className="bg-white p-4 rounded-xl border border-[#d3cec6] shadow-xs flex items-center justify-between">
                 <div>
                   <div className="text-[11px] font-extrabold text-[#7b7b78] uppercase tracking-wider">Total Active Queue</div>
-                  <div className="text-2xl font-black text-[#111111] font-mono mt-0.5">{orders.length}</div>
+                  <div className="text-2xl font-black text-[#111111] font-mono mt-0.5">{activeOrders.length}</div>
                 </div>
                 <div className="bg-[#111111] text-white h-10 w-10 rounded-xl flex items-center justify-center font-extrabold text-sm shadow-xs">
                   📋
@@ -5228,7 +5238,7 @@ export default function DashboardPage() {
             {/* Filter Pills with Live Counter Badges */}
             <div className="flex gap-2.5 mb-3 flex-wrap items-center">
               {[
-                { id: 'all', label: 'All Items', count: orders.length, dotColor: 'bg-slate-700', activeClass: 'bg-[#111111] text-white shadow-md', badgeActive: 'bg-white text-slate-900', badgeInactive: 'bg-slate-200 text-slate-800' },
+                { id: 'all', label: 'All Items', count: activeOrders.length, dotColor: 'bg-slate-700', activeClass: 'bg-[#111111] text-white shadow-md', badgeActive: 'bg-white text-slate-900', badgeInactive: 'bg-slate-200 text-slate-800' },
                 { id: 'new_order', label: 'New Order', count: newOrdersCount, dotColor: 'bg-blue-500', activeClass: 'bg-blue-600 text-white shadow-md ring-2 ring-blue-400/40', badgeActive: 'bg-white text-blue-900', badgeInactive: 'bg-blue-100 text-blue-800' },
                 { id: 'under_baking', label: 'Under Baking', count: underBakingOrdersCount, dotColor: 'bg-amber-500', activeClass: 'bg-amber-500 text-white shadow-md ring-2 ring-amber-400/40', badgeActive: 'bg-white text-amber-900', badgeInactive: 'bg-amber-100 text-amber-800' },
                 { id: 'delivered', label: 'Delivered', count: deliveredOrdersCount, dotColor: 'bg-emerald-500', activeClass: 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400/40', badgeActive: 'bg-white text-emerald-900', badgeInactive: 'bg-emerald-100 text-emerald-800' },
@@ -5257,22 +5267,15 @@ export default function DashboardPage() {
 
             {/* Full-Width Intercom Data Table */}
             <div className="dash-card p-0 overflow-hidden min-h-[500px] bg-white border border-[#d3cec6] rounded-xl shadow-xs">
-              {orders.filter(o => {
+              {activeOrders.filter(o => {
                 const statusLower = o.status?.toLowerCase() || '';
                 const isDelivered = statusLower === 'delivered' || statusLower === 'deliver';
-
-                // Auto-hide delivered orders older than 5 minutes to prevent clutter
-                if (isDelivered) {
-                  const deliveredTime = o.deliveredAt ? new Date(o.deliveredAt).getTime() : (o.timestamp ? new Date(o.timestamp).getTime() : null);
-                  if (deliveredTime && (Date.now() - deliveredTime > 5 * 60 * 1000)) {
-                    return false;
-                  }
-                }
 
                 if (orderFilter === 'all') return true;
                 if (orderFilter === 'new_order') return statusLower === 'new_order' || statusLower === 'new' || statusLower === 'new order' || statusLower === 'pending';
                 if (orderFilter === 'under_baking') return statusLower === 'under_baking' || statusLower === 'under baking' || statusLower === 'under_booking' || statusLower === 'confirmed';
-                if (orderFilter === 'delivered') return isDelivered;
+                if (orderFilter === 'delivered') return isDelivered || statusLower === 'completed' || statusLower === 'shipped';
+                if (orderFilter === 'cancelled') return statusLower === 'cancelled' || statusLower === 'canceled' || statusLower === 'rejected';
                 return o.status === orderFilter;
               }).length === 0 ? (
                 <div className="text-center p-12 bg-[#f5f1ec] text-[#7b7b78] font-medium text-xs">
@@ -5294,22 +5297,15 @@ export default function DashboardPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#ebe7e1] text-xs">
-                      {orders.filter(o => {
+                      {activeOrders.filter(o => {
                         const statusLower = o.status?.toLowerCase() || '';
                         const isDelivered = statusLower === 'delivered' || statusLower === 'deliver';
-
-                        // Auto-hide delivered orders older than 5 minutes to prevent clutter
-                        if (isDelivered) {
-                          const deliveredTime = o.deliveredAt ? new Date(o.deliveredAt).getTime() : (o.timestamp ? new Date(o.timestamp).getTime() : null);
-                          if (deliveredTime && (Date.now() - deliveredTime > 5 * 60 * 1000)) {
-                            return false;
-                          }
-                        }
 
                         if (orderFilter === 'all') return true;
                         if (orderFilter === 'new_order') return statusLower === 'new_order' || statusLower === 'new' || statusLower === 'new order' || statusLower === 'pending';
                         if (orderFilter === 'under_baking') return statusLower === 'under_baking' || statusLower === 'under baking' || statusLower === 'under_booking' || statusLower === 'confirmed';
-                        if (orderFilter === 'delivered') return isDelivered;
+                        if (orderFilter === 'delivered') return isDelivered || statusLower === 'completed' || statusLower === 'shipped';
+                        if (orderFilter === 'cancelled') return statusLower === 'cancelled' || statusLower === 'canceled' || statusLower === 'rejected';
                         return o.status === orderFilter;
                       }).map((order, idx) => {
                         const isAppointment = order.productName.includes('Appointment') || order.productName.startsWith('📅');
